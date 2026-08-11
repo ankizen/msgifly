@@ -27,3 +27,21 @@ public class BusinessProfileInfo
     public string? Email { get; set; }
     public string? Websites { get; set; }
 }
+
+/// <summary>Everything needed to build a Graph API template-send payload for one recipient.</summary>
+public class TemplateSendRequest
+{
+    public string TemplateName { get; set; } = string.Empty;
+    public string Language { get; set; } = "en_US";
+
+    /// <summary>TEXT | IMAGE | DOCUMENT | VIDEO | null (no header).</summary>
+    public string? HeaderFormat { get; set; }
+
+    /// <summary>Substituted value for a TEXT header's single {{1}} placeholder, if any.</summary>
+    public string? HeaderText { get; set; }
+
+    /// <summary>Publicly reachable URL for IMAGE/DOCUMENT/VIDEO headers.</summary>
+    public string? HeaderMediaUrl { get; set; }
+
+    public List<string> BodyParams { get; set; } = [];
+}

@@ -1,0 +1,156 @@
+@model Msgifly.Web.Models.ViewModels.CampaignFormViewModel
+@{
+    ViewData["Title"] = Model.Id is null ? "New Campaign" : "Edit Campaign";
+    var paramSourceOptions = new (string Value, string Label)[]
+    {
+        ("StaticText", "Static text"),
+        ("ContactFirstName", "Contact: First name"),
+        ("ContactLastName", "Contact: Last name"),
+        ("ContactFullName", "Contact: Full name"),
+        ("ContactPhone", "Contact: Phone"),
+        ("ContactEmail", "Contact: Email"),
+        ("ContactCompany", "Contact: Company"),
+    };
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Pick an approved template, who it goes to, and when.</p>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+
+<form asp-action="Save" method="post" class="max-w-3xl space-y-6"
+      x-data="{
+          templates: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TemplateOptions)),
+          selectedTemplateId: '@Model.TemplateId',
+          selectAll: @(Model.SelectAll ? "true" : "false"),
+          sendNow: @(Model.SendNow ? "true" : "false"),
+          get selectedTemplate() { return this.templates.find(t => t.templateId === this.selectedTemplateId) || null; },
+      }">
+    <input type="hidden" asp-for="Id" />
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <span asp-validation-for="Name" class="text-sm text-red-600"></span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label asp-for="RelType" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                <select asp-for="RelType" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="Lead">Lead</option>
+                    <option value="Customer">Customer</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="TemplateId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                <select asp-for="TemplateId" x-model="selectedTemplateId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Choose a template...</option>
+                    @foreach (var t in Model.TemplateOptions)
+                    {
+                        <option value="@t.TemplateId">@t.Name</option>
+                    }
+                </select>
+                <span asp-validation-for="TemplateId" class="text-sm text-red-600"></span>
+                @if (!Model.TemplateOptions.Any())
+                {
+                    <p class="mt-1 text-xs text-amber-600">No approved templates yet — sync templates from the WABA page first.</p>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* Header parameter(s) — text substitution or media URL, depending on the template's header format *@
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-3" x-show="selectedTemplate && selectedTemplate.headerFormat" x-cloak>
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Header</h2>
+
+        <div x-show="selectedTemplate && selectedTemplate.headerFormat === 'TEXT' && selectedTemplate.headerParamsCount > 0" class="grid grid-cols-2 gap-3">
+            <select name="HeaderParams[0].Source" asp-items="@(paramSourceOptions.Select(o => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(o.Label, o.Value)))"
+                    class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+            <input name="HeaderParams[0].StaticValue" value="@Model.HeaderParams[0]?.StaticValue" placeholder="Static value (used if source = Static text)"
+                   class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+        </div>
+
+        <div x-show="selectedTemplate && ['IMAGE','DOCUMENT','VIDEO'].includes(selectedTemplate.headerFormat)">
+            <label asp-for="HeaderMediaUrl" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Header media URL</label>
+            <input asp-for="HeaderMediaUrl" placeholder="https://..." class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">A publicly reachable image/document/video URL — same one used for every recipient.</p>
+        </div>
+    </div>
+
+    @* Body parameters *@
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-3" x-show="selectedTemplate && selectedTemplate.bodyParamsCount > 0" x-cloak>
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Body variables</h2>
+        <p class="text-xs text-gray-400 dark:text-slate-500">Each {{n}} in the template body, in order. Pick a contact field to personalize per recipient, or static text for the same value everyone.</p>
+
+        @for (var i = 0; i < Msgifly.Web.Models.ViewModels.CampaignFormViewModel.MaxBodyParams; i++)
+        {
+            <div x-show="selectedTemplate && @i < selectedTemplate.bodyParamsCount" class="grid grid-cols-2 gap-3">
+                <select name="BodyParams[@i].Source" asp-items="@(paramSourceOptions.Select(o => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(o.Label, o.Value)))"
+                        class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                <input name="BodyParams[@i].StaticValue" value="@Model.BodyParams[i]?.StaticValue" placeholder="{{@(i + 1)}} static value"
+                       class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            </div>
+        }
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Recipients</h2>
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" asp-for="SelectAll" x-model="selectAll" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+            <span class="text-sm text-gray-700 dark:text-slate-300">All matching contacts of the selected recipient type</span>
+        </label>
+
+        <div x-show="selectAll" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label asp-for="FilterStatusId" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Status filter (optional)</label>
+                <select asp-for="FilterStatusId" asp-items="Model.StatusOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Any status</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="FilterSourceId" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Source filter (optional)</label>
+                <select asp-for="FilterSourceId" asp-items="Model.SourceOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="">Any source</option>
+                </select>
+            </div>
+        </div>
+
+        <div x-show="!selectAll" x-cloak>
+            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Choose contacts</label>
+            <select name="SelectedContactIds" multiple class="tom-select mt-1 block w-full">
+                @foreach (var c in Model.ContactOptions)
+                {
+                    <option value="@c.Id" selected="@(Model.SelectedContactIds.Contains(c.Id))">@c.Label</option>
+                }
+            </select>
+            <span asp-validation-for="SelectedContactIds" class="text-sm text-red-600"></span>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Schedule</h2>
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" asp-for="SendNow" x-model="sendNow" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+            <span class="text-sm text-gray-700 dark:text-slate-300">Send as soon as it's saved</span>
+        </label>
+        <div x-show="!sendNow" x-cloak>
+            <label asp-for="ScheduledSendTime" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="ScheduledSendTime" type="datetime-local" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <span asp-validation-for="ScheduledSendTime" class="text-sm text-red-600"></span>
+        </div>
+    </div>
+
+    <div class="flex gap-3">
+        <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Save Campaign</button>
+        <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
+    </div>
+</form>

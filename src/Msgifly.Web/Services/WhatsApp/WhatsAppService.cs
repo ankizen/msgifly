@@ -198,6 +198,71 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult.Ok();
     }
 
+    public async Task<WhatsAppResult<string>> SendTemplateMessageAsync(string toPhoneNumber, TemplateSendRequest request)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<string>.Fail("WhatsApp Business Account is not connected.");
+        }
+
+        var components = new List<object>();
+
+        if (!string.IsNullOrEmpty(request.HeaderFormat))
+        {
+            object? headerParameter = request.HeaderFormat.ToUpperInvariant() switch
+            {
+                "TEXT" when !string.IsNullOrEmpty(request.HeaderText) =>
+                    new { type = "text", text = request.HeaderText },
+                "IMAGE" when !string.IsNullOrEmpty(request.HeaderMediaUrl) =>
+                    new { type = "image", image = new { link = request.HeaderMediaUrl } },
+                "DOCUMENT" when !string.IsNullOrEmpty(request.HeaderMediaUrl) =>
+                    new { type = "document", document = new { link = request.HeaderMediaUrl } },
+                "VIDEO" when !string.IsNullOrEmpty(request.HeaderMediaUrl) =>
+                    new { type = "video", video = new { link = request.HeaderMediaUrl } },
+                _ => null,
+            };
+
+            if (headerParameter is not null)
+            {
+                components.Add(new { type = "header", parameters = new[] { headerParameter } });
+            }
+        }
+
+        if (request.BodyParams.Count > 0)
+        {
+            components.Add(new
+            {
+                type = "body",
+                parameters = request.BodyParams.Select(p => new { type = "text", text = p }).ToArray(),
+            });
+        }
+
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "template",
+            template = new
+            {
+                name = request.TemplateName,
+                language = new { code = request.Language },
+                components,
+            },
+        };
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync($"{settings.DefaultPhoneNumberId}/messages", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(response));
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+        var messageId = body?["messages"]?.AsArray()?.FirstOrDefault()?["id"]?.GetValue<string>();
+        return WhatsAppResult<string>.Ok(messageId ?? string.Empty);
+    }
+
     public async Task<WhatsAppResult<string>> DebugTokenAsync()
     {
         var settings = await GetSettingsAsync();

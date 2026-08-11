@@ -14,5 +14,8 @@ public interface IWhatsAppService
 
     Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText);
 
+    /// <summary>Sends an approved template message. Returns the WhatsApp message id (wamid) on success.</summary>
+    Task<WhatsAppResult<string>> SendTemplateMessageAsync(string toPhoneNumber, TemplateSendRequest request);
+
     Task<WhatsAppResult<string>> DebugTokenAsync();
 }

@@ -1,9 +1,11 @@
+using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
+using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
@@ -53,6 +55,14 @@ builder.Services.AddHttpClient("GraphApi", client =>
 });
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSqlServerStorage(connectionString));
+builder.Services.AddHangfireServer();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -86,6 +96,16 @@ app.UseRouting();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = [new HangfireDashboardAuthFilter()],
+});
+
+RecurringJob.AddOrUpdate<CampaignDispatchJob>(
+    "process-scheduled-campaigns",
+    job => job.ProcessScheduledCampaignsAsync(),
+    Cron.Minutely());
 
 app.MapControllerRoute(
     name: "areas",

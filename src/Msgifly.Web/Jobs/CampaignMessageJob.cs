@@ -1,0 +1,108 @@
+using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Msgifly.Web.Data;
+using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services.Campaigns;
+using Msgifly.Web.Services.WhatsApp;
+
+namespace Msgifly.Web.Jobs;
+
+/// <summary>
+/// Sends one campaign message to one recipient — enqueued per-recipient by CampaignDispatchJob,
+/// the equivalent of the original's SendCampaignMessageJob (master doc §5.2). WhatsAppService
+/// already turns Graph API errors into a WhatsAppResult rather than throwing, so a rejected send
+/// (bad number, disallowed template params, etc.) is recorded as Failed without triggering
+/// Hangfire's automatic retry — retrying those wouldn't help. Genuine unhandled exceptions (e.g.
+/// a DB blip) still propagate and get Hangfire's default retry behavior as a safety net.
+/// </summary>
+public class CampaignMessageJob
+{
+    private readonly ApplicationDbContext _db;
+    private readonly IWhatsAppService _whatsAppService;
+    private readonly ILogger<CampaignMessageJob> _logger;
+
+    public CampaignMessageJob(ApplicationDbContext db, IWhatsAppService whatsAppService, ILogger<CampaignMessageJob> logger)
+    {
+        _db = db;
+        _whatsAppService = whatsAppService;
+        _logger = logger;
+    }
+
+    public async Task SendMessageAsync(int campaignDetailId)
+    {
+        var detail = await _db.CampaignDetails
+            .Include(d => d.Campaign)
+            .Include(d => d.Contact)
+            .FirstOrDefaultAsync(d => d.Id == campaignDetailId);
+
+        if (detail is null || detail.Contact is null)
+        {
+            _logger.LogWarning("CampaignDetail {Id} or its contact no longer exists; skipping.", campaignDetailId);
+            return;
+        }
+
+        if (detail.Campaign.PauseCampaign)
+        {
+            return; // left Pending — picked up again once the campaign is resumed
+        }
+
+        var template = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.MetaTemplateId == detail.Campaign.TemplateId);
+        if (template is null)
+        {
+            detail.Status = CampaignDetailStatus.Failed;
+            detail.ResponseMessage = "The template used by this campaign is no longer available.";
+            await _db.SaveChangesAsync();
+            return;
+        }
+
+        var headerParams = CampaignParamResolver.ResolveAll(detail.Campaign.HeaderParamsJson, detail.Contact);
+        var bodyParams = CampaignParamResolver.ResolveAll(detail.Campaign.BodyParamsJson, detail.Contact);
+
+        var request = new TemplateSendRequest
+        {
+            TemplateName = template.TemplateName,
+            Language = template.Language,
+            HeaderFormat = template.HeaderFormat,
+            HeaderText = headerParams.Count > 0 ? headerParams[0] : null,
+            HeaderMediaUrl = detail.Campaign.FileName,
+            BodyParams = bodyParams,
+        };
+
+        var result = await _whatsAppService.SendTemplateMessageAsync(detail.Contact.Phone, request);
+
+        detail.HeaderMessage = RenderText(template.HeaderText, headerParams);
+        detail.BodyMessage = RenderText(template.BodyText, bodyParams);
+        detail.FooterMessage = template.FooterText;
+        detail.UpdatedAt = DateTime.UtcNow;
+
+        if (result.Success)
+        {
+            detail.Status = CampaignDetailStatus.Sent;
+            detail.DeliveryStatus = MessageDeliveryStatus.Sent;
+            detail.WhatsappMessageId = result.Data;
+            detail.ResponseMessage = null;
+        }
+        else
+        {
+            detail.Status = CampaignDetailStatus.Failed;
+            detail.DeliveryStatus = MessageDeliveryStatus.Failed;
+            detail.ResponseMessage = result.ErrorMessage;
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    private static string? RenderText(string? templateText, List<string> paramValues)
+    {
+        if (string.IsNullOrEmpty(templateText))
+        {
+            return templateText;
+        }
+
+        return Regex.Replace(templateText, @"\{\{(\d+)\}\}", match =>
+        {
+            var index = int.Parse(match.Groups[1].Value) - 1;
+            return index >= 0 && index < paramValues.Count ? paramValues[index] : match.Value;
+        });
+    }
+}
