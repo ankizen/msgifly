@@ -1,0 +1,72 @@
+@model Msgifly.Web.Areas.Identity.Controllers.LoginViewModel
+@{
+    Layout = "_LoginLayout";
+    ViewData["Title"] = "Login";
+}
+
+<div class="grid grid-cols-1 md:grid-cols-12 sm:h-screen h-screen">
+    <div class="col-span-1 md:col-span-12 lg:col-span-4 flex flex-col justify-center items-center px-6 sm:px-20">
+        <div class="lg:w-full md:w-1/2">
+            <div class="w-full flex items-center my-4 justify-center p-6">
+                <h1 class="text-center text-2xl font-bold dark:text-slate-200">Login</h1>
+            </div>
+
+            @if (!ViewData.ModelState.IsValid)
+            {
+                <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+                    <div asp-validation-summary="All"></div>
+                </div>
+            }
+
+            <form asp-area="Identity" asp-controller="Account" asp-action="Login"
+                  asp-route-returnUrl="@ViewData["ReturnUrl"]" method="post"
+                  x-data="{ loading: false, showPassword: false }" x-on:submit="loading = true">
+
+                <div>
+                    <label asp-for="Email" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Email</label>
+                    <input asp-for="Email" class="block mt-1 w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                           autofocus autocomplete="username" />
+                    <span asp-validation-for="Email" class="mt-1 block text-sm text-red-600"></span>
+                </div>
+
+                <div class="mt-4">
+                    <label asp-for="Password" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Password</label>
+                    <div class="relative">
+                        <input asp-for="Password" x-bind:type="showPassword ? 'text' : 'password'"
+                               class="block mt-1 w-full pr-10 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               autocomplete="current-password" />
+                        <button type="button" class="absolute inset-y-0 right-3 flex items-center text-gray-500"
+                                x-on:click="showPassword = !showPassword">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </button>
+                    </div>
+                    <span asp-validation-for="Password" class="mt-1 block text-sm text-red-600"></span>
+                </div>
+
+                <div class="flex items-center justify-between mt-4">
+                    <label for="RememberMe" class="inline-flex items-center">
+                        <input asp-for="RememberMe" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+                        <span class="ms-2 text-sm text-gray-600 dark:text-slate-400">Remember me</span>
+                    </label>
+                </div>
+
+                <div class="mt-6 flex flex-col justify-center items-center gap-4">
+                    <button type="submit" x-bind:disabled="loading"
+                            class="relative w-full px-3 py-3 font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 rounded-lg min-h-12">
+                        <span x-show="!loading">Login</span>
+                        <span x-show="loading">Signing in…</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="hidden lg:block md:col-span-8 bg-gradient-to-r from-indigo-500 to-purple-500 relative">
+        <div class="absolute inset-0 flex justify-center items-center">
+            <img src="~/img/coverpage.png" alt="" class="object-cover" />
+        </div>
+    </div>
+</div>

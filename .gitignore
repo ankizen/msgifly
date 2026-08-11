@@ -1,0 +1,16 @@
+## .NET
+bin/
+obj/
+*.user
+
+## Frontend build artifacts (regenerated via `npm install && npm run build`)
+src/Msgifly.Web/frontend/node_modules/
+src/Msgifly.Web/wwwroot/build/
+
+## IDE
+.vs/
+.vscode/
+*.suo
+
+## Secrets
+appsettings.Development.local.json

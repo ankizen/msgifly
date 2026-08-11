@@ -1,0 +1,51 @@
+@using System.Security.Claims
+@{
+    var firstName = User.FindFirstValue(ClaimTypes.GivenName);
+    var lastName = User.FindFirstValue(ClaimTypes.Surname);
+    var displayName = string.IsNullOrWhiteSpace(firstName) ? (User.Identity?.Name ?? "Account") : $"{firstName} {lastName}".Trim();
+}
+<div class="bg-white sticky top-0 z-20 flex-shrink-0 flex h-16 border-b border-slate-200 dark:border-slate-600 dark:bg-slate-800">
+    <button x-on:click="open = !open" type="button"
+            class="px-4 border-r border-slate-200 text-slate-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-slate-900 lg:hidden dark:border-slate-600">
+        <span class="sr-only">Open sidebar</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+        </svg>
+    </button>
+
+    <div class="flex-1 px-4 flex justify-between">
+        <div class="flex-1 flex"></div>
+
+        <div class="flex items-center gap-2">
+            @* Dark mode toggle — `theme` is the Alpine store declared on <html> in _Layout.cshtml *@
+            <button type="button" title="Toggle dark mode"
+                    x-on:click="theme = (theme === 'dark' ? 'light' : 'dark')"
+                    class="p-2 rounded-md text-gray-400 hover:text-slate-600 dark:hover:text-slate-200">
+                <svg x-show="theme !== 'dark'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1.5m0 15V21m8.25-9H21M3 12h1.5m12.02-6.02l1.06-1.06M5.42 18.58l1.06-1.06m0-11.04L5.42 5.42m11.16 11.16l1.06 1.06M16.5 12a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                </svg>
+                <svg x-cloak x-show="theme === 'dark'" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                </svg>
+            </button>
+
+            <div class="relative" x-data="{ profileOpen: false }">
+                <button type="button" x-on:click="profileOpen = !profileOpen" x-on:click.outside="profileOpen = false"
+                        class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-semibold">
+                        @(displayName.Length > 0 ? displayName[0].ToString().ToUpperInvariant() : "?")
+                    </span>
+                    <span class="hidden sm:inline">@displayName</span>
+                </button>
+                <div x-cloak x-show="profileOpen" x-transition
+                     class="absolute right-0 mt-2 w-48 rounded-md bg-white dark:bg-slate-700 shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30">
+                    <form asp-area="Identity" asp-controller="Account" asp-action="Logout" method="post">
+                        <button type="submit" class="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-600">
+                            Log out
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

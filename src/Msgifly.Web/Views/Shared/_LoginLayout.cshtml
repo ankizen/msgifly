@@ -1,0 +1,42 @@
+@inject ISettingsService SettingsService
+@{
+    var general = await SettingsService.GetAsync<GeneralSettings>(nameof(GeneralSettings));
+    var seo = await SettingsService.GetAsync<SeoSettings>(nameof(SeoSettings));
+    var pageTitle = string.IsNullOrWhiteSpace(seo.MetaTitle) ? "Msgifly" : seo.MetaTitle;
+    if (ViewData["Title"] is string title && !string.IsNullOrWhiteSpace(title))
+    {
+        pageTitle += " - " + title;
+    }
+}
+<!DOCTYPE html>
+<html lang="@general.ActiveLanguage" class="h-full">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>@pageTitle</title>
+    <meta name="description" content="@(seo.MetaDescription ?? "Msgifly")" />
+
+    <link rel="icon" type="image/png" sizes="16x16" href="~/img/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="~/img/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="~/img/favicon.png" />
+    <link rel="apple-touch-icon" href="~/img/apple-touch-icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Lexend:wght@100..900&display=swap" />
+
+    <link rel="stylesheet" href="~/build/app.css" asp-append-version="true" />
+</head>
+<body class="font-sans text-gray-900 antialiased">
+    <div class="min-h-screen flex flex-col sm:justify-center items-center sm:pt-0 bg-gray-100 dark:bg-gray-900">
+        <div class="bg-white dark:bg-gray-800 overflow-hidden w-full">
+            @RenderBody()
+        </div>
+    </div>
+
+    <script src="~/build/app.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

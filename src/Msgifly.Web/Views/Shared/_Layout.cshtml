@@ -1,0 +1,68 @@
+@inject ISettingsService SettingsService
+@{
+    var general = await SettingsService.GetAsync<GeneralSettings>(nameof(GeneralSettings));
+    var seo = await SettingsService.GetAsync<SeoSettings>(nameof(SeoSettings));
+    var pageTitle = string.IsNullOrWhiteSpace(seo.MetaTitle) ? "Msgifly" : seo.MetaTitle;
+    if (ViewData["Title"] is string title && !string.IsNullOrWhiteSpace(title))
+    {
+        pageTitle += " - " + title;
+    }
+    var isChatPage = ViewData["IsChatPage"] is true;
+}
+<!DOCTYPE html>
+<html lang="@general.ActiveLanguage" class="h-full" x-data="{ theme: $persist('light') }"
+      x-bind:class="{ 'dark': theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) }">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>@pageTitle</title>
+    <meta name="description" content="@(seo.MetaDescription ?? "Msgifly")" />
+
+    <link rel="icon" type="image/png" sizes="16x16" href="~/img/favicon-16x16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="~/img/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="~/img/favicon.png" />
+    <link rel="apple-touch-icon" href="~/img/apple-touch-icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Lexend:wght@100..900&display=swap" />
+
+    <link rel="stylesheet" href="~/build/app.css" asp-append-version="true" />
+
+    <script>
+        window.dateTimeSettings = { dateFormat: '@general.DateFormat', timeFormat: '@general.TimeFormat' };
+        var date_format = window.dateTimeSettings.dateFormat;
+        var time_format = window.dateTimeSettings.timeFormat;
+    </script>
+</head>
+<body class="h-full antialiased bg-gray-50 font-sans dark:bg-slate-800">
+    <div id="main" x-data="{ open: false }" @@keydown.window.escape="open = false" class="min-h-full flex">
+
+        @await Component.InvokeAsync("SidebarNavigation")
+
+        <div class="lg:pl-[15rem] flex flex-col w-0 flex-1">
+            @await Component.InvokeAsync("HeaderNavigation")
+
+            <main class="flex-1 overflow-x-hidden">
+                @if (isChatPage)
+                {
+                    @RenderBody()
+                }
+                else
+                {
+                    <div class="py-6 px-2 md:p-6">
+                        @RenderBody()
+                    </div>
+                }
+            </main>
+
+            <partial name="_Notification" />
+        </div>
+    </div>
+
+    <script src="~/build/app.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

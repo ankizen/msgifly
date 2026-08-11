@@ -1,0 +1,314 @@
+@import '../../node_modules/intl-tel-input/build/css/intlTelInput.min.css';
+@import '../../node_modules/pretty-print-json/dist/css/pretty-print-json.min.css';
+@import "./wm-tribute.css";
+@import "../../node_modules/tom-select/dist/css/tom-select.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] {
+    display: none;
+}
+
+.ts-wrapper {
+    @apply  rounded-md focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500
+    dark:border-gray-600 dark:focus-within:border-blue-500 dark:focus-within:ring-blue-500 bg-gray-900;
+}
+
+.ts-control {
+    @apply bg-white text-slate-900 dark:bg-slate-800 rounded-md dark:border-slate-500 dark:text-white z-0 !important;
+}
+
+/* Style when Tom Select is disabled */
+.ts-wrapper.disabled {
+    @apply bg-gray-200 dark:bg-gray-700 opacity-50 cursor-not-allowed;
+}
+.ts-control.disabled {
+    @apply bg-gray-300 dark:bg-gray-800 text-gray-500 dark:text-gray-400;
+}
+
+.ts-control input::placeholder {
+    @apply text-slate-800;
+}
+
+.ts-dropdown {
+    @apply bg-white border border-slate-300 rounded-md shadow-lg dark:bg-slate-800  dark:border-slate-600;
+}
+
+.ts-dropdown [data-selectable].option{
+    @apply bg-white text-slate-900 dark:bg-slate-800 dark:text-white text-sm hover:bg-indigo-100 dark:hover:bg-indigo-400 !important;
+}
+
+::-webkit-scrollbar {
+    width: 4px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+    background: #eef0f4;
+}
+
+.dark ::-webkit-scrollbar-track {
+    background: #1e293b; /* Dark mode track color */
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+    background: #9c9df5;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: #64748b; /* Dark mode thumb color */
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+    background: #bac4d8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8; /* Dark mode hover color */
+}
+/* Light Mode */
+.chat-conversation-box {
+    background-image: url('/img/chat/whatsapp_light_bg.png');
+}
+
+/* Dark Mode */
+.dark .chat-conversation-box {
+    background-image: url('/img/chat/whatsapp_dark_bg.png');
+}
+#power-grid-table-base {
+    font-size: 14px !important;
+
+}
+
+/* Ensure the action links are hidden by default */
+.contact-actions {
+    display: none;
+}
+
+/* Show action links when hovering anywhere in the row */
+#power-grid-table-base tbody tr:hover .contact-actions {
+    display: flex;
+}
+
+.table {
+    background: white !important;
+}
+
+.dark .table {
+    background-color: #1e293b !important;
+}
+
+.iti {
+    width: 100%;
+}
+
+.iti .iti__search-input {
+    border: 1px solid #d5d5d5;
+    border-radius: 5px;
+    padding: 5px;
+    width: 100%;
+}
+
+.iti .iti__dropdown-content {
+    width: 250px !important;
+    border-radius: 5px;
+}
+.iti .iti__selected-dial-code {
+    line-height: 1;
+    font-size: 14px;
+}
+/* Dark Mode Styles */
+.dark .iti {
+    background-color: #1E293B;
+}
+
+.dark .iti .iti__search-input {
+    background-color: #1E293B;
+    border: 1px solid #444;
+    color: #fff;
+}
+
+.dark .iti .iti__dropdown-content {
+    background-color: #1E293B;
+    color: #fff;
+    border: 1px solid #444;
+}
+
+.dark .iti .iti__search-input::placeholder {
+    color: #9CA3B1;
+}
+.dark .iti .iti__selected-dial-code {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+}
+/* resources/css/app.css */
+.ql-container.ql-snow {
+    min-height: 250px;
+}
+
+.ql-editor {
+    min-height: 250px;
+}
+
+.ql-editor {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.ql-toolbar {
+    border-radius: 0.25rem 0.25rem 0px 0px;
+}
+
+.dark .ql-container {
+    background-color: #1E293B;
+    /* Dark background */
+    color: white;
+    /* Light text */
+}
+
+.dark .ql-toolbar {
+    background-color: #1E293B;
+    color: white;
+    /* Dark toolbar background */
+}
+
+.dark .ql-toolbar svg {
+    filter: invert(1);
+}
+
+.dark .ql-picker {
+    background-color: #1E293B !important;
+    /* Dark background */
+    color: white !important;
+    /* White text */
+    border: 1px solid #444;
+    /* Slight border for contrast */
+}
+
+.dark .ql-picker-label {
+    color: white !important;
+}
+
+/* Dropdown menu styles */
+.dark .ql-picker-options {
+    background-color: #1E293B !important;
+    /* Dark dropdown */
+    color: white !important;
+    border: 1px solid #444;
+}
+.dark .ql-picker-options :hover {
+    color: orange !important;
+
+}
+
+.dark .ql-editor {
+    background-color: #1E293B;
+    /* Dark background for the editor */
+    color: white;
+    /* Light text color */
+}
+
+.dark .ql-editor.ql-blank {
+    color: #888;
+    /* Placeholder color */
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+.animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .5;
+    }
+}
+
+body {
+    overflow-x: hidden !important;
+}
+
+.iti .iti__dropdown-content{
+    font-size: 14px;
+}
+[x-cloak] { display: none !important; }
+
+/* Add to your app.css */
+.tribute-container {
+    @apply absolute z-50 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.tribute-container ul {
+    @apply m-0 p-0 list-none;
+}
+
+.tribute-container li {
+    @apply cursor-pointer;
+}
+
+.tribute-container li.highlight {
+    @apply bg-gray-100 dark:bg-gray-700;
+}
+
+
+/* Merge Fields Selector Styles */
+.merge-field-button {
+    @apply text-left px-4 py-2 border rounded-md transition-colors duration-200;
+    @apply hover:bg-gray-50 dark:hover:bg-gray-700;
+    @apply border-gray-200 dark:border-gray-600;
+}
+
+.merge-field-button:focus {
+    @apply outline-none ring-2 ring-offset-2 ring-blue-500;
+}
+
+.merge-field-name {
+    @apply block font-medium text-sm text-gray-900 dark:text-gray-100;
+}
+
+.merge-field-key {
+    @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
+/* Tab Navigation */
+.merge-fields-tab {
+    @apply px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200;
+    @apply text-gray-600 dark:text-gray-300;
+    @apply hover:text-gray-900 dark:hover:text-gray-100;
+}
+
+.merge-fields-tab.active {
+    @apply bg-blue-100 text-blue-700;
+    @apply dark:bg-blue-900 dark:text-blue-300;
+}
+
+/* Message Editor */
+.message-editor {
+    @apply block w-full rounded-md shadow-sm;
+    @apply border-gray-300 dark:border-gray-700;
+    @apply dark:bg-gray-900 dark:text-gray-300;
+    @apply focus:border-blue-500 focus:ring-blue-500;
+    min-height: 300px;
+}

@@ -1,0 +1,28 @@
+@model Msgifly.Web.Areas.Admin.Controllers.DashboardViewModel
+@{
+    ViewData["Title"] = "Dashboard";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Dashboard</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Welcome — this is the Phase 0 foundation shell. Feature screens land here phase by phase.</p>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="bg-white dark:bg-slate-700 rounded-lg shadow p-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-slate-400">Messages</p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">@Model.MessageCount</p>
+    </div>
+    <div class="bg-white dark:bg-slate-700 rounded-lg shadow p-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-slate-400">Contacts</p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">@Model.ContactCount</p>
+    </div>
+    <div class="bg-white dark:bg-slate-700 rounded-lg shadow p-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-slate-400">Campaigns</p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">@Model.CampaignCount</p>
+    </div>
+    <div class="bg-white dark:bg-slate-700 rounded-lg shadow p-5">
+        <p class="text-sm font-medium text-gray-500 dark:text-slate-400">Templates</p>
+        <p class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">@Model.TemplateCount</p>
+    </div>
+</div>
