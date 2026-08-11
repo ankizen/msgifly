@@ -1,0 +1,89 @@
+@model Msgifly.Web.Models.PagedList<Msgifly.Web.Models.Entities.Contact>
+@{
+    ViewData["Title"] = "Contacts";
+    var statusOptions = (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewData["StatusOptions"]!;
+    var sourceOptions = (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewData["SourceOptions"]!;
+}
+
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Contacts</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Leads and customers reachable over WhatsApp.</p>
+    </div>
+    <div class="flex gap-2">
+        <a asp-action="Import" class="inline-flex items-center px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">
+            Import CSV
+        </a>
+        <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">
+            + Add Contact
+        </a>
+    </div>
+</div>
+
+<form method="get" class="mb-4 flex flex-wrap gap-3">
+    <input type="text" name="search" value="@ViewData["Search"]" placeholder="Search name, phone, email..."
+           class="w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+    <select name="statusId" onchange="this.form.submit()" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        <option value="">All statuses</option>
+        @foreach (var opt in statusOptions)
+        {
+            <option value="@opt.Value" selected="@(ViewData["StatusId"]?.ToString() == opt.Value)">@opt.Text</option>
+        }
+    </select>
+    <select name="sourceId" onchange="this.form.submit()" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+        <option value="">All sources</option>
+        @foreach (var opt in sourceOptions)
+        {
+            <option value="@opt.Value" selected="@(ViewData["SourceId"]?.ToString() == opt.Value)">@opt.Text</option>
+        }
+    </select>
+    <button type="submit" class="px-3 py-2 text-sm rounded-md bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">Filter</button>
+</form>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Phone</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Source</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Assigned</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Items.Any())
+            {
+                <tr><td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No contacts yet.</td></tr>
+            }
+            @foreach (var contact in Model.Items)
+            {
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">
+                        @contact.FullName
+                        <span class="ml-2 text-xs text-gray-400 dark:text-slate-500">@contact.Type</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@contact.Phone</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="h-2.5 w-2.5 rounded-full" style="background-color:@contact.Status.Color"></span>
+                            @contact.Status.Name
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@contact.Source.Name</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(contact.AssignedTo?.FullName ?? "-")</td>
+                    <td class="px-4 py-3 text-right text-sm space-x-3">
+                        <a asp-action="Save" asp-route-id="@contact.Id" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                        <button type="button" class="text-red-600 hover:text-red-500"
+                                x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = contact.Id })', message: 'Delete this contact?' })">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<partial name="_Pagination" model="Model" />

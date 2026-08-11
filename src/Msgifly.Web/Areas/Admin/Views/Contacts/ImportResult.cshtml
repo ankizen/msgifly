@@ -1,0 +1,35 @@
+@model Msgifly.Web.Models.ViewModels.ImportContactsResultViewModel
+@{
+    ViewData["Title"] = "Import Result";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Import Result</h1>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-lg">
+    <div class="grid grid-cols-2 gap-4 text-center">
+        <div class="rounded-md bg-green-50 dark:bg-green-900/30 p-4">
+            <p class="text-3xl font-semibold text-green-700 dark:text-green-300">@Model.Imported</p>
+            <p class="text-sm text-green-700 dark:text-green-300">Imported</p>
+        </div>
+        <div class="rounded-md bg-red-50 dark:bg-red-900/30 p-4">
+            <p class="text-3xl font-semibold text-red-700 dark:text-red-300">@Model.Skipped</p>
+            <p class="text-sm text-red-700 dark:text-red-300">Skipped</p>
+        </div>
+    </div>
+
+    @if (Model.Errors.Any())
+    {
+        <div class="mt-4 max-h-48 overflow-y-auto text-sm text-gray-600 dark:text-slate-400 space-y-1">
+            @foreach (var error in Model.Errors)
+            {
+                <p>@error</p>
+            }
+        </div>
+    }
+
+    <div class="mt-6">
+        <a asp-action="Index" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Go to Contacts</a>
+    </div>
+</div>

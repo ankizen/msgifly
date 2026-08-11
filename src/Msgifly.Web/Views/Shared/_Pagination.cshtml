@@ -1,0 +1,25 @@
+@model Msgifly.Web.Models.IPagedList
+@{
+    string PageUrl(int page)
+    {
+        var query = new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>(Context.Request.Query);
+        query["page"] = page.ToString();
+        return Context.Request.Path + QueryString.Create(query.SelectMany(kv => kv.Value.Select(v => new KeyValuePair<string, string?>(kv.Key, v))));
+    }
+}
+@if (Model.TotalPages > 1)
+{
+    <nav class="flex items-center justify-between border-t border-gray-200 dark:border-slate-700 px-4 py-3 mt-2">
+        <p class="text-sm text-gray-600 dark:text-slate-400">Page @Model.PageIndex of @Model.TotalPages</p>
+        <div class="flex gap-2">
+            <a href="@PageUrl(Model.PageIndex - 1)"
+               class="@(Model.HasPrevious ? "" : "pointer-events-none opacity-40") inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">
+                Previous
+            </a>
+            <a href="@PageUrl(Model.PageIndex + 1)"
+               class="@(Model.HasNext ? "" : "pointer-events-none opacity-40") inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">
+                Next
+            </a>
+        </div>
+    </nav>
+}

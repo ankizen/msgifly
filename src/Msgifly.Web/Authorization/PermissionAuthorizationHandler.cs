@@ -22,7 +22,7 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
         {
             context.Succeed(requirement);
         }
-        else if (context.User.HasClaim(PermissionClaimType, requirement.Permission))
+        else if (requirement.Permissions.Any(p => context.User.HasClaim(PermissionClaimType, p)))
         {
             context.Succeed(requirement);
         }

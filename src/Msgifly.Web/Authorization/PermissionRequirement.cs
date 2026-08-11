@@ -2,13 +2,16 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Msgifly.Web.Authorization;
 
-/// <summary>A single permission string, e.g. "contact.view" — matches the original app's permission naming.</summary>
+/// <summary>
+/// One or more permission strings from a comma-separated policy name, e.g. "contact.create,contact.edit" —
+/// satisfied if the user holds ANY of them (matches the original app's checkPermission([...]) OR-array semantics).
+/// </summary>
 public class PermissionRequirement : IAuthorizationRequirement
 {
-    public string Permission { get; }
+    public string[] Permissions { get; }
 
-    public PermissionRequirement(string permission)
+    public PermissionRequirement(string policyName)
     {
-        Permission = permission;
+        Permissions = policyName.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 }
