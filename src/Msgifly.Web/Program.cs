@@ -6,6 +6,7 @@ using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Services.Settings;
+using Msgifly.Web.Services.WhatsApp;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -45,6 +46,12 @@ builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler
 builder.Services.AddAuthorization();
 
 builder.Services.AddScoped<ISettingsService, SettingsService>();
+
+builder.Services.AddHttpClient("GraphApi", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 
 var app = builder.Build();
 

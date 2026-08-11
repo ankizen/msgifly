@@ -1,0 +1,146 @@
+@model Msgifly.Web.Models.ViewModels.WabaIndexViewModel
+@{
+    ViewData["Title"] = "WhatsApp Business Account";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">WhatsApp Business Account</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Connect Msgifly to Meta's WhatsApp Cloud API.</p>
+</div>
+
+@if (!Model.IsAccountConnected)
+{
+    <div class="max-w-2xl space-y-6">
+        <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="flex h-6 w-6 items-center justify-center rounded-full @(Model.IsWebhookConnected ? "bg-green-600" : "bg-indigo-600") text-white text-xs font-bold">1</span>
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Register your Meta App</h2>
+            </div>
+
+            @if (Model.IsWebhookConnected)
+            {
+                <p class="text-sm text-gray-600 dark:text-slate-400 mb-3">Add this callback URL and verify token to your Meta App's WhatsApp &gt; Configuration &gt; Webhook settings:</p>
+                <dl class="text-sm space-y-2 mb-4">
+                    <div>
+                        <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Callback URL</dt>
+                        <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 break-all">@Model.WebhookUrl</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Verify Token</dt>
+                        <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 break-all">@Model.WebhookVerifyToken</dd>
+                    </div>
+                </dl>
+                <p class="text-xs text-gray-400 dark:text-slate-500">Registered — you can update your App ID/Secret again below if needed.</p>
+            }
+
+            <form asp-action="ConnectWebhook" method="post" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label asp-for="WebhookForm.FacebookAppId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                    <input asp-for="WebhookForm.FacebookAppId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                </div>
+                <div>
+                    <label asp-for="WebhookForm.FacebookAppSecret" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                    <input asp-for="WebhookForm.FacebookAppSecret" type="password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                </div>
+                <div class="sm:col-span-2">
+                    <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">
+                        @(Model.IsWebhookConnected ? "Update" : "Save & Continue")
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 @(Model.IsWebhookConnected ? "" : "opacity-50 pointer-events-none")">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-bold">2</span>
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Connect your Business Account</h2>
+            </div>
+            <p class="text-sm text-gray-600 dark:text-slate-400 mb-3">
+                From Meta Business Manager, grab your WhatsApp Business Account ID and a permanent access token.
+            </p>
+            <form asp-action="ConnectAccount" method="post" class="grid grid-cols-1 gap-4">
+                <div>
+                    <label asp-for="AccountForm.BusinessAccountId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                    <input asp-for="AccountForm.BusinessAccountId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                </div>
+                <div>
+                    <label asp-for="AccountForm.AccessToken" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                    <input asp-for="AccountForm.AccessToken" type="password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                </div>
+                <div>
+                    <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Connect Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+}
+else
+{
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Phone Numbers</h2>
+                @if (!Model.PhoneNumbers.Any())
+                {
+                    <p class="text-sm text-gray-500 dark:text-slate-400">No phone numbers found on this Business Account.</p>
+                }
+                <div class="divide-y divide-gray-200 dark:divide-slate-700">
+                    @foreach (var number in Model.PhoneNumbers)
+                    {
+                        var isDefault = number.Id == Model.DefaultPhoneNumberId;
+                        <div class="py-3 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900 dark:text-slate-100">
+                                    @number.DisplayPhoneNumber
+                                    @if (isDefault)
+                                    {
+                                        <span class="ml-2 inline-flex items-center rounded-full bg-indigo-100 dark:bg-indigo-900 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">Default</span>
+                                    }
+                                </p>
+                                <p class="text-xs text-gray-400 dark:text-slate-500">@number.VerifiedName &middot; Quality: @(number.QualityRating ?? "unknown")</p>
+                            </div>
+                            @if (!isDefault)
+                            {
+                                <form asp-action="SetDefaultNumber" method="post">
+                                    <input type="hidden" name="phoneNumberId" value="@number.Id" />
+                                    <input type="hidden" name="phoneNumber" value="@number.DisplayPhoneNumber" />
+                                    <button type="submit" class="text-sm text-indigo-600 hover:text-indigo-500">Set as default</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Send a Test Message</h2>
+                <form asp-action="SendTestMessage" method="post" class="flex flex-wrap gap-2">
+                    <input type="text" name="phoneNumber" placeholder="+91XXXXXXXXXX" required
+                           class="flex-1 min-w-[200px] rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Send</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            @if (!string.IsNullOrEmpty(Model.DefaultPhoneNumber))
+            {
+                <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 text-center">
+                    <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Chat QR Code</h2>
+                    <img src="@Url.Action("QrCode")" alt="WhatsApp QR code" class="mx-auto w-40 h-40" />
+                    <p class="mt-2 text-xs text-gray-500 dark:text-slate-400">wa.me/@(new string(Model.DefaultPhoneNumber.Where(char.IsDigit).ToArray()))</p>
+                </div>
+            }
+
+            <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Danger zone</h2>
+                <p class="text-sm text-gray-500 dark:text-slate-400 mb-3">Disconnecting removes the stored credentials and clears the synced template cache.</p>
+                <form asp-action="Disconnect" method="post">
+                    <button type="submit" class="w-full px-4 py-2 rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 text-sm font-medium">
+                        Disconnect Account
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+}
