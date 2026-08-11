@@ -19,8 +19,9 @@ public static class DbSeeder
         var db = services.GetRequiredService<ApplicationDbContext>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole<int>>>();
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var logger = services.GetRequiredService<ILogger<ApplicationDbContext>>();
 
-        await db.Database.MigrateAsync();
+        await MigrateWithRetryAsync(db, logger);
 
         // Permissions live as role claims on an "Admin" role (see PermissionAuthorizationHandler).
         const string adminRoleName = "Admin";
@@ -90,6 +91,35 @@ public static class DbSeeder
             }
 
             await userManager.AddToRoleAsync(adminUser, adminRoleName);
+        }
+    }
+
+    /// <summary>
+    /// Docker Compose's `depends_on: condition: service_healthy` gets the container start order
+    /// right, but a fresh SQL Server container can still take a few extra seconds to accept logins
+    /// after its healthcheck first passes. Retry the initial connection/migration a few times
+    /// rather than crash-looping the whole app on a transient cold-start race.
+    /// </summary>
+    private static async Task MigrateWithRetryAsync(ApplicationDbContext db, ILogger logger)
+    {
+        const int maxAttempts = 8;
+        var delay = TimeSpan.FromSeconds(3);
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await db.Database.MigrateAsync();
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts)
+            {
+                logger.LogWarning(ex,
+                    "Database not ready yet (attempt {Attempt}/{MaxAttempts}), retrying in {Delay}s...",
+                    attempt, maxAttempts, delay.TotalSeconds);
+                await Task.Delay(delay);
+                delay += TimeSpan.FromSeconds(3);
+            }
         }
     }
 }

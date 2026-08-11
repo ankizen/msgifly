@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Authorization;
@@ -12,7 +13,9 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddMemoryCache();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)));
 
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole<int>>(options =>
@@ -56,7 +59,21 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// TLS is terminated at Coolify's reverse proxy (Traefik), not here — the app itself is only
+// ever addressed over plain HTTP inside the container network. Trust the proxy's forwarded
+// headers so cookies/auth see the real external scheme, and skip UseHttpsRedirection() (the
+// proxy owns HTTP->HTTPS enforcement once a real TLS domain is configured for this app).
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+};
+// The proxy's container IP isn't static, and it's only reachable on the internal Docker
+// network anyway (this container is never addressed directly from the internet) — clearing
+// these lets ASP.NET Core trust it without pinning a specific address.
+forwardedHeadersOptions.KnownIPNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
+
 app.UseStaticFiles();
 app.UseRouting();
 
