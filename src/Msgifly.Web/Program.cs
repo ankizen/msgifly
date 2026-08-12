@@ -7,6 +7,7 @@ using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
+using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
 
@@ -54,6 +55,7 @@ builder.Services.AddHttpClient("GraphApi", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
+builder.Services.AddScoped<BotMatchingService>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddHangfire(config => config

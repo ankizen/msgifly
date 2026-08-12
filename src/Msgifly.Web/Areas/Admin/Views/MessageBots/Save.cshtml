@@ -1,0 +1,79 @@
+@model Msgifly.Web.Models.ViewModels.MessageBotFormViewModel
+@{
+    ViewData["Title"] = Model.Id is null ? "New Message Bot" : "Edit Message Bot";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Reply with plain text when an inbound message matches.</p>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+
+<form asp-action="Save" method="post" class="max-w-2xl space-y-6" x-data="{ replyType: '@Model.ReplyType' }">
+    <input type="hidden" asp-for="Id" />
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <span asp-validation-for="Name" class="text-sm text-red-600"></span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label asp-for="RelType" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                <select asp-for="RelType" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="Lead">Lead</option>
+                    <option value="Customer">Customer</option>
+                </select>
+            </div>
+            <div>
+                <label asp-for="ReplyType" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                <select asp-for="ReplyType" x-model="replyType" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    <option value="ExactMatch">Exact match</option>
+                    <option value="Contains">Message contains</option>
+                    <option value="FirstMessage">Contact's first message</option>
+                    <option value="CatchAll">Catch-all (fallback)</option>
+                </select>
+            </div>
+        </div>
+
+        <div x-show="replyType === 'ExactMatch' || replyType === 'Contains'" x-cloak>
+            <label asp-for="TriggersInput" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="TriggersInput" placeholder="hi, hello, price" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <span asp-validation-for="TriggersInput" class="text-sm text-red-600"></span>
+        </div>
+
+        <div>
+            <label asp-for="HeaderText" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="HeaderText" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+        </div>
+
+        <div>
+            <label asp-for="ReplyText" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <textarea asp-for="ReplyText" rows="4" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></textarea>
+            <span asp-validation-for="ReplyText" class="text-sm text-red-600"></span>
+        </div>
+
+        <div>
+            <label asp-for="FooterText" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="FooterText" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+        </div>
+
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" asp-for="IsActive" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+            <span class="text-sm text-gray-700 dark:text-slate-300">Active</span>
+        </label>
+    </div>
+
+    <div class="flex gap-3">
+        <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Save</button>
+        <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
+    </div>
+</form>

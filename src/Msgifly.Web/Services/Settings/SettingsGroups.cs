@@ -48,3 +48,23 @@ public class WhatsAppSettings
     public DateTime? LastHealthCheckAt { get; set; }
     public string? HealthStatusJson { get; set; }
 }
+
+/// <summary>
+/// The product-specific behavior toggles the original grouped under its "WhatsMark Settings"
+/// nav section (master doc §7.13) — trimmed to just what the bot/inbound-message pipeline
+/// (this phase) actually needs; the rest (AI integration, notification sound, etc.) get added
+/// when the phase that uses them lands.
+/// </summary>
+public class WhatsMarkSettings
+{
+    /// <summary>Auto-create a Contact (as a Lead) the first time an unknown number messages in.</summary>
+    public bool AutoCreateLeadOnInboundMessage { get; set; } = true;
+
+    public int? DefaultLeadStatusId { get; set; }
+    public int? DefaultLeadSourceId { get; set; }
+
+    /// <summary>Comma-separated keywords that pause bots for a conversation when the contact sends them.</summary>
+    public string StopBotKeywords { get; set; } = "stop,unsubscribe";
+
+    public int RestartBotsAfterHours { get; set; } = 24;
+}

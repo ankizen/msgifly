@@ -51,16 +51,37 @@
     </a>
 }
 
-@if (User.HasPermission("campaigns.view"))
+@if (User.HasPermission("campaigns.view", "message_bot.view", "template_bot.view"))
 {
     <p class="mt-6 mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Marketing</p>
 
-    <a asp-area="Admin" asp-controller="Campaigns" asp-action="Index" class="@LinkClasses(IsActive("Campaigns"))">
-        <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-        </svg>
-        Campaigns
-    </a>
+    @if (User.HasPermission("campaigns.view"))
+    {
+        <a asp-area="Admin" asp-controller="Campaigns" asp-action="Index" class="@LinkClasses(IsActive("Campaigns"))">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+            Campaigns
+        </a>
+    }
+    @if (User.HasPermission("message_bot.view"))
+    {
+        <a asp-area="Admin" asp-controller="MessageBots" asp-action="Index" class="@LinkClasses(IsActive("MessageBots"))">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 9.75a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+            </svg>
+            Message Bots
+        </a>
+    }
+    @if (User.HasPermission("template_bot.view"))
+    {
+        <a asp-area="Admin" asp-controller="TemplateBots" asp-action="Index" class="@LinkClasses(IsActive("TemplateBots"))">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+            </svg>
+            Template Bots
+        </a>
+    }
 }
 
 @if (User.HasPermission("user.view", "role.view", "source.view", "status.view"))

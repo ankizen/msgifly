@@ -171,7 +171,10 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult.Ok();
     }
 
-    public async Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText)
+    public Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText) =>
+        SendPlainTextMessageAsync(toPhoneNumber, messageText);
+
+    public async Task<WhatsAppResult> SendPlainTextMessageAsync(string toPhoneNumber, string messageText)
     {
         var settings = await GetSettingsAsync();
         if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
