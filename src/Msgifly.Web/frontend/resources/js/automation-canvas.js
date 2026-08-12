@@ -160,7 +160,8 @@ const TRIGGER_HTML = () => `
         <option value="InboundMessage">Any inbound message</option>
         <option value="FirstInboundMessage">First message from a contact</option>
         <option value="KeywordMatch">Message contains a keyword</option>
-        <option value="NewContactCreated">New contact created</option>
+        <option value="NewContactCreated">New contact created (any source)</option>
+        <option value="FacebookLeadReceived">New Facebook lead received</option>
         <option value="InteractiveReply">Button / list reply tapped</option>
       </select>
       <input df-keywords placeholder="Keywords, comma-separated" class="${FIELD_CLASS}" />

@@ -78,6 +78,7 @@ builder.Services.AddScoped<EmbeddedSignupService>();
 builder.Services.AddScoped<MetaLeadAdsService>();
 builder.Services.AddScoped<BotMatchingService>();
 builder.Services.AddScoped<AutomationEngine>();
+builder.Services.AddScoped<LeadAdsSyncJob>();
 builder.Services.AddSignalR();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");

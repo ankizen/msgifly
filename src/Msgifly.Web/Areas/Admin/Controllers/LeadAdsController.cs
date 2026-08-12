@@ -28,19 +28,22 @@ public class LeadAdsController : Controller
     private readonly ISettingsService _settingsService;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly IBackgroundJobClient _backgroundJobClient;
+    private readonly LeadAdsSyncJob _leadAdsSyncJob;
 
     public LeadAdsController(
         ApplicationDbContext db,
         MetaLeadAdsService leadAdsService,
         ISettingsService settingsService,
         ICurrentWorkspaceAccessor workspaceAccessor,
-        IBackgroundJobClient backgroundJobClient)
+        IBackgroundJobClient backgroundJobClient,
+        LeadAdsSyncJob leadAdsSyncJob)
     {
         _db = db;
         _leadAdsService = leadAdsService;
         _settingsService = settingsService;
         _workspaceAccessor = workspaceAccessor;
         _backgroundJobClient = backgroundJobClient;
+        _leadAdsSyncJob = leadAdsSyncJob;
     }
 
     private Task<Workspace> CurrentWorkspaceAsync() => _db.Workspaces.FirstAsync(w => w.Id == _workspaceAccessor.WorkspaceId);
@@ -57,12 +60,14 @@ public class LeadAdsController : Controller
             .ToListAsync();
 
         var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
+        var forms = await _db.LeadAdsForms.OrderBy(f => f.FormName).ToListAsync();
 
         ViewData["Workspace"] = workspace;
         ViewData["ImportedCount"] = importedCount;
         ViewData["RecentImports"] = recentImports;
         ViewData["FacebookAppId"] = metaApp.FacebookAppId;
         ViewData["ApiVersion"] = metaApp.ApiVersion;
+        ViewData["Forms"] = forms;
         return View();
     }
 
@@ -111,7 +116,32 @@ public class LeadAdsController : Controller
         workspace.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        this.Notify($"Connected \"{pageName}\". New Instant Form leads will start syncing within a few minutes — or use \"Sync now\" below.");
+        var forms = await _leadAdsSyncJob.DiscoverFormsAsync(workspace);
+        var formNote = forms is { Count: > 0 }
+            ? $" Found {forms.Count} form(s) below — turn on the ones you want synced."
+            : " No Instant Forms found on this Page yet.";
+        this.Notify($"Connected \"{pageName}\".{formNote}");
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleForm(int id)
+    {
+        var form = await _db.LeadAdsForms.FirstOrDefaultAsync(f => f.Id == id);
+        if (form is null)
+        {
+            return NotFound();
+        }
+
+        form.IsEnabled = !form.IsEnabled;
+        form.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        this.Notify(form.IsEnabled
+            ? $"\"{form.FormName}\" will now sync new leads."
+            : $"\"{form.FormName}\" sync turned off.");
         return RedirectToAction(nameof(Index));
     }
 

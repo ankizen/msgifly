@@ -47,6 +47,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<AutomationLog> AutomationLogs => Set<AutomationLog>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<LeadAdsImport> LeadAdsImports => Set<LeadAdsImport>();
+    public DbSet<LeadAdsForm> LeadAdsForms => Set<LeadAdsForm>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -74,6 +75,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<Automation>().HasQueryFilter(a => a.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ApiKey>().HasQueryFilter(k => k.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<LeadAdsImport>().HasQueryFilter(l => l.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<LeadAdsForm>().HasQueryFilter(f => f.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ContactNote>().HasQueryFilter(n => n.Contact.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ChatMessage>().HasQueryFilter(m => m.Chat.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<CampaignDetail>().HasQueryFilter(d => d.Campaign.WorkspaceId == _workspaceAccessor.WorkspaceId);
@@ -235,5 +237,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<Workspace>(e => e.HasIndex(w => w.BusinessAccountId));
 
         builder.Entity<LeadAdsImport>(e => e.HasIndex(l => new { l.WorkspaceId, l.MetaLeadId }).IsUnique());
+        builder.Entity<LeadAdsForm>(e => e.HasIndex(f => new { f.WorkspaceId, f.FormId }).IsUnique());
     }
 }

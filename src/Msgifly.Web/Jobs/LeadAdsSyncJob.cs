@@ -62,16 +62,36 @@ public class LeadAdsSyncJob
         }
     }
 
-    private async Task SyncWorkspaceAsync(Workspace workspace)
+    /// <summary>Fetches the Page's current form list and upserts it into LeadAdsForms — called both
+    /// from here (every scheduled run) and immediately by LeadAdsController right after connecting
+    /// a Page, so the admin doesn't stare at an empty form list until the next scheduled run.</summary>
+    public async Task<List<LeadFormInfo>?> DiscoverFormsAsync(Workspace workspace)
     {
         var formsResult = await _leadAdsService.GetLeadFormsAsync(workspace.FacebookPageId!, workspace.FacebookPageAccessToken!);
         if (!formsResult.Success)
         {
             _logger.LogWarning("Couldn't list lead forms for workspace {WorkspaceId}: {Error}", workspace.Id, formsResult.ErrorMessage);
+            return null;
+        }
+
+        await UpsertFormsAsync(workspace, formsResult.Data!);
+        return formsResult.Data;
+    }
+
+    private async Task SyncWorkspaceAsync(Workspace workspace)
+    {
+        var forms = await DiscoverFormsAsync(workspace);
+        if (forms is null)
+        {
             return;
         }
 
-        foreach (var form in formsResult.Data!)
+        var enabledFormIds = await _db.LeadAdsForms
+            .Where(f => f.IsEnabled)
+            .Select(f => f.FormId)
+            .ToListAsync();
+
+        foreach (var form in forms.Where(f => enabledFormIds.Contains(f.Id)))
         {
             var leadsResult = await _leadAdsService.GetRecentLeadsAsync(form.Id, workspace.FacebookPageAccessToken!);
             if (!leadsResult.Success)
@@ -99,10 +119,42 @@ public class LeadAdsSyncJob
 
                 if (contact is not null)
                 {
+                    // Fire both: NewContactCreated for anyone whose automations already treat
+                    // every fresh contact the same regardless of source, and the more specific
+                    // FacebookLeadReceived for "follow up instantly on ad leads" automations.
                     await _automationEngine.RunForTriggerAsync(AutomationTriggerType.NewContactCreated, contact.Id, new AutomationContext());
+                    await _automationEngine.RunForTriggerAsync(AutomationTriggerType.FacebookLeadReceived, contact.Id, new AutomationContext());
                 }
             }
         }
+    }
+
+    private async Task UpsertFormsAsync(Workspace workspace, List<LeadFormInfo> forms)
+    {
+        var existingByFormId = await _db.LeadAdsForms.ToDictionaryAsync(f => f.FormId);
+
+        foreach (var form in forms)
+        {
+            if (existingByFormId.TryGetValue(form.Id, out var row))
+            {
+                row.FormName = form.Name;
+                row.Status = form.Status;
+                row.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                _db.LeadAdsForms.Add(new LeadAdsForm
+                {
+                    WorkspaceId = workspace.Id,
+                    FormId = form.Id,
+                    FormName = form.Name,
+                    Status = form.Status,
+                    IsEnabled = false,
+                });
+            }
+        }
+
+        await _db.SaveChangesAsync();
     }
 
     private async Task<Contact?> ImportLeadAsContactAsync(Workspace workspace, LeadInfo lead)

@@ -18,6 +18,12 @@ public enum AutomationTriggerType
 
     /// <summary>Customer tapped a specific quick-reply button or list row.</summary>
     InteractiveReply = 4,
+
+    /// <summary>A new lead came in from a connected Facebook Lead Ads (Instant Forms) form — a
+    /// more specific case of NewContactCreated, broken out as its own trigger so "follow up
+    /// instantly on ad leads" is a one-click automation to set up rather than something that
+    /// also silently fires for every manually-added or WhatsApp-inbound contact too.</summary>
+    FacebookLeadReceived = 5,
 }
 
 public enum AutomationStepType

@@ -41,6 +41,39 @@
 
     @if (isConnected)
     {
+        var forms = (List<LeadAdsForm>)ViewData["Forms"]!;
+        <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+            <div class="p-6 pb-3">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white">Instant Forms</h2>
+                <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">A Page can run many forms over time and not all stay active — turn on only the ones you want new leads pulled from.</p>
+            </div>
+            @if (forms.Count == 0)
+            {
+                <p class="px-6 pb-6 text-sm text-gray-500 dark:text-slate-400">No forms found yet — click "Sync now" above, or check back after Facebook reports this Page's forms.</p>
+            }
+            else
+            {
+                <ul class="divide-y divide-gray-200 dark:divide-slate-700">
+                    @foreach (var form in forms)
+                    {
+                        <li class="flex items-center justify-between px-6 py-3">
+                            <div>
+                                <p class="text-sm font-medium text-gray-900 dark:text-slate-100">@form.FormName</p>
+                                <p class="text-xs text-gray-500 dark:text-slate-400">Status: @form.Status</p>
+                            </div>
+                            <form asp-action="ToggleForm" asp-route-id="@form.Id" method="post">
+                                <button type="submit"
+                                        class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors @(form.IsEnabled ? "bg-emerald-500" : "bg-gray-300 dark:bg-slate-600")"
+                                        title="@(form.IsEnabled ? "Syncing — click to turn off" : "Not syncing — click to turn on")">
+                                    <span class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform @(form.IsEnabled ? "translate-x-6" : "translate-x-1")"></span>
+                                </button>
+                            </form>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+
         var recentImports = (IEnumerable<dynamic>)ViewData["RecentImports"]!;
         <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
             <h2 class="text-base font-semibold text-gray-900 dark:text-white p-6 pb-3">Recently imported</h2>
