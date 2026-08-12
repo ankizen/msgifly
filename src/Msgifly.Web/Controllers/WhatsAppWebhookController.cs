@@ -1,10 +1,13 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Data;
+using Msgifly.Web.Hubs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
@@ -30,6 +33,7 @@ public class WhatsAppWebhookController : Controller
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly BotMatchingService _botMatchingService;
+    private readonly IHubContext<ChatHub> _hubContext;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -37,12 +41,14 @@ public class WhatsAppWebhookController : Controller
         ApplicationDbContext db,
         IWhatsAppService whatsAppService,
         BotMatchingService botMatchingService,
+        IHubContext<ChatHub> hubContext,
         ILogger<WhatsAppWebhookController> logger)
     {
         _settingsService = settingsService;
         _db = db;
         _whatsAppService = whatsAppService;
         _botMatchingService = botMatchingService;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
@@ -161,7 +167,7 @@ public class WhatsAppWebhookController : Controller
 
             await _db.SaveChangesAsync(); // need chat.Id for the message below
 
-            _db.ChatMessages.Add(new ChatMessage
+            var inboundMessage = new ChatMessage
             {
                 ChatId = chat.Id,
                 SenderId = from,
@@ -171,8 +177,11 @@ public class WhatsAppWebhookController : Controller
                 Status = MessageDeliveryStatus.Read,
                 TimeSent = DateTime.UtcNow,
                 IsRead = false,
-            });
+            };
+            _db.ChatMessages.Add(inboundMessage);
             await _db.SaveChangesAsync();
+
+            await BroadcastMessageAsync(chat, inboundMessage);
 
             if (!chat.IsBotsStopped && contact is not null)
             {
@@ -272,7 +281,7 @@ public class WhatsAppWebhookController : Controller
 
     private async Task StoreBotReplyAsync(Chat chat, string text)
     {
-        _db.ChatMessages.Add(new ChatMessage
+        var reply = new ChatMessage
         {
             ChatId = chat.Id,
             SenderId = chat.WaNoId ?? "bot",
@@ -281,11 +290,28 @@ public class WhatsAppWebhookController : Controller
             Status = MessageDeliveryStatus.Sent,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
-        });
+        };
+        _db.ChatMessages.Add(reply);
 
         chat.LastMessage = text;
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
+
+        await BroadcastMessageAsync(chat, reply);
+    }
+
+    private async Task BroadcastMessageAsync(Chat chat, ChatMessage message)
+    {
+        var dto = new ChatMessageDto(
+            message.Id,
+            message.SenderId,
+            message.Message,
+            message.MessageType,
+            message.TimeSent,
+            IsOutbound: message.StaffId is not null || message.SenderId != chat.ReceiverId,
+            message.Status.ToString());
+
+        await _hubContext.Clients.All.SendAsync("ReceiveMessage", chat.Id, dto);
     }
 
     private async Task ProcessStatusUpdatesAsync(JsonArray statuses)
@@ -320,6 +346,8 @@ public class WhatsAppWebhookController : Controller
             {
                 chatMessage.Status = deliveryStatus.Value;
                 chatMessage.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
+                await _hubContext.Clients.All.SendAsync("MessageStatusUpdated", chatMessage.ChatId, chatMessage.Id, chatMessage.Status.ToString());
             }
 
             var campaignDetail = await _db.CampaignDetails.FirstOrDefaultAsync(d => d.WhatsappMessageId == wamid);
@@ -328,10 +356,9 @@ public class WhatsAppWebhookController : Controller
                 campaignDetail.DeliveryStatus = deliveryStatus.Value;
                 campaignDetail.ResponseMessage = errorDetail ?? campaignDetail.ResponseMessage;
                 campaignDetail.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
             }
         }
-
-        await _db.SaveChangesAsync();
     }
 
     private static string ExtractText(JsonNode message)

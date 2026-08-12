@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@alpinejs/persist": "^3.14.0",
+    "@microsoft/signalr": "^8.0.7",
     "alpinejs": "^3.14.0",
     "apexcharts": "^4.5.0",
     "axios": "^1.7.4",

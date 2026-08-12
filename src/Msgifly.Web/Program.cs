@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
+using Msgifly.Web.Hubs;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Services.Bots;
@@ -56,6 +57,7 @@ builder.Services.AddHttpClient("GraphApi", client =>
 });
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 builder.Services.AddScoped<BotMatchingService>();
+builder.Services.AddSignalR();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddHangfire(config => config
@@ -108,6 +110,8 @@ RecurringJob.AddOrUpdate<CampaignDispatchJob>(
     "process-scheduled-campaigns",
     job => job.ProcessScheduledCampaignsAsync(),
     Cron.Minutely());
+
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.MapControllerRoute(
     name: "areas",
