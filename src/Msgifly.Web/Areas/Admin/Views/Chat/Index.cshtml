@@ -188,15 +188,31 @@ function chatInbox() {
             this.connectRealtime();
         },
 
+        // Sending a message both returns it directly in the HTTP response (for the immediate,
+        // optimistic append below) AND gets broadcast back over SignalR to every connected
+        // client — including the sender's own connection. Without this dedup, the same message
+        // id lands in `messages` twice, and Alpine's x-for :key="message.id" reconciliation
+        // breaks on the duplicate key (messages appearing to vanish/reorder unpredictably as
+        // more arrive). Same guard covers a SignalR reconnect ever redelivering a message.
+        addMessageIfNew(message) {
+            if (this.messages.some(m => m.id === message.id)) {
+                return false;
+            }
+            this.messages.push(message);
+            return true;
+        },
+
         connectRealtime() {
             this.connection = window.createChatConnection();
 
             this.connection.on('ReceiveMessage', (chatId, message) => {
                 if (chatId === this.activeChatId) {
-                    this.messages.push(message);
-                    this.$nextTick(() => this.scrollToBottom());
-                    if (!message.isOutbound) {
-                        this.markAsRead(chatId);
+                    const added = this.addMessageIfNew(message);
+                    if (added) {
+                        this.$nextTick(() => this.scrollToBottom());
+                        if (!message.isOutbound) {
+                            this.markAsRead(chatId);
+                        }
                     }
                 }
                 this.bumpChat(chatId, message);
@@ -285,7 +301,7 @@ function chatInbox() {
                 }
 
                 const message = await res.json();
-                this.messages.push(message);
+                this.addMessageIfNew(message);
                 this.composeText = '';
                 this.pendingFile = null;
                 this.$refs.fileInput.value = '';
