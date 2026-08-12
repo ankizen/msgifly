@@ -241,6 +241,24 @@ public class WabaController : Controller
     [HttpPost]
     [Authorize(Policy = "connect_account.connect")]
     [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RegisterPhoneNumber(string phoneNumberId, string pin)
+    {
+        if (string.IsNullOrWhiteSpace(pin) || pin.Length != 6 || !pin.All(char.IsDigit))
+        {
+            this.Notify("Enter a 6-digit PIN.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var result = await _whatsAppService.RegisterPhoneNumberAsync(phoneNumberId, pin);
+        this.Notify(result.Success
+            ? "Number registered. Remember this PIN — Meta may ask for it again later (e.g. if you ever need to re-register)."
+            : $"Registration failed: {result.ErrorMessage}", result.Success ? "success" : "danger");
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetDefaultNumber(string phoneNumberId, string phoneNumber)
     {
         var workspace = await CurrentWorkspaceAsync();

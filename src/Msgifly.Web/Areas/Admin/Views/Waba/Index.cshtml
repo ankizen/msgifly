@@ -124,14 +124,20 @@ else
                                 </p>
                                 <p class="text-xs text-gray-400 dark:text-slate-500">@number.VerifiedName &middot; Quality: @(number.QualityRating ?? "unknown")</p>
                             </div>
-                            @if (!isDefault)
-                            {
-                                <form asp-action="SetDefaultNumber" method="post">
-                                    <input type="hidden" name="phoneNumberId" value="@number.Id" />
-                                    <input type="hidden" name="phoneNumber" value="@number.DisplayPhoneNumber" />
-                                    <button type="submit" class="text-sm text-emerald-600 hover:text-emerald-500">Set as default</button>
-                                </form>
-                            }
+                            <div class="flex items-center gap-3">
+                                <button type="button" x-data x-on:click="$dispatch('register-number', { phoneNumberId: @System.Text.Json.JsonSerializer.Serialize(number.Id) })"
+                                        class="text-sm text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200" title="Only needed once — fixes 'Account not registered' send errors">
+                                    Register
+                                </button>
+                                @if (!isDefault)
+                                {
+                                    <form asp-action="SetDefaultNumber" method="post">
+                                        <input type="hidden" name="phoneNumberId" value="@number.Id" />
+                                        <input type="hidden" name="phoneNumber" value="@number.DisplayPhoneNumber" />
+                                        <button type="submit" class="text-sm text-emerald-600 hover:text-emerald-500">Set as default</button>
+                                    </form>
+                                }
+                            </div>
                         </div>
                     }
                 </div>
@@ -215,6 +221,26 @@ else
             </div>
         </div>
     </div>
+
+    <form id="registerNumberForm" asp-action="RegisterPhoneNumber" method="post" class="hidden">
+        <input type="hidden" name="phoneNumberId" id="registerPhoneNumberId" />
+        <input type="hidden" name="pin" id="registerPin" />
+    </form>
+
+    @section Scripts {
+    <script>
+        window.addEventListener('register-number', (e) => {
+            const pin = window.prompt('Enter a 6-digit PIN to register this number for Cloud API messaging.\n\nAny 6 digits work if this is the first time — this becomes the number\'s 2-step verification PIN.');
+            if (!pin || !/^\d{6}$/.test(pin.trim())) {
+                if (pin !== null) window.alert('PIN must be exactly 6 digits.');
+                return;
+            }
+            document.getElementById('registerPhoneNumberId').value = e.detail.phoneNumberId;
+            document.getElementById('registerPin').value = pin.trim();
+            document.getElementById('registerNumberForm').submit();
+        });
+    </script>
+    }
 }
 
 @if (!Model.IsAccountConnected && !string.IsNullOrEmpty(Model.EmbeddedSignupConfigId) && !string.IsNullOrEmpty(Model.FacebookAppId))

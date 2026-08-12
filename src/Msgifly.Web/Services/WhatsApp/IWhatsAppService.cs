@@ -4,6 +4,14 @@ public interface IWhatsAppService
 {
     Task<WhatsAppResult<List<PhoneNumberInfo>>> GetPhoneNumbersAsync();
 
+    /// <summary>
+    /// Cloud API numbers need an explicit one-time registration (a 2-step-verification PIN) before
+    /// they can send/receive — separate from the number's ownership/display-name verification,
+    /// which is what GetPhoneNumbersAsync's data already reflects. Skipping this is exactly what
+    /// produces Meta's error #133010 "Account not registered" on an otherwise fully-connected number.
+    /// </summary>
+    Task<WhatsAppResult> RegisterPhoneNumberAsync(string phoneNumberId, string pin);
+
     Task<WhatsAppResult<BusinessProfileInfo>> GetBusinessProfileAsync(string phoneNumberId);
 
     /// <summary>Pulls Meta-approved templates into the local WhatsappTemplate table (updateOrCreate + delete orphans). Returns the count synced.</summary>

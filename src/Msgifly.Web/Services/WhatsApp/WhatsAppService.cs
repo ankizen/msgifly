@@ -37,6 +37,24 @@ public class WhatsAppService : IWhatsAppService
         _logger = logger;
     }
 
+    public async Task<WhatsAppResult> RegisterPhoneNumberAsync(string phoneNumberId, string pin)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync($"{phoneNumberId}/register", new { messaging_product = "whatsapp", pin });
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
     public async Task<WhatsAppResult<List<PhoneNumberInfo>>> GetPhoneNumbersAsync()
     {
         var settings = await GetSettingsAsync();
