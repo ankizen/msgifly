@@ -16,13 +16,51 @@ namespace Msgifly.Web.Areas.Admin.Controllers;
 public class TemplatesController : Controller
 {
     private const int PageSize = 20;
+    private const long MaxUploadBytes = 16 * 1024 * 1024; // matches Meta's own header-media cap
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
+    private readonly IWebHostEnvironment _environment;
 
-    public TemplatesController(ApplicationDbContext db, IWhatsAppService whatsAppService)
+    public TemplatesController(ApplicationDbContext db, IWhatsAppService whatsAppService, IWebHostEnvironment environment)
     {
         _db = db;
         _whatsAppService = whatsAppService;
+        _environment = environment;
+    }
+
+    /// <summary>
+    /// Backs the "Choose file" button on the template editor's header-media field — Meta's own
+    /// create/edit API just wants a publicly reachable URL for the sample media, so this stores
+    /// the upload under wwwroot and hands back that URL rather than requiring the admin to host
+    /// the file somewhere themselves first.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "template.load_template")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadHeaderMedia(IFormFile file)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest("Choose a file to upload.");
+        }
+
+        if (file.Length > MaxUploadBytes)
+        {
+            return BadRequest("File is larger than WhatsApp's 16 MB limit.");
+        }
+
+        var uploadsDir = Path.Combine(_environment.WebRootPath, "uploads", "templates");
+        Directory.CreateDirectory(uploadsDir);
+        var storedFileName = $"{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
+        var absolutePath = Path.Combine(uploadsDir, storedFileName);
+
+        await using (var stream = System.IO.File.Create(absolutePath))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        var publicUrl = $"{Request.Scheme}://{Request.Host}/uploads/templates/{storedFileName}";
+        return Json(new { url = publicUrl });
     }
 
     [Authorize(Policy = "template.view")]

@@ -7,6 +7,10 @@ obj/
 src/Msgifly.Web/frontend/node_modules/
 src/Msgifly.Web/wwwroot/build/
 
+## User-uploaded runtime content (chat media, template sample files) — lives on the deployed
+## volume, not in source control.
+src/Msgifly.Web/wwwroot/uploads/
+
 ## IDE
 .vs/
 .vscode/

@@ -10,6 +10,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.ApiKeys;
+using Msgifly.Web.Services.Chat;
 using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
 
@@ -92,13 +93,33 @@ public class MessagesController : ControllerBase
                     return BadRequest(new { error = "bad_request", message = "'template.name' is required for type=template." });
                 }
 
-                sendResult = await _whatsAppService.SendTemplateMessageAsync(request.To, new TemplateSendRequest
+                var templateEntity = await _db.WhatsappTemplates.AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.TemplateName == request.Template.Name);
+
+                var templateSendRequest = new TemplateSendRequest
                 {
                     TemplateName = request.Template.Name,
                     Language = request.Template.Language ?? "en_US",
+                    HeaderFormat = templateEntity?.HeaderFormat,
                     BodyParams = request.Template.Params ?? [],
-                });
-                storedMessage = $"[Template: {request.Template.Name}]";
+                };
+
+                sendResult = await _whatsAppService.SendTemplateMessageAsync(request.To, templateSendRequest);
+
+                // Falls back to a plain label if the template isn't in our local cache (e.g. sent
+                // by name only, never synced) — still sends fine via Meta, just less to show here.
+                if (templateEntity is not null)
+                {
+                    var rendered = TemplateMessageRenderer.ForChatMessage(templateEntity, templateSendRequest);
+                    storedMessage = rendered.DisplayText;
+                    storedType = rendered.MediaMessageType ?? "text";
+                    storedUrl = rendered.MediaUrl;
+                }
+                else
+                {
+                    storedMessage = $"Template: {request.Template.Name}";
+                    storedType = "text";
+                }
                 break;
 
             case "image" or "video" or "document" or "audio":
@@ -114,7 +135,7 @@ public class MessagesController : ControllerBase
                     Caption = request.Caption,
                     Filename = request.Filename,
                 });
-                storedMessage = request.Caption ?? $"[{type}]";
+                storedMessage = request.Caption ?? string.Empty;
                 storedUrl = request.MediaUrl;
                 break;
 
@@ -136,7 +157,9 @@ public class MessagesController : ControllerBase
             contactCreated = true;
         }
 
-        chat.LastMessage = storedMessage;
+        chat.LastMessage = type is "image" or "video" or "document" or "audio"
+            ? ChatPreviewText.ForMedia(storedType, storedMessage)
+            : storedMessage;
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 

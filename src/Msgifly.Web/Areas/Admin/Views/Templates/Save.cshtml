@@ -4,6 +4,8 @@
     ViewData["Title"] = isEdit ? "Edit Template" : "New Template";
 }
 
+@Html.AntiForgeryToken()
+
 <div class="mb-6">
     <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
     <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
@@ -31,13 +33,20 @@
     </div>
 }
 
-<form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@Model.Id" method="post" class="max-w-3xl space-y-6"
-      x-data="templateForm({
-          headerType: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderType),
-          headerContent: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderContent ?? ""),
-          bodyText: @System.Text.Json.JsonSerializer.Serialize(Model.BodyText),
-          buttonTypes: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.Type).ToList()),
-      })">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start"
+     x-data="templateForm({
+         headerType: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderType),
+         headerContent: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderContent ?? ""),
+         headerMediaUrl: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderMediaUrl ?? ""),
+         bodyText: @System.Text.Json.JsonSerializer.Serialize(Model.BodyText),
+         footerText: @System.Text.Json.JsonSerializer.Serialize(Model.FooterText ?? ""),
+         buttonTypes: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.Type).ToList()),
+         buttonTexts: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.Text ?? "").ToList()),
+         sampleHeader: @System.Text.Json.JsonSerializer.Serialize(Model.SampleHeader.ElementAtOrDefault(0) ?? ""),
+         sampleBody: @System.Text.Json.JsonSerializer.Serialize(Model.SampleBody.Select(v => v ?? "").ToList()),
+     })">
+
+    <form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@Model.Id" method="post" class="lg:col-span-2 space-y-6">
 
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
@@ -107,16 +116,29 @@
             <p class="mt-1 text-xs text-gray-400">At most one <code>{{1}}</code> placeholder. <span x-text="headerContent.length"></span>/60</p>
             <div x-show="/\{\{1\}\}/.test(headerContent)" x-cloak class="mt-2">
                 <label class="block text-xs font-medium text-gray-500 dark:text-slate-400">Sample value for {{1}}</label>
-                <input name="SampleHeader[0]" value="@Model.SampleHeader.ElementAtOrDefault(0)" placeholder="e.g. John"
+                <input name="SampleHeader[0]" x-model="sampleHeader" placeholder="e.g. John"
                        class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
             </div>
         </div>
 
-        <div x-show="headerType === 'image' || headerType === 'video' || headerType === 'document'" x-cloak class="mt-4">
-            <label asp-for="HeaderMediaUrl" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Sample media URL</label>
-            <input asp-for="HeaderMediaUrl" placeholder="https://..."
-                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
-            <p class="mt-1 text-xs text-gray-400">A publicly reachable sample file — shown to Meta's reviewers, not sent to recipients.</p>
+        <div x-show="headerType === 'image' || headerType === 'video' || headerType === 'document'" x-cloak class="mt-4 space-y-2">
+            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Sample media</label>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <label class="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 7.5L12 3m0 0L7.5 7.5M12 3v13.5" />
+                    </svg>
+                    <span x-text="headerMediaUploading ? 'Uploading…' : 'Choose file'"></span>
+                    <input type="file" class="hidden" :accept="headerType === 'image' ? 'image/*' : (headerType === 'video' ? 'video/*' : undefined)"
+                           x-on:change="uploadHeaderMedia($event.target)" :disabled="headerMediaUploading" />
+                </label>
+                <span class="text-xs text-gray-400">or paste a URL below</span>
+            </div>
+
+            <input asp-for="HeaderMediaUrl" x-model="headerMediaUrl" placeholder="https://..."
+                   class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <p class="text-xs text-gray-400">A publicly reachable sample file — shown to Meta's reviewers, not sent to recipients.</p>
         </div>
     </div>
 
@@ -133,7 +155,7 @@
         <template x-for="n in bodyVarCount" :key="n">
             <div class="mt-2">
                 <label class="block text-xs font-medium text-gray-500 dark:text-slate-400" x-text="'Sample value for {{' + n + '}}'"></label>
-                <input :name="'SampleBody[' + (n - 1) + ']'" :value="sampleBodyValue(n - 1)" placeholder="e.g. Priya"
+                <input :name="'SampleBody[' + (n - 1) + ']'" x-model="sampleBody[n - 1]" placeholder="e.g. Priya"
                        class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
             </div>
         </template>
@@ -142,7 +164,7 @@
     @* ---------- Footer ---------- *@
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
         <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Footer <span class="text-gray-400 font-normal">(optional)</span></h2>
-        <input asp-for="FooterText" maxlength="60" placeholder="Reply STOP to unsubscribe"
+        <input asp-for="FooterText" x-model="footerText" maxlength="60" placeholder="Reply STOP to unsubscribe"
                class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         <p class="mt-1 text-xs text-gray-400">No variables allowed here (Meta rule).</p>
     </div>
@@ -155,9 +177,9 @@
         <div class="space-y-3">
             @for (var i = 0; i < Model.Buttons.Count; i++)
             {
-                <div class="border border-gray-200 dark:border-slate-600 rounded-md p-3" x-data="{ type: buttonTypes[@i] || '' }">
+                <div class="border border-gray-200 dark:border-slate-600 rounded-md p-3">
                     <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-start">
-                        <select name="Buttons[@i].Type" x-model="type"
+                        <select name="Buttons[@i].Type" x-model="buttonTypes[@i]"
                                 class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
                             <option value="">— unused —</option>
                             <option value="QUICK_REPLY">Quick reply</option>
@@ -166,17 +188,17 @@
                             <option value="COPY_CODE">Copy offer code</option>
                         </select>
 
-                        <input name="Buttons[@i].Text" value="@Model.Buttons[i].Text" x-show="type" x-cloak maxlength="25" placeholder="Button text"
+                        <input name="Buttons[@i].Text" x-model="buttonTexts[@i]" x-show="buttonTypes[@i]" x-cloak maxlength="25" placeholder="Button text"
                                class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
 
-                        <input name="Buttons[@i].Url" value="@Model.Buttons[i].Url" x-show="type === 'URL'" x-cloak placeholder="https://example.com/{{1}}"
+                        <input name="Buttons[@i].Url" value="@Model.Buttons[i].Url" x-show="buttonTypes[@i] === 'URL'" x-cloak placeholder="https://example.com/{{1}}"
                                class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
 
-                        <input name="Buttons[@i].PhoneNumber" value="@Model.Buttons[i].PhoneNumber" x-show="type === 'PHONE_NUMBER'" x-cloak placeholder="+15551234567"
+                        <input name="Buttons[@i].PhoneNumber" value="@Model.Buttons[i].PhoneNumber" x-show="buttonTypes[@i] === 'PHONE_NUMBER'" x-cloak placeholder="+15551234567"
                                class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
 
-                        <input name="Buttons[@i].Example" value="@Model.Buttons[i].Example" x-show="type === 'URL' || type === 'COPY_CODE'" x-cloak
-                               :placeholder="type === 'COPY_CODE' ? 'Example code, e.g. SAVE20' : 'Example value for {{1}} in the URL, if used'"
+                        <input name="Buttons[@i].Example" value="@Model.Buttons[i].Example" x-show="buttonTypes[@i] === 'URL' || buttonTypes[@i] === 'COPY_CODE'" x-cloak
+                               :placeholder="buttonTypes[@i] === 'COPY_CODE' ? 'Example code, e.g. SAVE20' : 'Example value for {{1}} in the URL, if used'"
                                class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
                     </div>
                 </div>
@@ -190,7 +212,54 @@
         </button>
         <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
     </div>
-</form>
+    </form>
+
+    @* ---------- Live preview ---------- *@
+    <div class="lg:col-span-1 lg:sticky lg:top-6">
+        <h2 class="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-2">Live preview</h2>
+        <div class="rounded-lg p-4" style="background-color:#e5ddd5; background-image: linear-gradient(rgba(0,0,0,0.03), rgba(0,0,0,0.03));">
+            <div class="max-w-[92%] ml-auto bg-white rounded-lg shadow overflow-hidden">
+                <template x-if="headerType === 'image' && headerMediaUrl">
+                    <img :src="headerMediaUrl" class="w-full max-h-48 object-cover" />
+                </template>
+                <template x-if="headerType === 'image' && !headerMediaUrl">
+                    <div class="w-full h-32 bg-gray-200 flex items-center justify-center text-gray-400 text-xs">Image header</div>
+                </template>
+                <template x-if="headerType === 'video'">
+                    <div class="w-full h-32 bg-gray-800 flex items-center justify-center text-white text-xs gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                        <span x-show="!headerMediaUrl">Video header</span>
+                    </div>
+                </template>
+                <template x-if="headerType === 'document'">
+                    <div class="w-full py-4 bg-gray-100 flex items-center justify-center text-gray-500 text-xs gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        Document header
+                    </div>
+                </template>
+
+                <div class="px-3 py-2">
+                    <p x-show="headerType === 'text' && headerContent" class="font-semibold text-sm text-gray-900 mb-1" x-text="previewHeaderText()"></p>
+                    <p class="text-sm text-gray-900 whitespace-pre-wrap break-words" x-text="previewBodyText() || 'Body text appears here…'" :class="!bodyText ? 'text-gray-400 italic' : ''"></p>
+                    <p x-show="footerText" class="text-xs text-gray-500 mt-1" x-text="footerText"></p>
+                    <p class="text-[10px] text-gray-400 text-right mt-1">12:00 PM</p>
+                </div>
+
+                <template x-for="(type, i) in buttonTypes" :key="i">
+                    <div x-show="type" x-cloak class="border-t border-gray-100 px-3 py-2 text-center text-sm text-blue-600 flex items-center justify-center gap-1.5">
+                        <svg x-show="type === 'URL'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                        <svg x-show="type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h1.5a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106a1.125 1.125 0 00-1.173.417l-.97 1.293a11.25 11.25 0 01-6.223-6.223l1.293-.97a1.125 1.125 0 00.417-1.173L8.663 3.102a1.125 1.125 0 00-1.091-.852H6.75A2.25 2.25 0 004.5 4.5v2.25z" /></svg>
+                        <svg x-show="type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" /></svg>
+                        <span x-text="buttonTexts[i] || (type === 'QUICK_REPLY' ? 'Quick reply' : type === 'URL' ? 'Visit link' : type === 'PHONE_NUMBER' ? 'Call' : 'Copy code')"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+        <p class="mt-2 text-xs text-gray-400">Approximate — Meta's own reviewers see the final render.</p>
+    </div>
+</div>
 
 @section Scripts {
 <script>
@@ -198,15 +267,43 @@
         return {
             headerType: initial.headerType,
             headerContent: initial.headerContent,
+            headerMediaUrl: initial.headerMediaUrl,
+            headerMediaUploading: false,
             bodyText: initial.bodyText,
+            footerText: initial.footerText,
             buttonTypes: initial.buttonTypes,
-            initialSampleBody: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SampleBody)),
+            buttonTexts: initial.buttonTexts,
+            sampleHeader: initial.sampleHeader,
+            sampleBody: initial.sampleBody,
             get bodyVarCount() {
                 const matches = [...this.bodyText.matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1]));
                 return matches.length ? Math.max(...matches) : 0;
             },
-            sampleBodyValue(index) {
-                return this.initialSampleBody[index] || '';
+            previewHeaderText() {
+                return this.headerContent.replace(/\{\{1\}\}/g, this.sampleHeader || '{{1}}');
+            },
+            previewBodyText() {
+                return this.bodyText.replace(/\{\{(\d+)\}\}/g, (m, n) => this.sampleBody[Number(n) - 1] || m);
+            },
+            async uploadHeaderMedia(inputEl) {
+                const file = inputEl.files?.[0];
+                if (!file) return;
+                this.headerMediaUploading = true;
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('__RequestVerificationToken', document.querySelector('input[name="__RequestVerificationToken"]').value);
+                    const res = await fetch('/Admin/Templates/UploadHeaderMedia', { method: 'POST', body: formData });
+                    if (!res.ok) {
+                        alert('Upload failed: ' + await res.text());
+                        return;
+                    }
+                    const data = await res.json();
+                    this.headerMediaUrl = data.url;
+                } finally {
+                    this.headerMediaUploading = false;
+                    inputEl.value = '';
+                }
             },
         };
     }

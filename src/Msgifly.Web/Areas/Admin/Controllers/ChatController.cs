@@ -8,6 +8,7 @@ using Msgifly.Web.Hubs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services.Chat;
 using Msgifly.Web.Services.WhatsApp;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
@@ -219,7 +220,7 @@ public class ChatController : Controller
         {
             ChatId = chat.Id,
             SenderId = chat.WaNoId ?? "agent",
-            Message = string.IsNullOrWhiteSpace(caption) ? $"[{mediaType}] {file.FileName}" : caption,
+            Message = string.IsNullOrWhiteSpace(caption) ? string.Empty : caption,
             MessageType = mediaType,
             Url = $"/uploads/chat/{storedFileName}",
             WhatsappMessageId = sendResult.Data,
@@ -230,7 +231,7 @@ public class ChatController : Controller
         };
         _db.ChatMessages.Add(message);
 
-        chat.LastMessage = message.Message;
+        chat.LastMessage = ChatPreviewText.ForMedia(mediaType, message.Message);
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 

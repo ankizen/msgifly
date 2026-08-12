@@ -127,9 +127,9 @@ public class ContactsController : Controller
             _db.Chats.Add(chat);
         }
 
-        var previewText = $"[Template: {template.TemplateName}]" + (request.BodyParams.Count > 0 ? " " + string.Join(" / ", request.BodyParams) : string.Empty);
+        var rendered = TemplateMessageRenderer.ForChatMessage(template, request);
         chat.Name = chat.Name == contact.Phone ? contact.FullName : chat.Name;
-        chat.LastMessage = previewText;
+        chat.LastMessage = Truncate(rendered.DisplayText, 80);
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -137,8 +137,9 @@ public class ContactsController : Controller
         {
             ChatId = chat.Id,
             SenderId = chat.WaNoId ?? "agent",
-            Message = previewText,
-            MessageType = "text",
+            Message = rendered.DisplayText,
+            MessageType = rendered.MediaMessageType ?? "text",
+            Url = rendered.MediaUrl,
             WhatsappMessageId = result.Data,
             StaffId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null,
             Status = MessageDeliveryStatus.Sent,
@@ -150,6 +151,9 @@ public class ContactsController : Controller
         this.Notify($"Template sent to {contact.FullName}.");
         return RedirectToAction(nameof(Index));
     }
+
+    private static string Truncate(string text, int maxLength) =>
+        text.Length > maxLength ? text[..maxLength] + "…" : text;
 
     [Authorize(Policy = "contact.create,contact.edit")]
     public async Task<IActionResult> Save(int? id)

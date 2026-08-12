@@ -11,6 +11,7 @@ using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Bots;
+using Msgifly.Web.Services.Chat;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
@@ -179,7 +180,9 @@ public class WhatsAppWebhookController : Controller
             chat.Name = contactName ?? chat.Name;
             chat.WaNo = businessPhoneNumberId;
             chat.WaNoId = businessPhoneNumberId;
-            chat.LastMessage = messageText;
+            chat.LastMessage = messageType is "image" or "video" or "audio" or "document" or "sticker"
+                ? ChatPreviewText.ForMedia(messageType, messageText)
+                : messageText;
             chat.LastMessageTime = DateTime.UtcNow;
             chat.UpdatedAt = DateTime.UtcNow;
 
@@ -394,7 +397,16 @@ public class WhatsAppWebhookController : Controller
 
             if (result.Success)
             {
-                await StoreBotReplyAsync(chat, $"[Template: {template.TemplateName}] {string.Join(" / ", bodyParams)}", result.Data);
+                var rendered = TemplateMessageRenderer.ForChatMessage(template, new TemplateSendRequest
+                {
+                    TemplateName = template.TemplateName,
+                    Language = template.Language,
+                    HeaderFormat = template.HeaderFormat,
+                    HeaderText = headerParams.Count > 0 ? headerParams[0] : null,
+                    HeaderMediaUrl = bot.FileName,
+                    BodyParams = bodyParams,
+                });
+                await StoreBotReplyAsync(chat, rendered.DisplayText, result.Data, rendered.MediaMessageType ?? "text", rendered.MediaUrl);
                 bot.SendingCount++;
             }
             else
@@ -406,14 +418,15 @@ public class WhatsAppWebhookController : Controller
         await _db.SaveChangesAsync();
     }
 
-    private async Task StoreBotReplyAsync(Chat chat, string text, string? whatsappMessageId = null)
+    private async Task StoreBotReplyAsync(Chat chat, string text, string? whatsappMessageId = null, string messageType = "text", string? mediaUrl = null)
     {
         var reply = new ChatMessage
         {
             ChatId = chat.Id,
             SenderId = chat.WaNoId ?? "bot",
             Message = text,
-            MessageType = "text",
+            MessageType = messageType,
+            Url = mediaUrl,
             WhatsappMessageId = whatsappMessageId,
             Status = MessageDeliveryStatus.Sent,
             TimeSent = DateTime.UtcNow,
@@ -500,7 +513,8 @@ public class WhatsAppWebhookController : Controller
             "interactive" => message["interactive"]?["button_reply"]?["title"]?.GetValue<string>()
                 ?? message["interactive"]?["list_reply"]?["title"]?.GetValue<string>()
                 ?? string.Empty,
-            _ => $"[{type}]",
+            "image" or "video" or "document" => message[type]?["caption"]?.GetValue<string>() ?? string.Empty,
+            _ => string.Empty,
         };
     }
 

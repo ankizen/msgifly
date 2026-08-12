@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Data;
 using Msgifly.Web.Models.Enums;
@@ -87,8 +86,8 @@ public class CampaignMessageJob
 
         var result = await _whatsAppService.SendTemplateMessageAsync(detail.Contact.Phone, request);
 
-        detail.HeaderMessage = RenderText(template.HeaderText, headerParams);
-        detail.BodyMessage = RenderText(template.BodyText, bodyParams);
+        detail.HeaderMessage = TemplateMessageRenderer.RenderText(template.HeaderText, headerParams);
+        detail.BodyMessage = TemplateMessageRenderer.RenderText(template.BodyText, bodyParams);
         detail.FooterMessage = template.FooterText;
         detail.UpdatedAt = DateTime.UtcNow;
 
@@ -107,19 +106,5 @@ public class CampaignMessageJob
         }
 
         await _db.SaveChangesAsync();
-    }
-
-    private static string? RenderText(string? templateText, List<string> paramValues)
-    {
-        if (string.IsNullOrEmpty(templateText))
-        {
-            return templateText;
-        }
-
-        return Regex.Replace(templateText, @"\{\{(\d+)\}\}", match =>
-        {
-            var index = int.Parse(match.Groups[1].Value) - 1;
-            return index >= 0 && index < paramValues.Count ? paramValues[index] : match.Value;
-        });
     }
 }
