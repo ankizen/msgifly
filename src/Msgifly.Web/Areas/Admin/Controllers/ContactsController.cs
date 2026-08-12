@@ -11,6 +11,7 @@ using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services.Automations;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -20,10 +21,12 @@ public class ContactsController : Controller
 {
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
+    private readonly AutomationEngine _automationEngine;
 
-    public ContactsController(ApplicationDbContext db)
+    public ContactsController(ApplicationDbContext db, AutomationEngine automationEngine)
     {
         _db = db;
+        _automationEngine = automationEngine;
     }
 
     [Authorize(Policy = "contact.view")]
@@ -114,6 +117,7 @@ public class ContactsController : Controller
             return View(model);
         }
 
+        Contact? createdContact = null;
         if (model.Id is null)
         {
             var contact = new Contact
@@ -138,6 +142,7 @@ public class ContactsController : Controller
                 DateAssigned = model.AssignedToId is not null ? DateTime.UtcNow : null,
             };
             _db.Contacts.Add(contact);
+            createdContact = contact;
             this.Notify("Contact created.");
         }
         else
@@ -180,6 +185,12 @@ public class ContactsController : Controller
         }
 
         await _db.SaveChangesAsync();
+
+        if (createdContact is not null)
+        {
+            await _automationEngine.RunForTriggerAsync(AutomationTriggerType.NewContactCreated, createdContact.Id, new AutomationContext());
+        }
+
         return RedirectToAction(nameof(Index));
     }
 

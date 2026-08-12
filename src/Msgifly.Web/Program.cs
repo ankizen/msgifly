@@ -8,6 +8,7 @@ using Msgifly.Web.Data;
 using Msgifly.Web.Hubs;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
+using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
@@ -49,14 +50,25 @@ builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProv
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 builder.Services.AddAuthorization();
 
+// Second scheme alongside Identity's cookie scheme — the public /api/v1/* surface authenticates
+// machine callers via `Authorization: Bearer <api key>` instead of a browser session. Adding a
+// scheme this way doesn't touch the cookie scheme Identity already registered as the default.
+builder.Services.AddAuthentication()
+    .AddScheme<ApiKeyAuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", options => { });
+
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 
 builder.Services.AddHttpClient("GraphApi", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 });
+builder.Services.AddHttpClient("AutomationWebhook", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 builder.Services.AddScoped<BotMatchingService>();
+builder.Services.AddScoped<AutomationEngine>();
 builder.Services.AddSignalR();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");

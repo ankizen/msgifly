@@ -26,5 +26,7 @@ public static class Permissions
         "system_settings.view", "system_settings.edit",
         "user.view", "user.create", "user.edit", "user.delete",
         "email_template.view", "email_template.edit",
+        "automation.view", "automation.create", "automation.edit", "automation.delete",
+        "api_key.view", "api_key.create", "api_key.delete",
     ];
 }

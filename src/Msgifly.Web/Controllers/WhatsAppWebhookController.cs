@@ -8,6 +8,7 @@ using Msgifly.Web.Hubs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
@@ -33,6 +34,7 @@ public class WhatsAppWebhookController : Controller
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly BotMatchingService _botMatchingService;
+    private readonly AutomationEngine _automationEngine;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly IWebHostEnvironment _environment;
     private readonly ILogger<WhatsAppWebhookController> _logger;
@@ -42,6 +44,7 @@ public class WhatsAppWebhookController : Controller
         ApplicationDbContext db,
         IWhatsAppService whatsAppService,
         BotMatchingService botMatchingService,
+        AutomationEngine automationEngine,
         IHubContext<ChatHub> hubContext,
         IWebHostEnvironment environment,
         ILogger<WhatsAppWebhookController> logger)
@@ -50,6 +53,7 @@ public class WhatsAppWebhookController : Controller
         _db = db;
         _whatsAppService = whatsAppService;
         _botMatchingService = botMatchingService;
+        _automationEngine = automationEngine;
         _hubContext = hubContext;
         _environment = environment;
         _logger = logger;
@@ -192,6 +196,33 @@ public class WhatsAppWebhookController : Controller
             {
                 await FireMatchingBotsAsync(chat, contact, messageText, isFirstMessage);
             }
+
+            if (!chat.IsBotsStopped)
+            {
+                await FireAutomationsAsync(chat, contact, messageText, isFirstMessage, ExtractInteractiveReplyId(message));
+            }
+        }
+    }
+
+    private static string? ExtractInteractiveReplyId(JsonNode message) =>
+        message["interactive"]?["button_reply"]?["id"]?.GetValue<string>()
+        ?? message["interactive"]?["list_reply"]?["id"]?.GetValue<string>();
+
+    private async Task FireAutomationsAsync(Chat chat, Contact? contact, string messageText, bool isFirstMessage, string? interactiveReplyId)
+    {
+        var context = new AutomationContext { MessageText = messageText, ChatId = chat.Id, InteractiveReplyId = interactiveReplyId };
+
+        await _automationEngine.RunForTriggerAsync(AutomationTriggerType.InboundMessage, contact?.Id, context);
+        if (isFirstMessage)
+        {
+            await _automationEngine.RunForTriggerAsync(AutomationTriggerType.FirstInboundMessage, contact?.Id, context);
+        }
+
+        await _automationEngine.RunForTriggerAsync(AutomationTriggerType.KeywordMatch, contact?.Id, context);
+
+        if (!string.IsNullOrEmpty(interactiveReplyId))
+        {
+            await _automationEngine.RunForTriggerAsync(AutomationTriggerType.InteractiveReply, contact?.Id, context);
         }
     }
 
@@ -288,6 +319,7 @@ public class WhatsAppWebhookController : Controller
         };
         _db.Contacts.Add(contact);
         await _db.SaveChangesAsync();
+        await _automationEngine.RunForTriggerAsync(AutomationTriggerType.NewContactCreated, contact.Id, new AutomationContext());
         return contact;
     }
 

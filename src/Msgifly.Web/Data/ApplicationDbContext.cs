@@ -29,6 +29,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<WebhookLog> WebhookLogs => Set<WebhookLog>();
     public DbSet<WmActivityLog> WmActivityLogs => Set<WmActivityLog>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<Automation> Automations => Set<Automation>();
+    public DbSet<AutomationStep> AutomationSteps => Set<AutomationStep>();
+    public DbSet<AutomationLog> AutomationLogs => Set<AutomationLog>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -114,5 +118,43 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<Language>(e => e.HasIndex(l => l.Code).IsUnique());
 
         builder.Entity<AppSetting>(e => e.HasIndex(s => s.Group).IsUnique());
+
+        builder.Entity<AutomationStep>(e =>
+        {
+            e.HasOne(s => s.Automation)
+                .WithMany(a => a.Steps)
+                .HasForeignKey(s => s.AutomationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Restrict (not Cascade) on the self-reference: deleting the whole Automation already
+            // removes every step via the FK above in one shot, so a second cascade path off
+            // ParentStepId isn't needed — and SQL Server rejects multiple cascade paths to the
+            // same table anyway.
+            e.HasOne(s => s.ParentStep)
+                .WithMany()
+                .HasForeignKey(s => s.ParentStepId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(s => new { s.AutomationId, s.ParentStepId, s.Branch, s.Position });
+        });
+
+        builder.Entity<AutomationLog>(e =>
+        {
+            e.HasOne(l => l.Automation)
+                .WithMany()
+                .HasForeignKey(l => l.AutomationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(l => l.Contact)
+                .WithMany()
+                .HasForeignKey(l => l.ContactId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasIndex(l => new { l.AutomationId, l.CreatedAt });
+        });
+
+        builder.Entity<Automation>(e => e.HasIndex(a => new { a.TriggerType, a.IsActive }));
+
+        builder.Entity<ApiKey>(e => e.HasIndex(k => k.KeyHash).IsUnique());
     }
 }

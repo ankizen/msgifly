@@ -1,0 +1,12 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace Msgifly.Web.Models.ViewModels;
+
+public class ApiKeyFormViewModel
+{
+    [Required]
+    [Display(Name = "Key name")]
+    public string Name { get; set; } = string.Empty;
+
+    public List<string> Scopes { get; set; } = [];
+}

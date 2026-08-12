@@ -1,0 +1,78 @@
+@model List<Msgifly.Web.Models.Entities.ApiKey>
+@{
+    ViewData["Title"] = "API Keys";
+}
+
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">API Keys</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Credentials for the public REST API (<code>/api/v1/*</code>) — for scripts, n8n/Zapier-style automations, or your own tools.</p>
+    </div>
+    <a asp-action="Create" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">+ New Key</a>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Key</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Scopes</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Last used</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Any())
+            {
+                <tr><td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No API keys yet.</td></tr>
+            }
+            @foreach (var key in Model)
+            {
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@key.Name</td>
+                    <td class="px-4 py-3 text-sm font-mono text-gray-500 dark:text-slate-400">@key.KeyPrefix&hellip;</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">
+                        @if (string.IsNullOrEmpty(key.ScopesCsv))
+                        {
+                            <span class="text-gray-400">none</span>
+                        }
+                        else
+                        {
+                            @string.Join(", ", key.ScopesCsv.Split(','))
+                        }
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(key.LastUsedAt?.ToString("dd MMM, HH:mm") ?? "never")</td>
+                    <td class="px-4 py-3 text-sm">
+                        @if (key.RevokedAt is not null)
+                        {
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">Revoked</span>
+                        }
+                        else if (key.ExpiresAt is not null && key.ExpiresAt <= DateTime.UtcNow)
+                        {
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">Expired</span>
+                        }
+                        else
+                        {
+                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">Active</span>
+                        }
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm space-x-3 whitespace-nowrap">
+                        @if (key.IsActive)
+                        {
+                            <form asp-action="Revoke" asp-route-id="@key.Id" method="post" class="inline"
+                                  onsubmit="return confirm('Revoke this key? Anything using it will stop working immediately.');">
+                                <button type="submit" class="text-orange-600 hover:text-orange-500">Revoke</button>
+                            </form>
+                        }
+                        <form asp-action="Delete" asp-route-id="@key.Id" method="post" class="inline"
+                              onsubmit="return confirm('Delete this key permanently?');">
+                            <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
