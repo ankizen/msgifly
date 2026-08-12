@@ -53,9 +53,16 @@ public class ChatController : Controller
         var chats = await query.OrderByDescending(c => c.LastMessageTime).Take(200).ToListAsync();
         var receiverIds = chats.Select(c => c.ReceiverId).ToList();
 
+        // GroupBy + take one, not a straight ToDictionaryAsync keyed on Phone: nothing at the DB
+        // level enforces Phone uniqueness, so two Contact rows can (and, before
+        // PhoneNumberNormalizer, sometimes did) share the same number — a straight
+        // ToDictionaryAsync throws ArgumentException on the second matching row instead of just
+        // picking one, which took the whole chat list down.
         var contactTypes = await _db.Contacts.AsNoTracking()
             .Where(c => receiverIds.Contains(c.Phone))
-            .ToDictionaryAsync(c => c.Phone, c => c.Type);
+            .GroupBy(c => c.Phone)
+            .Select(g => new { Phone = g.Key, Type = g.First().Type })
+            .ToDictionaryAsync(x => x.Phone, x => x.Type);
 
         var unreadCounts = await _db.ChatMessages.AsNoTracking()
             .Where(m => chats.Select(c => c.Id).Contains(m.ChatId) && !m.IsRead && m.StaffId == null)
