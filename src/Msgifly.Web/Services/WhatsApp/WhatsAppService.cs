@@ -100,7 +100,7 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<int>.Fail("WhatsApp Business Account is not configured yet.");
         }
 
-        var response = await GetAsync(settings, $"{settings.BusinessAccountId}/message_templates?fields=id,name,language,status,category,components&limit=200");
+        var response = await GetAsync(settings, $"{settings.BusinessAccountId}/message_templates?fields=id,name,language,status,category,components,rejected_reason&limit=200");
         if (!response.Success)
         {
             return WhatsAppResult<int>.Fail(response.ErrorMessage!);
@@ -142,14 +142,218 @@ public class WhatsAppService : IWhatsAppService
         }
 
         // Delete local templates no longer present on Meta's side (mirrors the original's diff-and-delete).
+        // Locally-created DRAFTs (never submitted, MetaTemplateId is null) are never swept here —
+        // they simply aren't Meta's concern yet.
         var toDelete = await _db.WhatsappTemplates
-            .Where(t => !apiTemplateIds.Contains(t.MetaTemplateId))
+            .Where(t => t.MetaTemplateId != null && !apiTemplateIds.Contains(t.MetaTemplateId))
             .ToListAsync();
         _db.WhatsappTemplates.RemoveRange(toDelete);
 
         await _db.SaveChangesAsync();
 
         return WhatsAppResult<int>.Ok(apiTemplateIds.Count);
+    }
+
+    public async Task<WhatsAppResult<WhatsappTemplate>> CreateTemplateAsync(TemplateCreateRequest request)
+    {
+        var validation = TemplateValidator.Validate(request);
+
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.BusinessAccountId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var metaPayload = new
+        {
+            name = request.Name,
+            category = request.Category.ToUpperInvariant(),
+            language = request.Language,
+            components = BuildTemplateComponents(request),
+        };
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync($"{settings.BusinessAccountId}/message_templates", metaPayload);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail(await ExtractErrorAsync(response));
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+        var metaId = body?["id"]?.GetValue<string>();
+        var metaStatus = body?["status"]?.GetValue<string>() ?? "PENDING";
+        if (string.IsNullOrEmpty(metaId))
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail("Meta accepted the template but returned no id.");
+        }
+
+        var entity = MapRequestToEntity(request, validation, new WhatsappTemplate());
+        entity.MetaTemplateId = metaId;
+        entity.Status = metaStatus.Equals("APPROVED", StringComparison.OrdinalIgnoreCase) ? TemplateStatus.Approved : TemplateStatus.Pending;
+        _db.WhatsappTemplates.Add(entity);
+        await _db.SaveChangesAsync();
+
+        return WhatsAppResult<WhatsappTemplate>.Ok(entity);
+    }
+
+    public async Task<WhatsAppResult<WhatsappTemplate>> EditTemplateAsync(int localTemplateId, TemplateCreateRequest request)
+    {
+        var existing = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.Id == localTemplateId);
+        if (existing is null)
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail("Template not found.");
+        }
+
+        if (string.IsNullOrEmpty(existing.MetaTemplateId))
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail("This template was never submitted to Meta — use New Template to submit it instead.");
+        }
+
+        if (existing.Status is not (TemplateStatus.Approved or TemplateStatus.Rejected or TemplateStatus.Paused))
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail($"Templates in status {existing.Status} cannot be edited. Allowed: Approved, Rejected, Paused.");
+        }
+
+        var validation = TemplateValidator.Validate(request);
+
+        var settings = await GetSettingsAsync();
+        var editPayload = new
+        {
+            category = request.Category.ToUpperInvariant(),
+            components = BuildTemplateComponents(request),
+        };
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync(existing.MetaTemplateId, editPayload);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await ExtractErrorAsync(response);
+            existing.SubmissionError = error;
+            existing.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return WhatsAppResult<WhatsappTemplate>.Fail(error);
+        }
+
+        // Meta replaces components wholesale on edit and always bumps status back to PENDING for re-review.
+        MapRequestToEntity(request, validation, existing);
+        existing.Status = TemplateStatus.Pending;
+        existing.SubmissionError = null;
+        existing.RejectionReason = null;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return WhatsAppResult<WhatsappTemplate>.Ok(existing);
+    }
+
+    public async Task<WhatsAppResult> DeleteTemplateAsync(int localTemplateId)
+    {
+        var existing = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.Id == localTemplateId);
+        if (existing is null)
+        {
+            return WhatsAppResult.Fail("Template not found.");
+        }
+
+        if (!string.IsNullOrEmpty(existing.MetaTemplateId))
+        {
+            var settings = await GetSettingsAsync();
+            if (string.IsNullOrWhiteSpace(settings.BusinessAccountId))
+            {
+                return WhatsAppResult.Fail("WhatsApp Business Account is not configured — cannot delete on Meta.");
+            }
+
+            var client = CreateClient(settings);
+            var query = $"name={Uri.EscapeDataString(existing.TemplateName)}&hsm_id={Uri.EscapeDataString(existing.MetaTemplateId)}";
+            var response = await client.DeleteAsync($"{settings.BusinessAccountId}/message_templates?{query}");
+            // A 404 means it's already gone on Meta's side — still proceed to drop the local row.
+            if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+            {
+                return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+            }
+        }
+
+        _db.WhatsappTemplates.Remove(existing);
+        await _db.SaveChangesAsync();
+        return WhatsAppResult.Ok();
+    }
+
+    /// <summary>Translates our local request shape into Meta's `components` array (HEADER -> BODY -> FOOTER -> BUTTONS order), including the `example` blocks Meta requires alongside any {{N}} variable.</summary>
+    private static List<object> BuildTemplateComponents(TemplateCreateRequest request)
+    {
+        var components = new List<object>();
+
+        if (!string.IsNullOrEmpty(request.HeaderType))
+        {
+            if (request.HeaderType.Equals("text", StringComparison.OrdinalIgnoreCase))
+            {
+                var header = new Dictionary<string, object?> { ["type"] = "HEADER", ["format"] = "TEXT", ["text"] = request.HeaderContent };
+                if (request.SampleValues.Header.Count > 0)
+                {
+                    header["example"] = new { header_text = request.SampleValues.Header };
+                }
+
+                components.Add(header);
+            }
+            else
+            {
+                var format = request.HeaderType.ToUpperInvariant();
+                components.Add(new
+                {
+                    type = "HEADER",
+                    format,
+                    example = new { header_url = new[] { request.HeaderMediaUrl } },
+                });
+            }
+        }
+
+        var body = new Dictionary<string, object?> { ["type"] = "BODY", ["text"] = request.BodyText };
+        if (request.SampleValues.Body.Count > 0)
+        {
+            // Meta expects body_text as a 2D array: outer is "examples", inner is the per-variable values.
+            body["example"] = new { body_text = new[] { request.SampleValues.Body } };
+        }
+
+        components.Add(body);
+
+        if (!string.IsNullOrWhiteSpace(request.FooterText))
+        {
+            components.Add(new { type = "FOOTER", text = request.FooterText });
+        }
+
+        if (request.Buttons.Count > 0)
+        {
+            components.Add(new
+            {
+                type = "BUTTONS",
+                buttons = request.Buttons.Select(object (b) => b.Type switch
+                {
+                    "URL" => new { type = "URL", text = b.Text, url = b.Url, example = b.Example is null ? null : new[] { b.Example } },
+                    "PHONE_NUMBER" => new { type = "PHONE_NUMBER", text = b.Text, phone_number = b.PhoneNumber },
+                    "COPY_CODE" => new { type = "COPY_CODE", text = b.Text, example = new[] { b.Example } },
+                    _ => new { type = "QUICK_REPLY", text = b.Text },
+                }).ToArray(),
+            });
+        }
+
+        return components;
+    }
+
+    private static WhatsappTemplate MapRequestToEntity(TemplateCreateRequest request, TemplateValidator.ValidationResult validation, WhatsappTemplate entity)
+    {
+        entity.TemplateName = request.Name;
+        entity.Category = request.Category.ToUpperInvariant();
+        entity.Language = request.Language;
+        entity.HeaderFormat = request.HeaderType?.ToUpperInvariant();
+        entity.HeaderText = request.HeaderType?.Equals("text", StringComparison.OrdinalIgnoreCase) == true ? request.HeaderContent : null;
+        entity.HeaderMediaUrl = request.HeaderType is not null && !request.HeaderType.Equals("text", StringComparison.OrdinalIgnoreCase) ? request.HeaderMediaUrl : null;
+        entity.HeaderParamsCount = validation.HeaderVarCount;
+        entity.BodyText = request.BodyText;
+        entity.BodyParamsCount = validation.BodyVarCount;
+        entity.FooterText = request.FooterText;
+        entity.FooterParamsCount = 0;
+        entity.ButtonsJson = request.Buttons.Count > 0 ? JsonSerializer.Serialize(request.Buttons) : null;
+        entity.SampleValuesJson = JsonSerializer.Serialize(request.SampleValues);
+        entity.UpdatedAt = DateTime.UtcNow;
+        return entity;
     }
 
     public async Task<WhatsAppResult> SubscribeWebhookAsync()
@@ -655,6 +859,7 @@ public class WhatsAppService : IWhatsAppService
         {
             "APPROVED" => TemplateStatus.Approved,
             "REJECTED" => TemplateStatus.Rejected,
+            "PAUSED" => TemplateStatus.Paused,
             _ => TemplateStatus.Pending,
         };
 
@@ -673,6 +878,7 @@ public class WhatsAppService : IWhatsAppService
             FooterText = footerText,
             FooterParamsCount = footerParams,
             ButtonsJson = buttonsJson,
+            RejectionReason = node["rejected_reason"]?.GetValue<string>(),
         };
     }
 

@@ -31,7 +31,8 @@ public class TemplateBotsController : Controller
         var paged = await PagedList<TemplateBot>.CreateAsync(query, page, PageSize);
 
         ViewData["TemplateNames"] = await _db.WhatsappTemplates.AsNoTracking()
-            .ToDictionaryAsync(t => t.MetaTemplateId, t => t.TemplateName);
+            .Where(t => t.MetaTemplateId != null)
+            .ToDictionaryAsync(t => t.MetaTemplateId!, t => t.TemplateName);
 
         return View(paged);
     }
@@ -198,9 +199,9 @@ public class TemplateBotsController : Controller
     private async Task PopulateOptionsAsync(TemplateBotFormViewModel model)
     {
         model.TemplateOptions = await _db.WhatsappTemplates.AsNoTracking()
-            .Where(t => t.Status == TemplateStatus.Approved)
+            .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
             .OrderBy(t => t.TemplateName)
-            .Select(t => new TemplateOption(t.MetaTemplateId, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount))
+            .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount))
             .ToListAsync();
     }
 }

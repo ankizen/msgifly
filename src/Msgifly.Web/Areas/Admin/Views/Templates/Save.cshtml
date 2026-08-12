@@ -1,0 +1,214 @@
+@model Msgifly.Web.Models.ViewModels.TemplateFormViewModel
+@{
+    var isEdit = Model.Id.HasValue;
+    ViewData["Title"] = isEdit ? "Edit Template" : "New Template";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
+        @if (isEdit)
+        {
+            <text>Editing re-submits this template to Meta for review — status resets to Pending.</text>
+        }
+        else
+        {
+            <text>Submitted straight to Meta for approval. Marketing/Utility only — build Authentication templates in Meta Business Manager.</text>
+        }
+    </p>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+@if (isEdit && !string.IsNullOrEmpty(Model.RejectionReason))
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <strong>Meta's rejection reason:</strong> @Model.RejectionReason
+    </div>
+}
+
+<form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@Model.Id" method="post" class="max-w-3xl space-y-6"
+      x-data="templateForm({
+          headerType: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderType),
+          headerContent: @System.Text.Json.JsonSerializer.Serialize(Model.HeaderContent ?? ""),
+          bodyText: @System.Text.Json.JsonSerializer.Serialize(Model.BodyText),
+          buttonTypes: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.Type).ToList()),
+      })">
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" readonly="@isEdit" placeholder="order_confirmation"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 @(isEdit ? "opacity-60" : "")" />
+            <p class="mt-1 text-xs text-gray-400">lowercase, digits, underscores only</p>
+            <span asp-validation-for="Name" class="mt-1 block text-sm text-red-600"></span>
+        </div>
+        <div>
+            <label asp-for="Category" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <select asp-for="Category" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                <option value="MARKETING">Marketing</option>
+                <option value="UTILITY">Utility</option>
+            </select>
+        </div>
+        <div>
+            <label asp-for="Language" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <select asp-for="Language" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                <option value="en_US">English (US)</option>
+                <option value="en_GB">English (UK)</option>
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="es">Spanish</option>
+                <option value="es_MX">Spanish (Mexico)</option>
+                <option value="pt_BR">Portuguese (Brazil)</option>
+                <option value="pt_PT">Portuguese (Portugal)</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="ar">Arabic</option>
+                <option value="id">Indonesian</option>
+                <option value="ru">Russian</option>
+                <option value="zh_CN">Chinese (Simplified)</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="tr">Turkish</option>
+                <option value="vi">Vietnamese</option>
+                <option value="th">Thai</option>
+                <option value="nl">Dutch</option>
+                <option value="bn">Bengali</option>
+                <option value="ta">Tamil</option>
+                <option value="te">Telugu</option>
+                <option value="mr">Marathi</option>
+                <option value="gu">Gujarati</option>
+                <option value="ur">Urdu</option>
+            </select>
+        </div>
+    </div>
+
+    @* ---------- Header ---------- *@
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Header <span class="text-gray-400 font-normal">(optional)</span></h2>
+        <select asp-for="HeaderType" x-model="headerType"
+                class="block w-full sm:w-64 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+            <option value="none">No header</option>
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="document">Document</option>
+        </select>
+
+        <div x-show="headerType === 'text'" x-cloak class="mt-4">
+            <label asp-for="HeaderContent" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Header text</label>
+            <input asp-for="HeaderContent" x-model="headerContent" maxlength="60" placeholder="Your order is confirmed"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <p class="mt-1 text-xs text-gray-400">At most one <code>{{1}}</code> placeholder. <span x-text="headerContent.length"></span>/60</p>
+            <div x-show="/\{\{1\}\}/.test(headerContent)" x-cloak class="mt-2">
+                <label class="block text-xs font-medium text-gray-500 dark:text-slate-400">Sample value for {{1}}</label>
+                <input name="SampleHeader[0]" value="@Model.SampleHeader.ElementAtOrDefault(0)" placeholder="e.g. John"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+        </div>
+
+        <div x-show="headerType === 'image' || headerType === 'video' || headerType === 'document'" x-cloak class="mt-4">
+            <label asp-for="HeaderMediaUrl" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Sample media URL</label>
+            <input asp-for="HeaderMediaUrl" placeholder="https://..."
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <p class="mt-1 text-xs text-gray-400">A publicly reachable sample file — shown to Meta's reviewers, not sent to recipients.</p>
+        </div>
+    </div>
+
+    @* ---------- Body ---------- *@
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Body</h2>
+        <textarea asp-for="BodyText" x-model="bodyText" rows="4" maxlength="1024" placeholder="Hi {{1}}, your order #{{2}} has shipped!"
+                  class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea>
+        <p class="mt-1 text-xs text-gray-400">
+            Use <code>{{1}}</code>, <code>{{2}}</code>… for variables, in order. <span x-text="bodyText.length"></span>/1024
+        </p>
+        <span asp-validation-for="BodyText" class="mt-1 block text-sm text-red-600"></span>
+
+        <template x-for="n in bodyVarCount" :key="n">
+            <div class="mt-2">
+                <label class="block text-xs font-medium text-gray-500 dark:text-slate-400" x-text="'Sample value for {{' + n + '}}'"></label>
+                <input :name="'SampleBody[' + (n - 1) + ']'" :value="sampleBodyValue(n - 1)" placeholder="e.g. Priya"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+        </template>
+    </div>
+
+    @* ---------- Footer ---------- *@
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Footer <span class="text-gray-400 font-normal">(optional)</span></h2>
+        <input asp-for="FooterText" maxlength="60" placeholder="Reply STOP to unsubscribe"
+               class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        <p class="mt-1 text-xs text-gray-400">No variables allowed here (Meta rule).</p>
+    </div>
+
+    @* ---------- Buttons ---------- *@
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">Buttons <span class="text-gray-400 font-normal">(optional, up to 10)</span></h2>
+        <p class="text-xs text-gray-400 mb-3">Quick-reply buttons must be grouped before any URL/phone/copy-code buttons.</p>
+
+        <div class="space-y-3">
+            @for (var i = 0; i < Model.Buttons.Count; i++)
+            {
+                <div class="border border-gray-200 dark:border-slate-600 rounded-md p-3" x-data="{ type: buttonTypes[@i] || '' }">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-start">
+                        <select name="Buttons[@i].Type" x-model="type"
+                                class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                            <option value="">— unused —</option>
+                            <option value="QUICK_REPLY">Quick reply</option>
+                            <option value="URL">URL</option>
+                            <option value="PHONE_NUMBER">Call phone number</option>
+                            <option value="COPY_CODE">Copy offer code</option>
+                        </select>
+
+                        <input name="Buttons[@i].Text" value="@Model.Buttons[i].Text" x-show="type" x-cloak maxlength="25" placeholder="Button text"
+                               class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+
+                        <input name="Buttons[@i].Url" value="@Model.Buttons[i].Url" x-show="type === 'URL'" x-cloak placeholder="https://example.com/{{1}}"
+                               class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+
+                        <input name="Buttons[@i].PhoneNumber" value="@Model.Buttons[i].PhoneNumber" x-show="type === 'PHONE_NUMBER'" x-cloak placeholder="+15551234567"
+                               class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+
+                        <input name="Buttons[@i].Example" value="@Model.Buttons[i].Example" x-show="type === 'URL' || type === 'COPY_CODE'" x-cloak
+                               :placeholder="type === 'COPY_CODE' ? 'Example code, e.g. SAVE20' : 'Example value for {{1}} in the URL, if used'"
+                               class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+            @(isEdit ? "Re-submit to Meta" : "Submit to Meta")
+        </button>
+        <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    function templateForm(initial) {
+        return {
+            headerType: initial.headerType,
+            headerContent: initial.headerContent,
+            bodyText: initial.bodyText,
+            buttonTypes: initial.buttonTypes,
+            initialSampleBody: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.SampleBody)),
+            get bodyVarCount() {
+                const matches = [...this.bodyText.matchAll(/\{\{(\d+)\}\}/g)].map(m => Number(m[1]));
+                return matches.length ? Math.max(...matches) : 0;
+            },
+            sampleBodyValue(index) {
+                return this.initialSampleBody[index] || '';
+            },
+        };
+    }
+</script>
+}

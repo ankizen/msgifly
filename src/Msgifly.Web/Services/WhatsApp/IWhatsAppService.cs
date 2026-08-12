@@ -22,6 +22,17 @@ public interface IWhatsAppService
 
     Task<WhatsAppResult<string>> DebugTokenAsync();
 
+    // ---- Template lifecycle (create/edit/delete — sync already covers read) ----
+
+    /// <summary>Validates and submits a new template to Meta for approval, then upserts the local row (status PENDING). Throws ArgumentException on validation failure.</summary>
+    Task<WhatsAppResult<Models.Entities.WhatsappTemplate>> CreateTemplateAsync(TemplateCreateRequest request);
+
+    /// <summary>Re-submits an existing APPROVED/REJECTED/PAUSED template with new content — Meta replaces components wholesale and resets status to PENDING. Throws ArgumentException on validation failure.</summary>
+    Task<WhatsAppResult<Models.Entities.WhatsappTemplate>> EditTemplateAsync(int localTemplateId, TemplateCreateRequest request);
+
+    /// <summary>Deletes on Meta (when previously submitted) and removes the local row.</summary>
+    Task<WhatsAppResult> DeleteTemplateAsync(int localTemplateId);
+
     // ---- Media API ----
 
     /// <summary>Uploads a file to Meta's servers, returning a media_id usable in outbound messages (Graph API's /media endpoint requires this per-file upload; ids expire after ~30 days).</summary>

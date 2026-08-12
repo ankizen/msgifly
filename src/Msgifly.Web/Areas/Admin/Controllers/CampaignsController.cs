@@ -31,7 +31,8 @@ public class CampaignsController : Controller
         var paged = await PagedList<Campaign>.CreateAsync(query, page, PageSize);
 
         var templateNames = await _db.WhatsappTemplates.AsNoTracking()
-            .ToDictionaryAsync(t => t.MetaTemplateId, t => t.TemplateName);
+            .Where(t => t.MetaTemplateId != null)
+            .ToDictionaryAsync(t => t.MetaTemplateId!, t => t.TemplateName);
 
         var campaignIds = paged.Items.Select(c => c.Id).ToList();
         var counts = await _db.CampaignDetails.AsNoTracking()
@@ -342,9 +343,9 @@ public class CampaignsController : Controller
     private async Task PopulateOptionsAsync(CampaignFormViewModel model)
     {
         model.TemplateOptions = await _db.WhatsappTemplates.AsNoTracking()
-            .Where(t => t.Status == TemplateStatus.Approved)
+            .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
             .OrderBy(t => t.TemplateName)
-            .Select(t => new TemplateOption(t.MetaTemplateId, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount))
+            .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount))
             .ToListAsync();
 
         model.StatusOptions = await _db.Statuses.AsNoTracking().OrderBy(s => s.Name)
