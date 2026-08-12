@@ -21,6 +21,7 @@
     "apexcharts": "^4.5.0",
     "axios": "^1.7.4",
     "dompurify": "^3.2.4",
+    "drawflow": "^0.0.60",
     "emoji-mart": "^5.6.0",
     "flatpickr": "^4.6.13",
     "glightbox": "^3.3.1",

@@ -4,9 +4,9 @@
     ViewData["Title"] = isEdit ? "Edit Automation" : "New Automation";
 }
 
-<div class="mb-6">
+<div class="mb-4">
     <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">One trigger, then an ordered list of steps. A Condition step branches into Yes/No — branches can hold any step except another Condition.</p>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Drag steps onto the canvas and connect them. A Condition node has two outputs — Yes and No.</p>
 </div>
 
 @if (!ViewData.ModelState.IsValid)
@@ -16,22 +16,18 @@
     </div>
 }
 
-<form asp-action="Save" asp-route-id="@Model.Id" method="post" class="max-w-4xl space-y-6"
-      x-data="automationBuilder(@System.Text.Json.JsonSerializer.Serialize(Model.StepsJson), '@Model.TriggerType')" x-on:submit="beforeSubmit">
-
-    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                <input asp-for="Name" placeholder="Welcome new leads"
-                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                <span asp-validation-for="Name" class="mt-1 block text-sm text-red-600"></span>
-            </div>
-            <div>
-                <label asp-for="Description" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                <input asp-for="Description" placeholder="Optional note for your own reference"
-                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
-            </div>
+<form asp-action="Save" asp-route-id="@Model.Id" method="post" id="automationForm" class="space-y-4">
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" placeholder="Welcome new leads"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <span asp-validation-for="Name" class="mt-1 block text-sm text-red-600"></span>
+        </div>
+        <div class="sm:col-span-2">
+            <label asp-for="Description" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Description" placeholder="Optional note for your own reference"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
         <label class="inline-flex items-center gap-2">
             <input asp-for="IsActive" type="checkbox" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
@@ -39,216 +35,35 @@
         </label>
     </div>
 
-    @* ---------- Trigger ---------- *@
-    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
-        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Trigger</h2>
-        <select asp-for="TriggerType" x-model="triggerType" class="block w-full sm:w-72 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-            <option value="InboundMessage">Any inbound message</option>
-            <option value="FirstInboundMessage">First message from a contact</option>
-            <option value="KeywordMatch">Message contains a keyword</option>
-            <option value="NewContactCreated">New contact created</option>
-            <option value="InteractiveReply">Button / list reply tapped</option>
-        </select>
-
-        <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4" x-show="triggerType === 'KeywordMatch'" x-cloak>
-            <div class="sm:col-span-2">
-                <label asp-for="KeywordsCsv" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Keywords (comma-separated)</label>
-                <input asp-for="KeywordsCsv" placeholder="price, cost, quote"
-                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
-            </div>
-            <div>
-                <label asp-for="KeywordMatchType" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Match type</label>
-                <select asp-for="KeywordMatchType" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
-                    <option value="contains">Contains</option>
-                    <option value="exact">Exact match</option>
-                    <option value="word">Whole word</option>
-                </select>
-            </div>
-            <label class="inline-flex items-center gap-2 mt-6">
-                <input asp-for="KeywordCaseSensitive" type="checkbox" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
-                <span class="text-sm text-gray-700 dark:text-slate-300">Case-sensitive</span>
-            </label>
-        </div>
-
-        <div class="mt-4" x-show="triggerType === 'InteractiveReply'" x-cloak>
-            <label asp-for="InteractiveReplyIdsCsv" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Button/row ids (comma-separated)</label>
-            <input asp-for="InteractiveReplyIdsCsv" placeholder="pricing, demo"
-                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
-            <p class="mt-1 text-xs text-gray-400">Matches the id you gave the button/row in a Send Buttons step of another automation.</p>
-        </div>
-    </div>
-
-    @* ---------- Steps ---------- *@
-    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
-        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Steps</h2>
-
-        <div class="space-y-3">
-            <template x-for="(step, index) in steps" :key="step._id">
-                <div>
-                    <div class="border border-gray-200 dark:border-slate-600 rounded-md p-4">
-                        <div class="flex items-start justify-between gap-3">
-                            <select x-model="step.type" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
-                                <option value="SendMessage">Send message</option>
-                                <option value="SendTemplate">Send template</option>
-                                <option value="SendButtons">Send buttons</option>
-                                <option value="Wait">Wait</option>
-                                <option value="Condition">Condition (if/else)</option>
-                                <option value="UpdateContactField">Update contact field</option>
-                                <option value="SendWebhook">Call webhook</option>
-                                <option value="Stop">Stop</option>
-                            </select>
-                            <div class="flex items-center gap-1">
-                                <button type="button" x-on:click="moveStep(steps, index, -1)" x-show="index > 0" class="p-1 text-gray-400 hover:text-gray-600" title="Move up">&uarr;</button>
-                                <button type="button" x-on:click="moveStep(steps, index, 1)" x-show="index < steps.length - 1" class="p-1 text-gray-400 hover:text-gray-600" title="Move down">&darr;</button>
-                                <button type="button" x-on:click="steps.splice(index, 1)" class="p-1 text-red-400 hover:text-red-600" title="Remove">&times;</button>
-                            </div>
-                        </div>
-
-                        <div class="mt-3" x-show="step.type === 'SendMessage'">
-                            <textarea x-model="step.config.text" rows="2" placeholder="Hi {{message.text}}, thanks for reaching out!"
-                                      class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea>
-                            <p class="mt-1 text-xs text-gray-400">Use <code>{{message.text}}</code> or <code>{{vars.x}}</code>.</p>
-                        </div>
-
-                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2" x-show="step.type === 'SendTemplate'">
-                            <input x-model="step.config.templateName" placeholder="Template name (exact)" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <input x-model="step.config.language" placeholder="Language, e.g. en_US" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <input x-model="step.config.bodyParamsCsv" placeholder="Body params, comma-separated" class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                        </div>
-
-                        <div class="mt-3 space-y-2" x-show="step.type === 'SendButtons'">
-                            <input x-model="step.config.bodyText" placeholder="Message body" class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <template x-for="n in 3" :key="n">
-                                <div class="grid grid-cols-2 gap-2">
-                                    <input x-model="step.config.buttons[n-1].id" placeholder="Button id" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <input x-model="step.config.buttons[n-1].title" placeholder="Button label" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                                </div>
-                            </template>
-                            <p class="text-xs text-gray-400">Up to 3 buttons; leave a row blank to skip it.</p>
-                        </div>
-
-                        <div class="mt-3 flex items-center gap-2" x-show="step.type === 'Wait'">
-                            <input x-model.number="step.config.amount" type="number" min="1" class="w-24 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <select x-model="step.config.unit" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
-                                <option value="minutes">minutes</option>
-                                <option value="hours">hours</option>
-                                <option value="days">days</option>
-                            </select>
-                        </div>
-
-                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2" x-show="step.type === 'Condition'">
-                            <select x-model="step.config.subject" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
-                                <option value="MessageContent">Message contains</option>
-                                <option value="ContactField">Contact field equals</option>
-                                <option value="TimeOfDay">Time of day is between</option>
-                            </select>
-                            <input x-show="step.config.subject === 'ContactField'" x-model="step.config.operand" placeholder="Field, e.g. City" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <input x-show="step.config.subject === 'TimeOfDay'" x-model="step.config.operand" placeholder="09:00-18:00" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <input x-show="step.config.subject !== 'TimeOfDay'" x-model="step.config.value" placeholder="Value to compare" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                        </div>
-
-                        <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2" x-show="step.type === 'UpdateContactField'">
-                            <select x-model="step.config.field" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
-                                <option value="FirstName">First name</option>
-                                <option value="LastName">Last name</option>
-                                <option value="Company">Company</option>
-                                <option value="Email">Email</option>
-                                <option value="Description">Notes</option>
-                                <option value="City">City</option>
-                                <option value="State">State</option>
-                            </select>
-                            <input x-model="step.config.value" placeholder="New value (supports {{message.text}})" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                        </div>
-
-                        <div class="mt-3 space-y-2" x-show="step.type === 'SendWebhook'">
-                            <input x-model="step.config.url" placeholder="https://your-endpoint.example.com/hook" class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
-                            <textarea x-model="step.config.bodyTemplate" rows="2" placeholder='Optional JSON body template — defaults to the run context'
-                                      class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm font-mono focus:border-emerald-500 focus:ring-emerald-500"></textarea>
-                            <p class="text-xs text-gray-400">Refused for private/internal addresses — only public URLs are deliverable.</p>
-                        </div>
-
-                        <p class="mt-2 text-xs text-gray-400" x-show="step.type === 'Stop'">Ends this branch here — nothing after it runs.</p>
-                    </div>
-
-                    @* Condition branches — one level only, no nested conditions. *@
-                    <div x-show="step.type === 'Condition'" x-cloak class="mt-2 ml-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div class="border-l-2 border-green-400 pl-3">
-                            <p class="text-xs font-semibold text-green-600 mb-2">YES</p>
-                            <template x-for="(child, ci) in (step.yes ||= [])" :key="child._id">
-                                <div class="border border-gray-200 dark:border-slate-600 rounded-md p-3 mb-2">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <select x-model="child.type" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500">
-                                            <option value="SendMessage">Send message</option>
-                                            <option value="SendTemplate">Send template</option>
-                                            <option value="SendButtons">Send buttons</option>
-                                            <option value="Wait">Wait</option>
-                                            <option value="UpdateContactField">Update field</option>
-                                            <option value="SendWebhook">Webhook</option>
-                                            <option value="Stop">Stop</option>
-                                        </select>
-                                        <button type="button" x-on:click="step.yes.splice(ci, 1)" class="text-red-400 hover:text-red-600 text-xs">&times;</button>
-                                    </div>
-                                    <textarea x-show="child.type === 'SendMessage'" x-model="child.config.text" rows="2" placeholder="Message text"
-                                              class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500"></textarea>
-                                    <input x-show="child.type === 'SendTemplate'" x-model="child.config.templateName" placeholder="Template name" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <input x-show="child.type === 'SendButtons'" x-model="child.config.bodyText" placeholder="Message body" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <div x-show="child.type === 'Wait'" class="mt-2 flex items-center gap-1">
-                                        <input x-model.number="child.config.amount" type="number" min="1" class="w-16 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                        <select x-model="child.config.unit" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500">
-                                            <option value="minutes">min</option><option value="hours">hr</option><option value="days">day</option>
-                                        </select>
-                                    </div>
-                                    <input x-show="child.type === 'UpdateContactField'" x-model="child.config.field" placeholder="Field name" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <input x-show="child.type === 'SendWebhook'" x-model="child.config.url" placeholder="Webhook URL" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                </div>
-                            </template>
-                            <button type="button" x-on:click="step.yes.push(newStep('SendMessage'))" class="text-xs text-emerald-600 hover:text-emerald-500">+ Add step</button>
-                        </div>
-                        <div class="border-l-2 border-red-400 pl-3">
-                            <p class="text-xs font-semibold text-red-600 mb-2">NO</p>
-                            <template x-for="(child, ci) in (step.no ||= [])" :key="child._id">
-                                <div class="border border-gray-200 dark:border-slate-600 rounded-md p-3 mb-2">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <select x-model="child.type" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500">
-                                            <option value="SendMessage">Send message</option>
-                                            <option value="SendTemplate">Send template</option>
-                                            <option value="SendButtons">Send buttons</option>
-                                            <option value="Wait">Wait</option>
-                                            <option value="UpdateContactField">Update field</option>
-                                            <option value="SendWebhook">Webhook</option>
-                                            <option value="Stop">Stop</option>
-                                        </select>
-                                        <button type="button" x-on:click="step.no.splice(ci, 1)" class="text-red-400 hover:text-red-600 text-xs">&times;</button>
-                                    </div>
-                                    <textarea x-show="child.type === 'SendMessage'" x-model="child.config.text" rows="2" placeholder="Message text"
-                                              class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500"></textarea>
-                                    <input x-show="child.type === 'SendTemplate'" x-model="child.config.templateName" placeholder="Template name" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <input x-show="child.type === 'SendButtons'" x-model="child.config.bodyText" placeholder="Message body" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <div x-show="child.type === 'Wait'" class="mt-2 flex items-center gap-1">
-                                        <input x-model.number="child.config.amount" type="number" min="1" class="w-16 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                        <select x-model="child.config.unit" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500">
-                                            <option value="minutes">min</option><option value="hours">hr</option><option value="days">day</option>
-                                        </select>
-                                    </div>
-                                    <input x-show="child.type === 'UpdateContactField'" x-model="child.config.field" placeholder="Field name" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                    <input x-show="child.type === 'SendWebhook'" x-model="child.config.url" placeholder="Webhook URL" class="mt-2 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500" />
-                                </div>
-                            </template>
-                            <button type="button" x-on:click="step.no.push(newStep('SendMessage'))" class="text-xs text-emerald-600 hover:text-emerald-500">+ Add step</button>
-                        </div>
-                    </div>
-                </div>
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden" x-data="automationCanvasController()">
+        <div class="flex flex-wrap items-center gap-2 p-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
+            <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mr-1">Add step:</span>
+            <template x-for="[type, def] in Object.entries(stepDefs)" :key="type">
+                <button type="button" draggable="true"
+                        x-on:dragstart="canvas.startDrag($event, type)"
+                        x-on:click="canvas.addStepNode(type)"
+                        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-700 cursor-grab">
+                    <span x-text="def.icon"></span> <span x-text="def.label"></span>
+                </button>
             </template>
-
-            <p x-show="steps.length === 0" class="text-sm text-gray-400">No steps yet.</p>
+            <div class="ml-auto flex items-center gap-1">
+                <button type="button" x-on:click="canvas.zoomOut()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" title="Zoom out">&minus;</button>
+                <button type="button" x-on:click="canvas.zoomReset()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 text-xs">Reset</button>
+                <button type="button" x-on:click="canvas.zoomIn()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" title="Zoom in">+</button>
+            </div>
         </div>
 
-        <div class="mt-4 flex gap-2">
-            <button type="button" x-on:click="steps.push(newStep('SendMessage'))" class="px-3 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">+ Add step</button>
-            <button type="button" x-on:click="steps.push(newStep('Condition'))" class="px-3 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">+ Add condition</button>
-        </div>
+        <div id="automationCanvas" class="relative w-full" style="height: 620px;"></div>
+        <p class="px-3 py-2 text-xs text-gray-400 dark:text-slate-500 border-t border-gray-100 dark:border-slate-700">
+            Drag from an output dot to an input dot to connect steps. Double-click a connection line to add a bend point; double-click a node to delete it.
+        </p>
     </div>
 
+    <input type="hidden" name="TriggerType" x-ref="triggerTypeInput" />
+    <input type="hidden" name="KeywordsCsv" x-ref="keywordsInput" />
+    <input type="hidden" name="KeywordMatchType" x-ref="matchTypeInput" />
+    <input type="hidden" name="KeywordCaseSensitive" x-ref="caseSensitiveInput" />
+    <input type="hidden" name="InteractiveReplyIdsCsv" x-ref="replyIdsInput" />
     <input type="hidden" name="StepsJson" x-ref="stepsJsonInput" />
 
     <div class="flex items-center gap-3">
@@ -257,67 +72,48 @@
     </div>
 </form>
 
+<style>
+    .df-node-card { min-width: 220px; font-family: inherit; }
+    .df-node-title { font-weight: 600; font-size: 0.8rem; padding: 6px 10px; background: #047857; color: #fff; border-radius: 6px 6px 0 0; }
+    .df-trigger-card .df-node-title { background: #1e293b; }
+    .df-node-body { padding: 8px 10px; background: #fff; border-radius: 0 0 6px 6px; display: flex; flex-direction: column; gap: 4px; }
+    .drawflow-node { background: transparent; border: none; box-shadow: 0 1px 4px rgba(0,0,0,.15); border-radius: 6px; padding: 0; width: auto; }
+    .drawflow-node.selected .df-node-body { outline: 2px solid #047857; }
+    .drawflow .connection .main-path { stroke: #94a3b8; stroke-width: 2px; }
+    .drawflow .connection .main-path:hover { stroke: #047857; }
+    #automationCanvas { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 18px 18px; }
+    html.dark #automationCanvas { background-color: #0f172a; background-image: radial-gradient(#334155 1px, transparent 1px); }
+    html.dark .df-node-body { background: #1e293b; color: #e2e8f0; }
+</style>
+
 @section Scripts {
 <script>
-    function automationBuilder(stepsJson, initialTriggerType) {
+    function automationCanvasController() {
         return {
-            steps: [],
-            triggerType: initialTriggerType,
+            canvas: null,
+            stepDefs: window.AUTOMATION_STEP_DEFS || {},
             init() {
-                const parsed = JSON.parse(stepsJson || '[]');
-                this.steps = parsed.map(s => this.hydrate(s));
-            },
-            // x-show only toggles CSS display — Alpine still evaluates every directive inside a
-            // hidden block on each reactive update (it doesn't prune based on visibility). So
-            // step.config.buttons must exist on EVERY step regardless of its current type, or
-            // the always-present (just hidden) SendButtons row template throws reading
-            // `buttons[n-1]` off an undefined array the moment any other step type is selected.
-            normalizeButtons(config) {
-                const existing = Array.isArray(config.buttons) ? config.buttons : [];
-                config.buttons = [0, 1, 2].map(i => existing[i] || { id: '', title: '' });
-                if (typeof config.bodyText !== 'string') config.bodyText = '';
-                return config;
-            },
-            hydrate(node) {
-                const step = { _id: crypto.randomUUID(), type: node.type, config: this.normalizeButtons(node.config || {}) };
-                if (node.type === 'SendTemplate' && Array.isArray(step.config.bodyParams)) {
-                    step.config.bodyParamsCsv = step.config.bodyParams.join(', ');
-                }
-                if (node.type === 'Condition') {
-                    step.yes = (node.yes || []).map(c => this.hydrate(c));
-                    step.no = (node.no || []).map(c => this.hydrate(c));
-                }
-                return step;
-            },
-            newStep(type) {
-                const step = { _id: crypto.randomUUID(), type, config: this.normalizeButtons({}) };
-                if (type === 'Wait') Object.assign(step.config, { amount: 1, unit: 'minutes' });
-                if (type === 'Condition') { step.config.subject = 'MessageContent'; step.yes = []; step.no = []; }
-                return step;
-            },
-            moveStep(list, index, dir) {
-                const target = index + dir;
-                if (target < 0 || target >= list.length) return;
-                [list[index], list[target]] = [list[target], list[index]];
-            },
-            serializeNode(step) {
-                const config = { ...step.config };
-                if (step.type === 'SendTemplate') {
-                    config.bodyParams = (config.bodyParamsCsv || '').split(',').map(s => s.trim()).filter(Boolean);
-                    delete config.bodyParamsCsv;
-                }
-                if (step.type === 'SendButtons') {
-                    config.buttons = (config.buttons || []).filter(b => b && b.id && b.title);
-                }
-                const node = { type: step.type, config };
-                if (step.type === 'Condition') {
-                    node.yes = (step.yes || []).map(c => this.serializeNode(c));
-                    node.no = (step.no || []).map(c => this.serializeNode(c));
-                }
-                return node;
-            },
-            beforeSubmit() {
-                this.$refs.stepsJsonInput.value = JSON.stringify(this.steps.map(s => this.serializeNode(s)));
+                const initial = {
+                    triggerType: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TriggerType)),
+                    triggerFields: {
+                        keywords: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KeywordsCsv ?? "")),
+                        matchtype: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KeywordMatchType)),
+                        casesensitive: @Html.Raw(Model.KeywordCaseSensitive ? "'true'" : "'false'"),
+                        replyids: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.InteractiveReplyIdsCsv ?? "")),
+                    },
+                    steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
+                };
+                this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial);
+
+                document.getElementById('automationForm').addEventListener('submit', () => {
+                    const data = this.canvas.exportForSubmit();
+                    this.$refs.triggerTypeInput.value = data.triggerType;
+                    this.$refs.keywordsInput.value = data.keywords;
+                    this.$refs.matchTypeInput.value = data.matchType;
+                    this.$refs.caseSensitiveInput.value = data.caseSensitive ? 'true' : 'false';
+                    this.$refs.replyIdsInput.value = data.replyIds;
+                    this.$refs.stepsJsonInput.value = data.stepsJson;
+                });
             },
         };
     }

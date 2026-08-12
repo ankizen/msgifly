@@ -218,7 +218,7 @@ public class AutomationsController : Controller
         }
     }
 
-    /// <summary>One level of Condition nesting only — a Yes/No branch's own children must not themselves be Conditions.</summary>
+    /// <summary>Arbitrary nesting is fine — the canvas builder represents this as a graph (Condition nodes with two outputs, each potentially leading to further Conditions), which the engine's recursive step-walker already executes correctly regardless of depth.</summary>
     private static void ValidateTree(List<AutomationStepNode> nodes, int depth)
     {
         foreach (var node in nodes)
@@ -230,11 +230,6 @@ public class AutomationsController : Controller
 
             if (stepType == AutomationStepType.Condition)
             {
-                if (depth > 0)
-                {
-                    throw new ArgumentException("Conditions can't be nested inside another condition's branch.");
-                }
-
                 if (node.Yes is not null) ValidateTree(node.Yes, depth + 1);
                 if (node.No is not null) ValidateTree(node.No, depth + 1);
             }
