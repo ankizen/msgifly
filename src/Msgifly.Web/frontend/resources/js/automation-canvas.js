@@ -102,8 +102,9 @@ const STEP_DEFS = {
        </select>
        <input df-operand placeholder="Field name / HH:mm-HH:mm (if needed)" class="${FIELD_CLASS}" />
        <input df-value placeholder="Value to compare" class="${FIELD_CLASS}" />
-       <div class="mt-1 flex justify-between text-[10px] font-semibold px-1">
-         <span class="text-green-600">YES ↓</span><span class="text-red-600">NO ↓</span>
+       <div class="df-condition-legend">
+         <span class="text-green-600">● Yes</span>
+         <span class="text-red-600">● No</span>
        </div>`
     ),
   },

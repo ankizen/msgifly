@@ -73,12 +73,39 @@
 </form>
 
 <style>
-    .df-node-card { min-width: 220px; font-family: inherit; }
+    .df-node-card { min-width: 220px; font-family: inherit; position: relative; }
     .df-node-title { font-weight: 600; font-size: 0.8rem; padding: 6px 10px; background: #047857; color: #fff; border-radius: 6px 6px 0 0; }
     .df-trigger-card .df-node-title { background: #1e293b; }
     .df-node-body { padding: 8px 10px; background: #fff; border-radius: 0 0 6px 6px; display: flex; flex-direction: column; gap: 4px; }
-    .drawflow-node { background: transparent; border: none; box-shadow: 0 1px 4px rgba(0,0,0,.15); border-radius: 6px; padding: 0; width: auto; }
-    .drawflow-node.selected .df-node-body { outline: 2px solid #047857; }
+
+    /* Specificity note: Drawflow's own stylesheet uses ".drawflow .drawflow-node" (two classes),
+       which beats a plain ".drawflow-node" override — so every rule here that touches node/port
+       chrome must match or exceed that ancestor-qualified selector, or the library's default
+       cyan/black debug styling silently wins. */
+    .drawflow .drawflow-node {
+        background: transparent;
+        border: none;
+        box-shadow: 0 1px 4px rgba(0,0,0,.15);
+        border-radius: 6px;
+        padding: 0;
+        width: auto;
+        /* Ports are centered on the whole node's height by default; since our cards have
+           variable-height bodies (different field counts per step type), that leaves ports
+           landing at a different, unpredictable row per node and makes connection lines look
+           crooked. Pin them to a fixed offset (the title bar) instead, so every node's ports
+           line up on the same row regardless of body content. */
+        align-items: flex-start;
+    }
+    .drawflow .drawflow-node.selected { background: transparent; }
+    .drawflow .drawflow-node.selected .df-node-body { outline: 2px solid #047857; }
+    .drawflow .drawflow-node .inputs,
+    .drawflow .drawflow-node .outputs { margin-top: 13px; }
+    .drawflow .drawflow-node .input,
+    .drawflow .drawflow-node .output { border-color: #047857; background: #fff; }
+    .drawflow .drawflow-node .input { background: #10b981; }
+
+    .df-condition-legend { position: absolute; top: 10px; right: -54px; display: flex; flex-direction: column; gap: 12px; font-size: 10px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+
     .drawflow .connection .main-path { stroke: #94a3b8; stroke-width: 2px; }
     .drawflow .connection .main-path:hover { stroke: #047857; }
     #automationCanvas { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 18px 18px; }
