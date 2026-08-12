@@ -8,6 +8,7 @@ using Msgifly.Web.Hubs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
@@ -216,12 +217,12 @@ public class WhatsAppWebhookController : Controller
 
             await BroadcastMessageAsync(chat, inboundMessage);
 
-            if (!chat.IsBotsStopped && contact is not null)
+            if (!chat.IsBotsStopped && !chat.IsBlocked && contact is not null)
             {
                 await FireMatchingBotsAsync(chat, contact, messageText, isFirstMessage);
             }
 
-            if (!chat.IsBotsStopped)
+            if (!chat.IsBotsStopped && !chat.IsBlocked)
             {
                 await FireAutomationsAsync(chat, contact, messageText, isFirstMessage, ExtractInteractiveReplyId(message));
             }
@@ -316,8 +317,8 @@ public class WhatsAppWebhookController : Controller
 
     private async Task<Contact?> ResolveContactAsync(string phone, string? name, Workspace workspace)
     {
-        var digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
-        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == phone || c.Phone == digitsOnly || c.Phone == "+" + digitsOnly);
+        var normalized = PhoneNumberNormalizer.Normalize(phone);
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == phone || c.Phone == normalized || c.Phone == "+" + normalized);
         if (contact is not null || !workspace.AutoCreateLeadOnInboundMessage)
         {
             return contact;
@@ -336,7 +337,7 @@ public class WhatsAppWebhookController : Controller
             WorkspaceId = workspace.Id,
             FirstName = nameParts[0],
             LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty,
-            Phone = phone,
+            Phone = normalized,
             Type = ContactType.Lead,
             StatusId = statusId.Value,
             SourceId = sourceId.Value,

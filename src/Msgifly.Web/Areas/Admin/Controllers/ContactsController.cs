@@ -11,6 +11,7 @@ using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Workspaces;
 
@@ -141,7 +142,7 @@ public class ContactsController : Controller
                 SourceId = model.SourceId,
                 Email = model.Email,
                 Website = model.Website,
-                Phone = model.Phone,
+                Phone = PhoneNumberNormalizer.Normalize(model.Phone),
                 IsEnabled = model.IsEnabled,
                 DateAssigned = model.AssignedToId is not null ? DateTime.UtcNow : null,
             };
@@ -182,7 +183,7 @@ public class ContactsController : Controller
             contact.SourceId = model.SourceId;
             contact.Email = model.Email;
             contact.Website = model.Website;
-            contact.Phone = model.Phone;
+            contact.Phone = PhoneNumberNormalizer.Normalize(model.Phone);
             contact.IsEnabled = model.IsEnabled;
             contact.UpdatedAt = DateTime.UtcNow;
             this.Notify("Contact updated.");
@@ -310,7 +311,7 @@ public class ContactsController : Controller
                 WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
                 FirstName = firstName,
                 LastName = lastName ?? string.Empty,
-                Phone = phone,
+                Phone = PhoneNumberNormalizer.Normalize(phone),
                 Email = string.IsNullOrWhiteSpace(email) ? null : email,
                 Company = string.IsNullOrWhiteSpace(company) ? null : company,
                 Type = type,

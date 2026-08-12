@@ -59,9 +59,20 @@
                             <p class="text-xs text-gray-400 dark:text-slate-500" x-text="activeChat?.receiverId"></p>
                         </div>
                     </div>
-                    <template x-if="activeChat?.isBotsStopped">
-                        <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">Bots paused</span>
-                    </template>
+                    <div class="flex items-center gap-2">
+                        <template x-if="activeChat?.isBotsStopped">
+                            <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">Bots paused</span>
+                        </template>
+                        <template x-if="activeChat?.isBlocked">
+                            <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">Blocked</span>
+                        </template>
+                        <button type="button" x-on:click="toggleBlock()"
+                                class="text-xs font-medium px-2 py-1 rounded-md border"
+                                :class="activeChat?.isBlocked
+                                    ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-700 dark:hover:bg-emerald-900/20'
+                                    : 'border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:hover:bg-red-900/20'"
+                                x-text="activeChat?.isBlocked ? 'Unblock' : 'Block'"></button>
+                    </div>
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50 dark:bg-slate-900" x-ref="messageList">
@@ -96,7 +107,33 @@
                                 </template>
 
                                 <p class="whitespace-pre-wrap break-words" x-show="message.message" x-text="message.message"></p>
-                                <p class="mt-1 text-[10px] opacity-70 text-right" x-text="formatTime(message.timeSent) + (message.isOutbound ? ' · ' + message.status : '')"></p>
+                                <p class="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-70">
+                                    <span x-text="formatTime(message.timeSent)"></span>
+                                    <template x-if="message.isOutbound">
+                                        <span class="inline-flex items-center">
+                                            <!-- Pending: clock -->
+                                            <svg x-show="message.status === 'Pending'" xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+                                                <circle cx="8" cy="8" r="6.5" /><path stroke-linecap="round" d="M8 4.5V8l2.5 1.5" />
+                                            </svg>
+                                            <!-- Sent: single tick -->
+                                            <svg x-show="message.status === 'Sent'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 16 11" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M1 6l3.5 3.5L14 1" />
+                                            </svg>
+                                            <!-- Delivered: double tick, grey -->
+                                            <svg x-show="message.status === 'Delivered'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-4" viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M1 6l3.5 3.5L11 2" /><path stroke-linecap="round" stroke-linejoin="round" d="M6.5 6l3.5 3.5L19 1" />
+                                            </svg>
+                                            <!-- Read: double tick, blue -->
+                                            <svg x-show="message.status === 'Read'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-4" viewBox="0 0 20 11" fill="none" stroke="#53bdeb" stroke-width="1.5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M1 6l3.5 3.5L11 2" /><path stroke-linecap="round" stroke-linejoin="round" d="M6.5 6l3.5 3.5L19 1" />
+                                            </svg>
+                                            <!-- Failed: warning -->
+                                            <svg x-show="message.status === 'Failed'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-red-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                                                <circle cx="8" cy="8" r="6.5" /><path stroke-linecap="round" d="M8 5v3.5" /><circle cx="8" cy="10.8" r="0.6" fill="currentColor" stroke="none" />
+                                            </svg>
+                                        </span>
+                                    </template>
+                                </p>
                             </div>
                         </div>
                     </template>
@@ -112,6 +149,12 @@
                     </div>
                 </template>
 
+                <template x-if="activeChat?.isBlocked">
+                    <div class="p-3 border-t border-gray-200 dark:border-slate-700 bg-red-50 dark:bg-red-900/20 text-center text-sm text-red-600 dark:text-red-300">
+                        This contact is blocked — <button type="button" x-on:click="toggleBlock()" class="underline font-medium">unblock</button> to send messages.
+                    </div>
+                </template>
+                <template x-if="!activeChat?.isBlocked">
                 <div class="p-3 border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                     <div class="flex items-end gap-2">
                         <div class="relative" x-data="{ open: false }">
@@ -153,6 +196,7 @@
                         </button>
                     </div>
                 </div>
+                </template>
             </div>
         </template>
     </div>
@@ -243,6 +287,21 @@ function chatInbox() {
         async loadChats() {
             const res = await fetch('/Admin/Chat/GetChats?search=' + encodeURIComponent(this.search));
             this.chats = await res.json();
+        },
+
+        async toggleBlock() {
+            if (!this.activeChatId) return;
+            const res = await fetch('/Admin/Chat/ToggleBlock', {
+                method: 'POST',
+                body: new URLSearchParams({ chatId: this.activeChatId, __RequestVerificationToken: this.antiForgeryToken() }),
+            });
+            if (!res.ok) {
+                window.showNotification('Could not update block status.', 'danger');
+                return;
+            }
+            const { isBlocked } = await res.json();
+            const chat = this.chats.find(c => c.id === this.activeChatId);
+            if (chat) chat.isBlocked = isBlocked;
         },
 
         async loadCannedReplies() {

@@ -6,6 +6,7 @@ using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services;
 using Msgifly.Web.Services.ApiKeys;
 using Msgifly.Web.Services.Workspaces;
 
@@ -98,7 +99,7 @@ public class ContactsController : ControllerBase
             WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName?.Trim() ?? string.Empty,
-            Phone = request.Phone.Trim(),
+            Phone = PhoneNumberNormalizer.Normalize(request.Phone),
             Email = request.Email,
             Company = request.Company,
             Type = ContactType.Lead,

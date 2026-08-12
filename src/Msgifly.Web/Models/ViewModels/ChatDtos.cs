@@ -8,7 +8,8 @@ public record ChatSummaryDto(
     DateTime? LastMessageTime,
     int UnreadCount,
     string ContactType,
-    bool IsBotsStopped);
+    bool IsBotsStopped,
+    bool IsBlocked);
 
 public record ChatMessageDto(
     int Id,

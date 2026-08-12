@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.LeadAds;
 using Msgifly.Web.Services.Workspaces;
@@ -113,8 +114,8 @@ public class LeadAdsSyncJob
             return null;
         }
 
-        var digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
-        var existing = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == phone || c.Phone == digitsOnly || c.Phone == "+" + digitsOnly);
+        var normalized = PhoneNumberNormalizer.Normalize(phone);
+        var existing = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == phone || c.Phone == normalized || c.Phone == "+" + normalized);
         if (existing is not null)
         {
             return existing; // same person already a Contact (e.g. messaged in before) — don't duplicate, just note the lead
@@ -138,7 +139,7 @@ public class LeadAdsSyncJob
             WorkspaceId = workspace.Id,
             FirstName = nameParts[0],
             LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty,
-            Phone = phone,
+            Phone = normalized,
             Email = FirstValue(lead, "email"),
             Type = ContactType.Lead,
             StatusId = statusId.Value,

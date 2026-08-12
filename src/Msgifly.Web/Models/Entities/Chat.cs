@@ -24,6 +24,12 @@ public class Chat
     public bool IsBotsStopped { get; set; }
     public DateTime? BotStoppedTime { get; set; }
 
+    /// <summary>Msgifly-side block — the Cloud API has no platform-level "block this number" of
+    /// its own, so this stops us: bots/automations skip a blocked chat's inbound messages, and
+    /// the composer/send endpoints refuse outbound ones, same idea as IsBotsStopped but stronger
+    /// and manually toggled rather than keyword- or time-triggered.</summary>
+    public bool IsBlocked { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

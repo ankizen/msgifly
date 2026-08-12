@@ -71,7 +71,8 @@ public class ChatController : Controller
             c.LastMessageTime,
             unreadCounts.GetValueOrDefault(c.Id),
             contactTypes.TryGetValue(c.ReceiverId, out var t) ? t.ToString() : "Unknown",
-            c.IsBotsStopped));
+            c.IsBotsStopped,
+            c.IsBlocked));
 
         return Json(result);
     }
@@ -113,6 +114,11 @@ public class ChatController : Controller
         if (chat is null)
         {
             return NotFound();
+        }
+
+        if (chat.IsBlocked)
+        {
+            return BadRequest("This contact is blocked — unblock them first to send a message.");
         }
 
         var result = await _whatsAppService.SendPlainTextMessageAsync(chat.ReceiverId, text);
@@ -166,6 +172,11 @@ public class ChatController : Controller
         if (chat is null)
         {
             return NotFound();
+        }
+
+        if (chat.IsBlocked)
+        {
+            return BadRequest("This contact is blocked — unblock them first to send a message.");
         }
 
         var mediaType = ResolveMediaType(file.ContentType);
@@ -264,6 +275,24 @@ public class ChatController : Controller
         }
 
         return Ok();
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "chat.view")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleBlock(int chatId)
+    {
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == chatId);
+        if (chat is null)
+        {
+            return NotFound();
+        }
+
+        chat.IsBlocked = !chat.IsBlocked;
+        chat.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return Json(new { isBlocked = chat.IsBlocked });
     }
 
     [HttpGet]
