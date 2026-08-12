@@ -6,7 +6,7 @@ import aspectRatio from '@tailwindcss/aspect-ratio';
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: ['../Views/**/*.cshtml', './resources/**/*.js'],
+  content: ['../Views/**/*.cshtml', '../Areas/**/*.cshtml', './resources/**/*.js'],
   theme: {
     extend: {
       animation: {
