@@ -27,7 +27,7 @@
 
 <form asp-action="Save" method="post" class="max-w-3xl space-y-6"
       x-data="{
-          templates: @System.Text.Json.JsonSerializer.Serialize(Model.TemplateOptions),
+          templates: @System.Text.Json.JsonSerializer.Serialize(Model.TemplateOptions, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web)),
           selectedTemplateId: '@Model.TemplateId',
           replyType: '@Model.ReplyType',
           get selectedTemplate() { return this.templates.find(t => t.templateId === this.selectedTemplateId) || null; },

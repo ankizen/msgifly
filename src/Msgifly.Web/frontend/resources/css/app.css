@@ -1,4 +1,4 @@
-@import '../../node_modules/intl-tel-input/build/css/intlTelInput.min.css';
+@import 'intl-tel-input/build/css/intlTelInput.css';
 @import '../../node_modules/pretty-print-json/dist/css/pretty-print-json.min.css';
 @import "./wm-tribute.css";
 @import "../../node_modules/tom-select/dist/css/tom-select.css";

@@ -1,4 +1,18 @@
 import intlTelInput from 'intl-tel-input';
+// intl-tel-input points its flag sprite via CSS custom properties whose values are themselves
+// url(...) — bundlers don't rewrite url() references nested inside a custom property (they're
+// opaque strings to CSS tooling), so the sprite silently 404s no matter how the stylesheet
+// itself is imported. Importing the images directly here makes Vite emit them as real,
+// content-hashed build assets and hand back their final URLs, which get set onto the same
+// custom properties the library's CSS already reads from.
+import flags1x from 'intl-tel-input/build/img/flags.webp?url';
+import flags2x from 'intl-tel-input/build/img/flags@2x.webp?url';
+import globe1x from 'intl-tel-input/build/img/globe.webp?url';
+import globe2x from 'intl-tel-input/build/img/globe@2x.webp?url';
+document.documentElement.style.setProperty('--iti-path-flags-1x', `url(${flags1x})`);
+document.documentElement.style.setProperty('--iti-path-flags-2x', `url(${flags2x})`);
+document.documentElement.style.setProperty('--iti-path-globe-1x', `url(${globe1x})`);
+document.documentElement.style.setProperty('--iti-path-globe-2x', `url(${globe2x})`);
 import Quill from 'quill';
 import 'quill/dist/quill.snow.css';
 import flatpickr from 'flatpickr';

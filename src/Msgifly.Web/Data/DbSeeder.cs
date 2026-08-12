@@ -154,6 +154,31 @@ public static class DbSeeder
         db.Workspaces.Add(workspace);
         await db.SaveChangesAsync(); // need workspace.Id before backfilling
 
+        // Backfill BEFORE the "seed defaults if none exist" checks below, not after — every row
+        // that existed prior to the WorkspaceId column has it defaulted to 0 by the migration
+        // (see AddWorkspaces migration), so a legacy install's real Sources/Statuses are still
+        // sitting at WorkspaceId=0 until this runs. Checking "does workspace.Id already have any
+        // Sources" before this backfill always says no even when it truly already has some,
+        // which used to seed a second, duplicate set on top of the ones the backfill was about
+        // to bring in.
+        var tables = new[]
+        {
+            "Contacts", "Sources", "Statuses", "Chats", "Campaigns", "WhatsappTemplates",
+            "MessageBots", "TemplateBots", "CannedReplies", "Automations", "ApiKeys",
+        };
+        foreach (var table in tables)
+        {
+            // `table` is one of the fixed literals above, never external/user input, so
+            // interpolating it into the SQL text (identifiers can't be parameterized) is safe —
+            // only the WorkspaceId value below is a real parameter.
+#pragma warning disable EF1002
+            await db.Database.ExecuteSqlRawAsync(
+                $"UPDATE [{table}] SET WorkspaceId = {{0}} WHERE WorkspaceId = 0", workspace.Id);
+#pragma warning restore EF1002
+        }
+
+        logger.LogInformation("Backfilled all pre-existing rows to Default Workspace {WorkspaceId}.", workspace.Id);
+
         if (!await db.Sources.IgnoreQueryFilters().AnyAsync(s => s.WorkspaceId == workspace.Id))
         {
             db.Sources.AddRange(
@@ -173,26 +198,6 @@ public static class DbSeeder
         }
 
         await db.SaveChangesAsync();
-
-        // Every row that existed before the WorkspaceId column was added has it defaulted to 0 by
-        // the migration (see AddWorkspaces migration) — point them all at the Default Workspace.
-        var tables = new[]
-        {
-            "Contacts", "Sources", "Statuses", "Chats", "Campaigns", "WhatsappTemplates",
-            "MessageBots", "TemplateBots", "CannedReplies", "Automations", "ApiKeys",
-        };
-        foreach (var table in tables)
-        {
-            // `table` is one of the fixed literals above, never external/user input, so
-            // interpolating it into the SQL text (identifiers can't be parameterized) is safe —
-            // only the WorkspaceId value below is a real parameter.
-#pragma warning disable EF1002
-            await db.Database.ExecuteSqlRawAsync(
-                $"UPDATE [{table}] SET WorkspaceId = {{0}} WHERE WorkspaceId = 0", workspace.Id);
-#pragma warning restore EF1002
-        }
-
-        logger.LogInformation("Backfilled all pre-existing rows to Default Workspace {WorkspaceId}.", workspace.Id);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Claims;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.AspNetCore.Authorization;
@@ -13,6 +14,7 @@ using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
+using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
@@ -24,12 +26,14 @@ public class ContactsController : Controller
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
     private readonly AutomationEngine _automationEngine;
+    private readonly IWhatsAppService _whatsAppService;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public ContactsController(ApplicationDbContext db, AutomationEngine automationEngine, ICurrentWorkspaceAccessor workspaceAccessor)
+    public ContactsController(ApplicationDbContext db, AutomationEngine automationEngine, IWhatsAppService whatsAppService, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
         _automationEngine = automationEngine;
+        _whatsAppService = whatsAppService;
         _workspaceAccessor = workspaceAccessor;
     }
 
@@ -64,8 +68,87 @@ public class ContactsController : Controller
         ViewData["SourceId"] = sourceId;
         ViewData["StatusOptions"] = await BuildOptionsAsync(_db.Statuses, s => s.Id, s => s.Name);
         ViewData["SourceOptions"] = await BuildOptionsAsync(_db.Sources, s => s.Id, s => s.Name);
+        ViewData["TemplateOptions"] = await _db.WhatsappTemplates.AsNoTracking()
+            .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
+            .OrderBy(t => t.TemplateName)
+            .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText))
+            .ToListAsync();
 
         return View(await PagedList<Contact>.CreateAsync(query, page, PageSize));
+    }
+
+    /// <summary>
+    /// The "Send Template" quick action on the Contacts list — sends one template to one person
+    /// right now, distinct from Campaigns (which are for bulk sends to a filtered/picked
+    /// segment). Recorded as a normal outbound ChatMessage on that contact's conversation
+    /// (finding-or-creating the Chat exactly like the public API's MessagesController does), so
+    /// it shows up in the Chat inbox like any other message rather than living only in a
+    /// separate campaign report.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTemplate(int contactId, string templateId, string? headerParam, List<string>? bodyParams)
+    {
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Id == contactId);
+        if (contact is null)
+        {
+            return NotFound();
+        }
+
+        var template = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.MetaTemplateId == templateId && t.Status == TemplateStatus.Approved);
+        if (template is null)
+        {
+            this.Notify("Choose an approved template.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var request = new TemplateSendRequest
+        {
+            TemplateName = template.TemplateName,
+            Language = template.Language,
+            HeaderFormat = template.HeaderFormat,
+            HeaderText = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) ? headerParam : null,
+            HeaderMediaUrl = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) ? null : headerParam,
+            BodyParams = (bodyParams ?? []).Take(template.BodyParamsCount).ToList(),
+        };
+
+        var result = await _whatsAppService.SendTemplateMessageAsync(contact.Phone, request);
+        if (!result.Success)
+        {
+            this.Notify($"Couldn't send: {result.ErrorMessage}", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == contact.Phone);
+        if (chat is null)
+        {
+            chat = new Chat { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value, ReceiverId = contact.Phone, Name = contact.FullName };
+            _db.Chats.Add(chat);
+        }
+
+        var previewText = $"[Template: {template.TemplateName}]" + (request.BodyParams.Count > 0 ? " " + string.Join(" / ", request.BodyParams) : string.Empty);
+        chat.Name = chat.Name == contact.Phone ? contact.FullName : chat.Name;
+        chat.LastMessage = previewText;
+        chat.LastMessageTime = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _db.ChatMessages.Add(new ChatMessage
+        {
+            ChatId = chat.Id,
+            SenderId = chat.WaNoId ?? "agent",
+            Message = previewText,
+            MessageType = "text",
+            WhatsappMessageId = result.Data,
+            StaffId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null,
+            Status = MessageDeliveryStatus.Sent,
+            TimeSent = DateTime.UtcNow,
+            IsRead = true,
+        });
+        await _db.SaveChangesAsync();
+
+        this.Notify($"Template sent to {contact.FullName}.");
+        return RedirectToAction(nameof(Index));
     }
 
     [Authorize(Policy = "contact.create,contact.edit")]
