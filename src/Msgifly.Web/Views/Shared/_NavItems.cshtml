@@ -7,9 +7,14 @@
         string.Equals(currentController, controller, StringComparison.OrdinalIgnoreCase)
         && (action is null || string.Equals(currentAction, action, StringComparison.OrdinalIgnoreCase));
 
+    // The sidebar shell is always dark (bg-slate-800/900, see SidebarNavigation/Default.cshtml) —
+    // it doesn't follow the app's light/dark mode toggle. So these classes are deliberately NOT
+    // theme-conditional; using `dark:` variants here would only apply when the whole app is in
+    // dark mode and leave inactive items nearly invisible (light-mode gray text on a dark navy
+    // sidebar) the rest of the time.
     string LinkClasses(bool active) => active
-        ? "group flex items-center px-4 py-2 text-sm font-medium rounded-r-md border-l-4 border-emerald-600 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-slate-900 dark:text-white"
-        : "group flex items-center px-4 py-2 text-sm font-medium rounded-r-md text-gray-600 hover:bg-emerald-100 hover:text-emerald-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white";
+        ? "group flex items-center px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white shadow-sm"
+        : "group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-white transition-colors duration-150";
 
     var waSettings = await SettingsService.GetAsync<Msgifly.Web.Services.Settings.WhatsAppSettings>(nameof(Msgifly.Web.Services.Settings.WhatsAppSettings));
 }
@@ -53,7 +58,7 @@
 
 @if (User.HasPermission("campaigns.view", "message_bot.view", "template_bot.view"))
 {
-    <p class="mt-6 mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Marketing</p>
+    <p class="mt-6 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500/80">Marketing</p>
 
     @if (User.HasPermission("campaigns.view"))
     {
@@ -86,7 +91,7 @@
 
 @if (User.HasPermission("chat.view", "chat.read_only"))
 {
-    <p class="mt-6 mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Support</p>
+    <p class="mt-6 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500/80">Support</p>
 
     <a asp-area="Admin" asp-controller="Chat" asp-action="Index" class="@LinkClasses(IsActive("Chat"))">
         <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -98,7 +103,7 @@
 
 @if (User.HasPermission("user.view", "role.view", "source.view", "status.view", "canned_reply.view"))
 {
-    <p class="mt-6 mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Setup</p>
+    <p class="mt-6 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500/80">Setup</p>
 
     @if (User.HasPermission("user.view"))
     {
