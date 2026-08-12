@@ -14,6 +14,8 @@ services:
         condition: service_healthy
     ports:
       - "8080"
+    volumes:
+      - msgifly-uploads:/app/wwwroot/uploads
 
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
@@ -32,3 +34,4 @@ services:
 
 volumes:
   msgifly-db-data:
+  msgifly-uploads:
