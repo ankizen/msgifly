@@ -52,9 +52,48 @@ public class WabaController : Controller
             {
                 this.Notify($"Couldn't refresh phone numbers: {phoneNumbers.ErrorMessage}", "danger");
             }
+
+            if (!string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId))
+            {
+                var profile = await _whatsAppService.GetBusinessProfileAsync(settings.DefaultPhoneNumberId);
+                if (profile.Success)
+                {
+                    model.BusinessProfile = profile.Data;
+                    model.ProfileForm = new BusinessProfileFormViewModel
+                    {
+                        About = profile.Data!.About,
+                        Email = profile.Data.Email,
+                        Website = profile.Data.Websites,
+                    };
+                }
+            }
         }
 
         return View(model);
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateBusinessProfile([Bind(Prefix = "ProfileForm")] BusinessProfileFormViewModel form)
+    {
+        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
+        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId))
+        {
+            this.Notify("Choose a default number first.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var result = await _whatsAppService.UpdateBusinessProfileAsync(settings.DefaultPhoneNumberId, new BusinessProfileUpdateRequest
+        {
+            About = form.About,
+            Email = form.Email,
+            Website = form.Website,
+            Vertical = form.Vertical,
+        });
+
+        this.Notify(result.Success ? "Business profile updated." : $"Couldn't update profile: {result.ErrorMessage}", result.Success ? "success" : "danger");
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]

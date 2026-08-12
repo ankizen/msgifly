@@ -17,6 +17,7 @@ public record ChatMessageDto(
     string? MessageType,
     DateTime TimeSent,
     bool IsOutbound,
-    string Status);
+    string Status,
+    string? Url = null);
 
 public record CannedReplyDto(int Id, string Title, string Description);

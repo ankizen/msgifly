@@ -23,15 +23,18 @@ namespace Msgifly.Web.Areas.Admin.Controllers;
 public class ChatController : Controller
 {
     private const int MessagePageSize = 20;
+    private const long MaxUploadBytes = 16 * 1024 * 1024; // Meta's own cap for images/audio/docs (video allows up to 16MB too as of the current Cloud API limits)
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IHubContext<ChatHub> _hubContext;
+    private readonly IWebHostEnvironment _environment;
 
-    public ChatController(ApplicationDbContext db, IWhatsAppService whatsAppService, IHubContext<ChatHub> hubContext)
+    public ChatController(ApplicationDbContext db, IWhatsAppService whatsAppService, IHubContext<ChatHub> hubContext, IWebHostEnvironment environment)
     {
         _db = db;
         _whatsAppService = whatsAppService;
         _hubContext = hubContext;
+        _environment = environment;
     }
 
     [Authorize(Policy = "chat.view,chat.read_only")]
@@ -126,6 +129,7 @@ public class ChatController : Controller
             SenderId = chat.WaNoId ?? "agent",
             Message = text,
             MessageType = "text",
+            WhatsappMessageId = result.Data,
             StaffId = userId,
             Status = MessageDeliveryStatus.Sent,
             TimeSent = DateTime.UtcNow,
@@ -141,6 +145,103 @@ public class ChatController : Controller
         await _hubContext.Clients.All.SendAsync("ReceiveMessage", chatId, dto);
 
         return Json(dto);
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "chat.view")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendMedia(int chatId, IFormFile file, string? caption)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest("Choose a file to send.");
+        }
+
+        if (file.Length > MaxUploadBytes)
+        {
+            return BadRequest("File is larger than WhatsApp's 16 MB limit.");
+        }
+
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == chatId);
+        if (chat is null)
+        {
+            return NotFound();
+        }
+
+        var mediaType = ResolveMediaType(file.ContentType);
+        var uploadsDir = Path.Combine(_environment.WebRootPath, "uploads", "chat");
+        Directory.CreateDirectory(uploadsDir);
+        var storedFileName = $"{Guid.NewGuid():N}{Path.GetExtension(file.FileName)}";
+        var absolutePath = Path.Combine(uploadsDir, storedFileName);
+
+        await using (var stream = System.IO.File.Create(absolutePath))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        var publicUrl = $"{Request.Scheme}://{Request.Host}/uploads/chat/{storedFileName}";
+
+        var sendResult = await _whatsAppService.SendMediaMessageAsync(chat.ReceiverId, new MediaMessageRequest
+        {
+            MediaType = mediaType,
+            Link = publicUrl,
+            Caption = string.IsNullOrWhiteSpace(caption) ? null : caption,
+            Filename = mediaType == "document" ? file.FileName : null,
+        });
+
+        if (!sendResult.Success)
+        {
+            System.IO.File.Delete(absolutePath);
+            return BadRequest(sendResult.ErrorMessage);
+        }
+
+        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : (int?)null;
+
+        var message = new ChatMessage
+        {
+            ChatId = chat.Id,
+            SenderId = chat.WaNoId ?? "agent",
+            Message = string.IsNullOrWhiteSpace(caption) ? $"[{mediaType}] {file.FileName}" : caption,
+            MessageType = mediaType,
+            Url = $"/uploads/chat/{storedFileName}",
+            WhatsappMessageId = sendResult.Data,
+            StaffId = userId,
+            Status = MessageDeliveryStatus.Sent,
+            TimeSent = DateTime.UtcNow,
+            IsRead = true,
+        };
+        _db.ChatMessages.Add(message);
+
+        chat.LastMessage = message.Message;
+        chat.LastMessageTime = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var dto = ToDto(message, chat);
+        await _hubContext.Clients.All.SendAsync("ReceiveMessage", chatId, dto);
+
+        return Json(dto);
+    }
+
+    private static string ResolveMediaType(string? contentType)
+    {
+        if (string.IsNullOrEmpty(contentType))
+        {
+            return "document";
+        }
+
+        if (contentType.Equals("image/webp", StringComparison.OrdinalIgnoreCase))
+        {
+            return "sticker";
+        }
+
+        var prefix = contentType.Split('/')[0].ToLowerInvariant();
+        return prefix switch
+        {
+            "image" => "image",
+            "video" => "video",
+            "audio" => "audio",
+            _ => "document",
+        };
     }
 
     [HttpPost]
@@ -185,5 +286,6 @@ public class ChatController : Controller
         message.MessageType,
         message.TimeSent,
         IsOutbound: message.StaffId is not null || message.SenderId != chat.ReceiverId,
-        message.Status.ToString());
+        message.Status.ToString(),
+        message.Url);
 }

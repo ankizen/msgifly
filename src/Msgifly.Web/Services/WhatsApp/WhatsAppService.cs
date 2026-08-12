@@ -171,18 +171,14 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult.Ok();
     }
 
-    public Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText) =>
-        SendPlainTextMessageAsync(toPhoneNumber, messageText);
-
-    public async Task<WhatsAppResult> SendPlainTextMessageAsync(string toPhoneNumber, string messageText)
+    public async Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText)
     {
-        var settings = await GetSettingsAsync();
-        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
-        {
-            return WhatsAppResult.Fail("Connect a WhatsApp Business Account and choose a default number first.");
-        }
+        var result = await SendPlainTextMessageAsync(toPhoneNumber, messageText);
+        return result.Success ? WhatsAppResult.Ok() : WhatsAppResult.Fail(result.ErrorMessage!);
+    }
 
-        var client = CreateClient(settings);
+    public async Task<WhatsAppResult<string>> SendPlainTextMessageAsync(string toPhoneNumber, string messageText)
+    {
         var payload = new
         {
             messaging_product = "whatsapp",
@@ -191,14 +187,7 @@ public class WhatsAppService : IWhatsAppService
             text = new { body = messageText },
         };
 
-        var response = await client.PostAsJsonAsync($"{settings.DefaultPhoneNumberId}/messages", payload);
-        if (!response.IsSuccessStatusCode)
-        {
-            var error = await ExtractErrorAsync(response);
-            return WhatsAppResult.Fail(error);
-        }
-
-        return WhatsAppResult.Ok();
+        return await PostMessageAsync(payload);
     }
 
     public async Task<WhatsAppResult<string>> SendTemplateMessageAsync(string toPhoneNumber, TemplateSendRequest request)
@@ -253,6 +242,347 @@ public class WhatsAppService : IWhatsAppService
                 components,
             },
         };
+
+        return await PostMessageAsync(payload);
+    }
+
+    public async Task<WhatsAppResult<string>> UploadMediaAsync(Stream fileStream, string fileName, string mimeType)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<string>.Fail("Connect a WhatsApp Business Account and choose a default number first.");
+        }
+
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent("whatsapp"), "messaging_product");
+        content.Add(new StringContent(mimeType), "type");
+
+        using var streamContent = new StreamContent(fileStream);
+        streamContent.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
+        content.Add(streamContent, "file", fileName);
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsync($"{settings.DefaultPhoneNumberId}/media", content);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(response));
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+        var mediaId = body?["id"]?.GetValue<string>();
+        return string.IsNullOrEmpty(mediaId)
+            ? WhatsAppResult<string>.Fail("Upload succeeded but no media id was returned.")
+            : WhatsAppResult<string>.Ok(mediaId);
+    }
+
+    public async Task<WhatsAppResult<MediaInfo>> GetMediaInfoAsync(string mediaId)
+    {
+        var settings = await GetSettingsAsync();
+        var response = await GetAsync(settings, mediaId);
+        if (!response.Success)
+        {
+            return WhatsAppResult<MediaInfo>.Fail(response.ErrorMessage!);
+        }
+
+        var node = response.Data!;
+        return WhatsAppResult<MediaInfo>.Ok(new MediaInfo
+        {
+            MediaId = node["id"]?.GetValue<string>() ?? mediaId,
+            Url = node["url"]?.GetValue<string>() ?? string.Empty,
+            MimeType = node["mime_type"]?.GetValue<string>() ?? string.Empty,
+            Sha256 = node["sha256"]?.GetValue<string>(),
+            FileSizeBytes = node["file_size"]?.GetValue<long>() ?? 0,
+        });
+    }
+
+    public async Task<WhatsAppResult<byte[]>> DownloadMediaBytesAsync(string mediaUrl)
+    {
+        var settings = await GetSettingsAsync();
+        try
+        {
+            // mediaUrl is an absolute, short-lived signed CDN link (not relative to the Graph API
+            // base address), but it still requires the same Bearer token as any other Graph call.
+            using var request = new HttpRequestMessage(HttpMethod.Get, mediaUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", settings.AccessToken);
+
+            var client = _httpClientFactory.CreateClient("GraphApi");
+            var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return WhatsAppResult<byte[]>.Fail(await ExtractErrorAsync(response));
+            }
+
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            return WhatsAppResult<byte[]>.Ok(bytes);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to download WhatsApp media from {Url}", mediaUrl);
+            return WhatsAppResult<byte[]>.Fail("Could not download the media file.");
+        }
+    }
+
+    public async Task<WhatsAppResult> DeleteMediaAsync(string mediaId)
+    {
+        var settings = await GetSettingsAsync();
+        var client = CreateClient(settings);
+        var response = await client.DeleteAsync(mediaId);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    public async Task<WhatsAppResult<string>> SendMediaMessageAsync(string toPhoneNumber, MediaMessageRequest request)
+    {
+        var mediaType = request.MediaType.ToLowerInvariant();
+        object mediaObject = (request.Link, request.MediaId, mediaType) switch
+        {
+            (_, _, "document") when request.Link is not null => new { link = request.Link, caption = request.Caption, filename = request.Filename },
+            (_, _, "document") when request.MediaId is not null => new { id = request.MediaId, caption = request.Caption, filename = request.Filename },
+            (not null, _, _) => new { link = request.Link, caption = request.Caption },
+            (_, not null, _) => new { id = request.MediaId, caption = request.Caption },
+            _ => throw new ArgumentException("Either Link or MediaId must be provided.", nameof(request)),
+        };
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["messaging_product"] = "whatsapp",
+            ["to"] = toPhoneNumber,
+            ["type"] = mediaType,
+            [mediaType] = mediaObject,
+        };
+
+        return await PostMessageAsync(payload);
+    }
+
+    public async Task<WhatsAppResult<string>> SendLocationMessageAsync(string toPhoneNumber, LocationMessageRequest request)
+    {
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "location",
+            location = new
+            {
+                latitude = request.Latitude,
+                longitude = request.Longitude,
+                name = request.Name,
+                address = request.Address,
+            },
+        };
+
+        return await PostMessageAsync(payload);
+    }
+
+    public async Task<WhatsAppResult<string>> SendContactMessageAsync(string toPhoneNumber, ContactCardRequest contact)
+    {
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "contacts",
+            contacts = new[]
+            {
+                new
+                {
+                    name = new
+                    {
+                        formatted_name = contact.FormattedName,
+                        first_name = contact.FirstName,
+                        last_name = contact.LastName,
+                    },
+                    phones = contact.PhoneNumber is null ? null : new[] { new { phone = contact.PhoneNumber, type = "CELL" } },
+                    org = contact.Organization is null ? null : new { company = contact.Organization },
+                },
+            },
+        };
+
+        return await PostMessageAsync(payload);
+    }
+
+    public async Task<WhatsAppResult> SendReactionAsync(string toPhoneNumber, string messageId, string emoji)
+    {
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "reaction",
+            reaction = new { message_id = messageId, emoji },
+        };
+
+        var result = await PostMessageAsync(payload);
+        return result.Success ? WhatsAppResult.Ok() : WhatsAppResult.Fail(result.ErrorMessage!);
+    }
+
+    public async Task<WhatsAppResult> MarkMessageAsReadAsync(string messageId)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult.Fail("Connect a WhatsApp Business Account and choose a default number first.");
+        }
+
+        var payload = new
+        {
+            messaging_product = "whatsapp",
+            status = "read",
+            message_id = messageId,
+        };
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync($"{settings.DefaultPhoneNumberId}/messages", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    public async Task<WhatsAppResult<string>> SendInteractiveButtonsMessageAsync(
+        string toPhoneNumber, string bodyText, List<InteractiveButton> buttons, string? headerText = null, string? footerText = null)
+    {
+        if (buttons.Count is 0 or > 3)
+        {
+            return WhatsAppResult<string>.Fail("Interactive button messages need between 1 and 3 buttons.");
+        }
+
+        var interactive = new Dictionary<string, object?>
+        {
+            ["type"] = "button",
+            ["header"] = headerText is null ? null : new { type = "text", text = headerText },
+            ["body"] = new { text = bodyText },
+            ["footer"] = footerText is null ? null : new { text = footerText },
+            ["action"] = new
+            {
+                buttons = buttons.Select(b => new { type = "reply", reply = new { id = b.Id, title = b.Title } }).ToArray(),
+            },
+        };
+
+        return await PostMessageAsync(new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "interactive",
+            interactive,
+        });
+    }
+
+    public async Task<WhatsAppResult<string>> SendInteractiveListMessageAsync(
+        string toPhoneNumber, string bodyText, string buttonText, List<InteractiveListSection> sections, string? headerText = null, string? footerText = null)
+    {
+        var interactive = new Dictionary<string, object?>
+        {
+            ["type"] = "list",
+            ["header"] = headerText is null ? null : new { type = "text", text = headerText },
+            ["body"] = new { text = bodyText },
+            ["footer"] = footerText is null ? null : new { text = footerText },
+            ["action"] = new
+            {
+                button = buttonText,
+                sections = sections.Select(s => new
+                {
+                    title = s.Title,
+                    rows = s.Rows.Select(r => new { id = r.Id, title = r.Title, description = r.Description }).ToArray(),
+                }).ToArray(),
+            },
+        };
+
+        return await PostMessageAsync(new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "interactive",
+            interactive,
+        });
+    }
+
+    public async Task<WhatsAppResult<string>> SendInteractiveCtaUrlMessageAsync(
+        string toPhoneNumber, string bodyText, string buttonText, string url, string? headerText = null, string? footerText = null)
+    {
+        var interactive = new Dictionary<string, object?>
+        {
+            ["type"] = "cta_url",
+            ["header"] = headerText is null ? null : new { type = "text", text = headerText },
+            ["body"] = new { text = bodyText },
+            ["footer"] = footerText is null ? null : new { text = footerText },
+            ["action"] = new
+            {
+                name = "cta_url",
+                parameters = new { display_text = buttonText, url },
+            },
+        };
+
+        return await PostMessageAsync(new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "interactive",
+            interactive,
+        });
+    }
+
+    public async Task<WhatsAppResult> UpdateBusinessProfileAsync(string phoneNumberId, BusinessProfileUpdateRequest request)
+    {
+        var settings = await GetSettingsAsync();
+        var payload = new Dictionary<string, object?> { ["messaging_product"] = "whatsapp" };
+        if (request.About is not null)
+        {
+            payload["about"] = request.About;
+        }
+
+        if (request.Email is not null)
+        {
+            payload["email"] = request.Email;
+        }
+
+        if (request.Website is not null)
+        {
+            payload["websites"] = new[] { request.Website };
+        }
+
+        if (request.Vertical is not null)
+        {
+            payload["vertical"] = request.Vertical;
+        }
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync($"{phoneNumberId}/whatsapp_business_profile", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    public async Task<WhatsAppResult> UpdateBusinessProfilePictureAsync(string phoneNumberId, string mediaId)
+    {
+        var settings = await GetSettingsAsync();
+        var payload = new { messaging_product = "whatsapp", profile_picture_handle = mediaId };
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsJsonAsync($"{phoneNumberId}/whatsapp_business_profile", payload);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    /// <summary>Shared POST-to-/messages helper — every outbound message type shares the same envelope and same "pull the wamid out of messages[0].id" response shape.</summary>
+    private async Task<WhatsAppResult<string>> PostMessageAsync(object payload)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<string>.Fail("Connect a WhatsApp Business Account and choose a default number first.");
+        }
 
         var client = CreateClient(settings);
         var response = await client.PostAsJsonAsync($"{settings.DefaultPhoneNumberId}/messages", payload);

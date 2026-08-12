@@ -25,6 +25,24 @@ public class WabaAccountFormViewModel
     public string AccessToken { get; set; } = string.Empty;
 }
 
+public class BusinessProfileFormViewModel
+{
+    [Display(Name = "About")]
+    [MaxLength(139)]
+    public string? About { get; set; }
+
+    [Display(Name = "Email")]
+    [EmailAddress]
+    public string? Email { get; set; }
+
+    [Display(Name = "Website")]
+    [Url]
+    public string? Website { get; set; }
+
+    [Display(Name = "Industry")]
+    public string? Vertical { get; set; }
+}
+
 public class WabaIndexViewModel
 {
     public bool IsWebhookConnected { get; set; }
@@ -37,6 +55,9 @@ public class WabaIndexViewModel
     public string? DefaultPhoneNumberId { get; set; }
     public string? DefaultPhoneNumber { get; set; }
 
+    public BusinessProfileInfo? BusinessProfile { get; set; }
+
     public WabaWebhookFormViewModel WebhookForm { get; set; } = new();
     public WabaAccountFormViewModel AccountForm { get; set; } = new();
+    public BusinessProfileFormViewModel ProfileForm { get; set; } = new();
 }

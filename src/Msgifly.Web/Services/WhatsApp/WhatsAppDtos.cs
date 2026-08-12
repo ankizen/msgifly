@@ -45,3 +45,58 @@ public class TemplateSendRequest
 
     public List<string> BodyParams { get; set; } = [];
 }
+
+/// <summary>Result of GET /{media-id} — a short-lived signed CDN URL, not a permanent link.</summary>
+public class MediaInfo
+{
+    public string Url { get; set; } = string.Empty;
+    public string MimeType { get; set; } = string.Empty;
+    public string? Sha256 { get; set; }
+    public long FileSizeBytes { get; set; }
+    public string MediaId { get; set; } = string.Empty;
+}
+
+/// <summary>image | video | audio | document | sticker. Provide either Link (public HTTPS URL) or MediaId (previously uploaded), not both.</summary>
+public class MediaMessageRequest
+{
+    public string MediaType { get; set; } = "image";
+    public string? Link { get; set; }
+    public string? MediaId { get; set; }
+    public string? Caption { get; set; }
+    public string? Filename { get; set; }
+}
+
+public class LocationMessageRequest
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public string? Name { get; set; }
+    public string? Address { get; set; }
+}
+
+public class ContactCardRequest
+{
+    public string FormattedName { get; set; } = string.Empty;
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? PhoneNumber { get; set; }
+    public string? Organization { get; set; }
+}
+
+/// <summary>Up to 3 quick-reply buttons. Id is echoed back in the recipient's button_reply on tap.</summary>
+public record InteractiveButton(string Id, string Title);
+
+public record InteractiveListRow(string Id, string Title, string? Description = null);
+
+public record InteractiveListSection(string Title, List<InteractiveListRow> Rows);
+
+/// <summary>What the local Business Profile settings screen can change (about/email/website/vertical/photo — the profile photo is a separate media-upload step).</summary>
+public class BusinessProfileUpdateRequest
+{
+    public string? About { get; set; }
+    public string? Email { get; set; }
+    public string? Website { get; set; }
+
+    /// <summary>Meta's fixed industry vertical enum, e.g. "RETAIL", "PROF_SERVICES", "OTHER".</summary>
+    public string? Vertical { get; set; }
+}

@@ -14,10 +14,55 @@ public interface IWhatsAppService
 
     Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText);
 
-    Task<WhatsAppResult> SendPlainTextMessageAsync(string toPhoneNumber, string messageText);
+    /// <summary>Returns the WhatsApp message id (wamid) on success — needed to correlate later delivery-status webhooks.</summary>
+    Task<WhatsAppResult<string>> SendPlainTextMessageAsync(string toPhoneNumber, string messageText);
 
     /// <summary>Sends an approved template message. Returns the WhatsApp message id (wamid) on success.</summary>
     Task<WhatsAppResult<string>> SendTemplateMessageAsync(string toPhoneNumber, TemplateSendRequest request);
 
     Task<WhatsAppResult<string>> DebugTokenAsync();
+
+    // ---- Media API ----
+
+    /// <summary>Uploads a file to Meta's servers, returning a media_id usable in outbound messages (Graph API's /media endpoint requires this per-file upload; ids expire after ~30 days).</summary>
+    Task<WhatsAppResult<string>> UploadMediaAsync(Stream fileStream, string fileName, string mimeType);
+
+    /// <summary>Resolves a media_id (from an inbound message, or one of ours) to a short-lived signed CDN URL + metadata.</summary>
+    Task<WhatsAppResult<MediaInfo>> GetMediaInfoAsync(string mediaId);
+
+    /// <summary>Downloads the actual bytes from a signed CDN URL returned by GetMediaInfoAsync — these URLs require the same Bearer token as the Graph API itself.</summary>
+    Task<WhatsAppResult<byte[]>> DownloadMediaBytesAsync(string mediaUrl);
+
+    Task<WhatsAppResult> DeleteMediaAsync(string mediaId);
+
+    // ---- Outbound message types ----
+
+    /// <summary>Sends an image/video/audio/document/sticker by public link or previously-uploaded media_id.</summary>
+    Task<WhatsAppResult<string>> SendMediaMessageAsync(string toPhoneNumber, MediaMessageRequest request);
+
+    Task<WhatsAppResult<string>> SendLocationMessageAsync(string toPhoneNumber, LocationMessageRequest request);
+
+    Task<WhatsAppResult<string>> SendContactMessageAsync(string toPhoneNumber, ContactCardRequest contact);
+
+    /// <summary>Reacts to a specific inbound/outbound message. Pass an empty emoji string to remove a reaction.</summary>
+    Task<WhatsAppResult> SendReactionAsync(string toPhoneNumber, string messageId, string emoji);
+
+    /// <summary>Marks an inbound message as read (blue ticks) and, per Meta's behavior, also shows the typing indicator briefly beforehand.</summary>
+    Task<WhatsAppResult> MarkMessageAsReadAsync(string messageId);
+
+    /// <summary>Up to 3 quick-reply buttons under a body message.</summary>
+    Task<WhatsAppResult<string>> SendInteractiveButtonsMessageAsync(string toPhoneNumber, string bodyText, List<InteractiveButton> buttons, string? headerText = null, string? footerText = null);
+
+    /// <summary>A single "Menu"-style button that opens a scrollable list of selectable rows, grouped into sections.</summary>
+    Task<WhatsAppResult<string>> SendInteractiveListMessageAsync(string toPhoneNumber, string bodyText, string buttonText, List<InteractiveListSection> sections, string? headerText = null, string? footerText = null);
+
+    /// <summary>A single button that opens an external URL.</summary>
+    Task<WhatsAppResult<string>> SendInteractiveCtaUrlMessageAsync(string toPhoneNumber, string bodyText, string buttonText, string url, string? headerText = null, string? footerText = null);
+
+    // ---- Business profile ----
+
+    Task<WhatsAppResult> UpdateBusinessProfileAsync(string phoneNumberId, BusinessProfileUpdateRequest request);
+
+    /// <summary>Uploads a new profile photo — takes a media_id from UploadMediaAsync.</summary>
+    Task<WhatsAppResult> UpdateBusinessProfilePictureAsync(string phoneNumberId, string mediaId);
 }

@@ -34,6 +34,7 @@ public class WhatsAppWebhookController : Controller
     private readonly IWhatsAppService _whatsAppService;
     private readonly BotMatchingService _botMatchingService;
     private readonly IHubContext<ChatHub> _hubContext;
+    private readonly IWebHostEnvironment _environment;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -42,6 +43,7 @@ public class WhatsAppWebhookController : Controller
         IWhatsAppService whatsAppService,
         BotMatchingService botMatchingService,
         IHubContext<ChatHub> hubContext,
+        IWebHostEnvironment environment,
         ILogger<WhatsAppWebhookController> logger)
     {
         _settingsService = settingsService;
@@ -49,6 +51,7 @@ public class WhatsAppWebhookController : Controller
         _whatsAppService = whatsAppService;
         _botMatchingService = botMatchingService;
         _hubContext = hubContext;
+        _environment = environment;
         _logger = logger;
     }
 
@@ -131,6 +134,7 @@ public class WhatsAppWebhookController : Controller
 
             var messageText = ExtractText(message);
             var messageType = message["type"]?.GetValue<string>() ?? "text";
+            var mediaUrl = await DownloadInboundMediaAsync(message, messageType);
 
             var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == from);
             var isFirstMessage = chat is null;
@@ -173,6 +177,7 @@ public class WhatsAppWebhookController : Controller
                 SenderId = from,
                 Message = messageText,
                 MessageType = messageType,
+                Url = mediaUrl,
                 WhatsappMessageId = messageId,
                 Status = MessageDeliveryStatus.Read,
                 TimeSent = DateTime.UtcNow,
@@ -189,6 +194,70 @@ public class WhatsAppWebhookController : Controller
             }
         }
     }
+
+    private static readonly HashSet<string> MediaMessageTypes = ["image", "video", "audio", "document", "sticker"];
+
+    /// <summary>
+    /// Inbound media only ever comes as a media_id, valid for a couple of weeks on Meta's CDN —
+    /// so it has to be resolved and downloaded right away or it's effectively lost. Saved under
+    /// wwwroot so the chat UI can just <img>/<video>/<a> it like any other static asset.
+    /// </summary>
+    private async Task<string?> DownloadInboundMediaAsync(JsonNode message, string messageType)
+    {
+        if (!MediaMessageTypes.Contains(messageType))
+        {
+            return null;
+        }
+
+        var mediaId = message[messageType]?["id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(mediaId))
+        {
+            return null;
+        }
+
+        var infoResult = await _whatsAppService.GetMediaInfoAsync(mediaId);
+        if (!infoResult.Success)
+        {
+            _logger.LogWarning("Could not resolve inbound media {MediaId}: {Error}", mediaId, infoResult.ErrorMessage);
+            return null;
+        }
+
+        var downloadResult = await _whatsAppService.DownloadMediaBytesAsync(infoResult.Data!.Url);
+        if (!downloadResult.Success)
+        {
+            _logger.LogWarning("Could not download inbound media {MediaId}: {Error}", mediaId, downloadResult.ErrorMessage);
+            return null;
+        }
+
+        var uploadsDir = Path.Combine(_environment.WebRootPath, "uploads", "chat");
+        Directory.CreateDirectory(uploadsDir);
+        var extension = MimeTypeToExtension(infoResult.Data.MimeType);
+        var storedFileName = $"{Guid.NewGuid():N}{extension}";
+        await System.IO.File.WriteAllBytesAsync(Path.Combine(uploadsDir, storedFileName), downloadResult.Data!);
+
+        return $"/uploads/chat/{storedFileName}";
+    }
+
+    private static string MimeTypeToExtension(string mimeType) => mimeType switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        "video/mp4" => ".mp4",
+        "video/3gpp" => ".3gp",
+        "audio/aac" => ".aac",
+        "audio/mp4" => ".m4a",
+        "audio/mpeg" => ".mp3",
+        "audio/amr" => ".amr",
+        "audio/ogg" => ".ogg",
+        "application/pdf" => ".pdf",
+        "application/vnd.ms-excel" => ".xls",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => ".xlsx",
+        "application/msword" => ".doc",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
+        "text/plain" => ".txt",
+        _ => string.Empty,
+    };
 
     private async Task<Contact?> ResolveContactAsync(string phone, string? name, WhatsMarkSettings wmSettings)
     {
@@ -235,7 +304,7 @@ public class WhatsAppWebhookController : Controller
             var result = await _whatsAppService.SendPlainTextMessageAsync(contact.Phone, ComposeText(bot.HeaderText, bot.ReplyText, bot.FooterText));
             if (result.Success)
             {
-                await StoreBotReplyAsync(chat, ComposeText(bot.HeaderText, bot.ReplyText, bot.FooterText));
+                await StoreBotReplyAsync(chat, ComposeText(bot.HeaderText, bot.ReplyText, bot.FooterText), result.Data);
                 bot.SendingCount++;
             }
             else
@@ -267,7 +336,7 @@ public class WhatsAppWebhookController : Controller
 
             if (result.Success)
             {
-                await StoreBotReplyAsync(chat, $"[Template: {template.TemplateName}] {string.Join(" / ", bodyParams)}");
+                await StoreBotReplyAsync(chat, $"[Template: {template.TemplateName}] {string.Join(" / ", bodyParams)}", result.Data);
                 bot.SendingCount++;
             }
             else
@@ -279,7 +348,7 @@ public class WhatsAppWebhookController : Controller
         await _db.SaveChangesAsync();
     }
 
-    private async Task StoreBotReplyAsync(Chat chat, string text)
+    private async Task StoreBotReplyAsync(Chat chat, string text, string? whatsappMessageId = null)
     {
         var reply = new ChatMessage
         {
@@ -287,6 +356,7 @@ public class WhatsAppWebhookController : Controller
             SenderId = chat.WaNoId ?? "bot",
             Message = text,
             MessageType = "text",
+            WhatsappMessageId = whatsappMessageId,
             Status = MessageDeliveryStatus.Sent,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
@@ -309,7 +379,8 @@ public class WhatsAppWebhookController : Controller
             message.MessageType,
             message.TimeSent,
             IsOutbound: message.StaffId is not null || message.SenderId != chat.ReceiverId,
-            message.Status.ToString());
+            message.Status.ToString(),
+            message.Url);
 
         await _hubContext.Clients.All.SendAsync("ReceiveMessage", chat.Id, dto);
     }
