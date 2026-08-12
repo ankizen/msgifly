@@ -7,6 +7,7 @@ COPY src/Msgifly.Web/frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
 COPY src/Msgifly.Web/frontend/ ./frontend/
 COPY src/Msgifly.Web/Views/ ./Views/
+COPY src/Msgifly.Web/Areas/ ./Areas/
 RUN cd frontend && npm run build
 
 # ---- Stage 2: restore, build & publish the .NET app ----
