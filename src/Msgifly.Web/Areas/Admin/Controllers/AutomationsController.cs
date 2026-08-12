@@ -9,6 +9,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Automations;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -20,10 +21,12 @@ public class AutomationsController : Controller
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerOptions.Web);
 
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public AutomationsController(ApplicationDbContext db)
+    public AutomationsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "automation.view")]
@@ -117,7 +120,7 @@ public class AutomationsController : Controller
         Automation automation;
         if (model.Id is null)
         {
-            automation = new Automation { Name = model.Name.Trim(), Description = model.Description };
+            automation = new Automation { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value, Name = model.Name.Trim(), Description = model.Description };
             _db.Automations.Add(automation);
         }
         else

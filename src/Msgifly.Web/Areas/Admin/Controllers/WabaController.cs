@@ -7,10 +7,17 @@ using Msgifly.Web.Extensions;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 using QRCoder;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
+/// <summary>
+/// "Connect WABA" for the CURRENT workspace. The Meta App identity (FacebookAppId/Secret,
+/// webhook verify token) is global — one App shared by every workspace — so ConnectWebhook
+/// writes to MetaAppSettings; every other action here reads/writes the current Workspace's own
+/// WABA connection fields directly.
+/// </summary>
 [Area("Admin")]
 [Authorize]
 public class WabaController : Controller
@@ -18,30 +25,36 @@ public class WabaController : Controller
     private readonly ISettingsService _settingsService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public WabaController(ISettingsService settingsService, IWhatsAppService whatsAppService, ApplicationDbContext db)
+    public WabaController(ISettingsService settingsService, IWhatsAppService whatsAppService, ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _settingsService = settingsService;
         _whatsAppService = whatsAppService;
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
+
+    private Task<Models.Entities.Workspace> CurrentWorkspaceAsync() =>
+        _db.Workspaces.FirstAsync(w => w.Id == _workspaceAccessor.WorkspaceId);
 
     [Authorize(Policy = "connect_account.view")]
     public async Task<IActionResult> Index()
     {
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
+        var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
+        var workspace = await CurrentWorkspaceAsync();
 
         var model = new WabaIndexViewModel
         {
-            IsWebhookConnected = settings.IsWebhookConnected,
-            IsAccountConnected = settings.IsAccountConnected,
+            IsWebhookConnected = metaApp.IsWebhookConnected,
+            IsAccountConnected = workspace.IsAccountConnected,
             WebhookUrl = $"{Request.Scheme}://{Request.Host}/whatsapp/webhook",
-            WebhookVerifyToken = settings.WebhookVerifyToken,
-            DefaultPhoneNumberId = settings.DefaultPhoneNumberId,
-            DefaultPhoneNumber = settings.DefaultPhoneNumber,
+            WebhookVerifyToken = metaApp.WebhookVerifyToken,
+            DefaultPhoneNumberId = workspace.DefaultPhoneNumberId,
+            DefaultPhoneNumber = workspace.DefaultPhoneNumber,
         };
 
-        if (settings.IsAccountConnected)
+        if (workspace.IsAccountConnected)
         {
             var phoneNumbers = await _whatsAppService.GetPhoneNumbersAsync();
             if (phoneNumbers.Success)
@@ -53,9 +66,9 @@ public class WabaController : Controller
                 this.Notify($"Couldn't refresh phone numbers: {phoneNumbers.ErrorMessage}", "danger");
             }
 
-            if (!string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId))
+            if (!string.IsNullOrWhiteSpace(workspace.DefaultPhoneNumberId))
             {
-                var profile = await _whatsAppService.GetBusinessProfileAsync(settings.DefaultPhoneNumberId);
+                var profile = await _whatsAppService.GetBusinessProfileAsync(workspace.DefaultPhoneNumberId);
                 if (profile.Success)
                 {
                     model.BusinessProfile = profile.Data;
@@ -77,14 +90,14 @@ public class WabaController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateBusinessProfile([Bind(Prefix = "ProfileForm")] BusinessProfileFormViewModel form)
     {
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
-        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId))
+        var workspace = await CurrentWorkspaceAsync();
+        if (string.IsNullOrWhiteSpace(workspace.DefaultPhoneNumberId))
         {
             this.Notify("Choose a default number first.", "danger");
             return RedirectToAction(nameof(Index));
         }
 
-        var result = await _whatsAppService.UpdateBusinessProfileAsync(settings.DefaultPhoneNumberId, new BusinessProfileUpdateRequest
+        var result = await _whatsAppService.UpdateBusinessProfileAsync(workspace.DefaultPhoneNumberId, new BusinessProfileUpdateRequest
         {
             About = form.About,
             Email = form.Email,
@@ -96,6 +109,7 @@ public class WabaController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>Registers the Meta App identity — global, shared by every workspace, done once regardless of how many businesses get connected below.</summary>
     [HttpPost]
     [Authorize(Policy = "connect_account.connect")]
     [ValidateAntiForgeryToken]
@@ -107,14 +121,14 @@ public class WabaController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
+        var settings = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
         settings.FacebookAppId = form.FacebookAppId;
         settings.FacebookAppSecret = form.FacebookAppSecret;
         settings.WebhookVerifyToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         settings.IsWebhookConnected = true;
-        await _settingsService.SaveAsync(nameof(WhatsAppSettings), settings);
+        await _settingsService.SaveAsync(nameof(MetaAppSettings), settings);
 
-        this.Notify("Webhook app registered. Add the webhook URL and verify token to your Meta App's WhatsApp configuration, then connect your Business Account below.");
+        this.Notify("Webhook app registered. Add the webhook URL and verify token to your Meta App's WhatsApp configuration, then connect a Business Account below.");
         return RedirectToAction(nameof(Index));
     }
 
@@ -129,10 +143,12 @@ public class WabaController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
-        settings.BusinessAccountId = form.BusinessAccountId;
-        settings.AccessToken = form.AccessToken;
-        await _settingsService.SaveAsync(nameof(WhatsAppSettings), settings);
+        var workspace = await CurrentWorkspaceAsync();
+        workspace.BusinessAccountId = form.BusinessAccountId;
+        workspace.AccessToken = form.AccessToken;
+        workspace.ConnectionMethod = "manual";
+        workspace.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
 
         var phoneNumbers = await _whatsAppService.GetPhoneNumbersAsync();
         if (!phoneNumbers.Success)
@@ -144,15 +160,15 @@ public class WabaController : Controller
         var syncResult = await _whatsAppService.SyncTemplatesAsync();
         var subscribeResult = await _whatsAppService.SubscribeWebhookAsync();
 
-        settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
-        settings.IsAccountConnected = true;
-        if (settings.DefaultPhoneNumberId is null && phoneNumbers.Data!.Count > 0)
+        workspace.IsAccountConnected = true;
+        if (workspace.DefaultPhoneNumberId is null && phoneNumbers.Data!.Count > 0)
         {
-            settings.DefaultPhoneNumberId = phoneNumbers.Data![0].Id;
-            settings.DefaultPhoneNumber = phoneNumbers.Data![0].DisplayPhoneNumber;
+            workspace.DefaultPhoneNumberId = phoneNumbers.Data![0].Id;
+            workspace.DefaultPhoneNumber = phoneNumbers.Data![0].DisplayPhoneNumber;
         }
 
-        await _settingsService.SaveAsync(nameof(WhatsAppSettings), settings);
+        workspace.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
 
         var message = $"Account connected. {(syncResult.Success ? $"Synced {syncResult.Data} templates." : "Template sync failed: " + syncResult.ErrorMessage)}";
         if (!subscribeResult.Success)
@@ -169,10 +185,11 @@ public class WabaController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetDefaultNumber(string phoneNumberId, string phoneNumber)
     {
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
-        settings.DefaultPhoneNumberId = phoneNumberId;
-        settings.DefaultPhoneNumber = phoneNumber;
-        await _settingsService.SaveAsync(nameof(WhatsAppSettings), settings);
+        var workspace = await CurrentWorkspaceAsync();
+        workspace.DefaultPhoneNumberId = phoneNumberId;
+        workspace.DefaultPhoneNumber = phoneNumber;
+        workspace.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
 
         this.Notify("Default sending number updated.");
         return RedirectToAction(nameof(Index));
@@ -193,8 +210,17 @@ public class WabaController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Disconnect()
     {
-        await _settingsService.SaveAsync(nameof(WhatsAppSettings), new WhatsAppSettings());
+        var workspace = await CurrentWorkspaceAsync();
+        workspace.IsAccountConnected = false;
+        workspace.BusinessAccountId = null;
+        workspace.AccessToken = null;
+        workspace.DefaultPhoneNumberId = null;
+        workspace.DefaultPhoneNumber = null;
+        workspace.ProfilePictureUrl = null;
+        workspace.ConnectionMethod = null;
+        workspace.UpdatedAt = DateTime.UtcNow;
         await _db.WhatsappTemplates.ExecuteDeleteAsync();
+        await _db.SaveChangesAsync();
 
         this.Notify("WhatsApp Business Account disconnected.");
         return RedirectToAction(nameof(Index));
@@ -203,13 +229,13 @@ public class WabaController : Controller
     /// <summary>A wa.me deep-link QR code for the connected default number.</summary>
     public async Task<IActionResult> QrCode()
     {
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
-        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumber))
+        var workspace = await CurrentWorkspaceAsync();
+        if (string.IsNullOrWhiteSpace(workspace.DefaultPhoneNumber))
         {
             return NotFound();
         }
 
-        var digitsOnly = new string(settings.DefaultPhoneNumber.Where(char.IsDigit).ToArray());
+        var digitsOnly = new string(workspace.DefaultPhoneNumber.Where(char.IsDigit).ToArray());
         using var generator = new QRCodeGenerator();
         using var data = generator.CreateQrCode($"https://wa.me/{digitsOnly}", QRCodeGenerator.ECCLevel.Q);
         var pngBytes = new PngByteQRCode(data).GetGraphic(10);

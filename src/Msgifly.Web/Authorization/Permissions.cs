@@ -28,5 +28,6 @@ public static class Permissions
         "email_template.view", "email_template.edit",
         "automation.view", "automation.create", "automation.edit", "automation.delete",
         "api_key.view", "api_key.create", "api_key.delete",
+        "workspace.view", "workspace.create", "workspace.edit",
     ];
 }

@@ -7,6 +7,7 @@ using Msgifly.Web.Extensions;
 using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -16,10 +17,12 @@ public class MessageBotsController : Controller
 {
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public MessageBotsController(ApplicationDbContext db)
+    public MessageBotsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "message_bot.view")]
@@ -82,6 +85,7 @@ public class MessageBotsController : Controller
         {
             _db.MessageBots.Add(new MessageBot
             {
+                WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
                 Name = model.Name,
                 RelType = model.RelType,
                 ReplyType = model.ReplyType,

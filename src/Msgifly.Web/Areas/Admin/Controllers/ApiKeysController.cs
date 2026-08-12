@@ -7,6 +7,7 @@ using Msgifly.Web.Extensions;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.ApiKeys;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -15,10 +16,12 @@ namespace Msgifly.Web.Areas.Admin.Controllers;
 public class ApiKeysController : Controller
 {
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public ApiKeysController(ApplicationDbContext db)
+    public ApiKeysController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "api_key.view")]
@@ -47,6 +50,7 @@ public class ApiKeysController : Controller
 
         var apiKey = new ApiKey
         {
+            WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
             Name = model.Name.Trim(),
             KeyPrefix = generated.DisplayPrefix,
             KeyHash = generated.Hash,

@@ -11,6 +11,7 @@ using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.ApiKeys;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Controllers.Api.V1;
 
@@ -28,12 +29,14 @@ public class MessagesController : ControllerBase
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IHubContext<ChatHub> _hubContext;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public MessagesController(ApplicationDbContext db, IWhatsAppService whatsAppService, IHubContext<ChatHub> hubContext)
+    public MessagesController(ApplicationDbContext db, IWhatsAppService whatsAppService, IHubContext<ChatHub> hubContext, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
         _whatsAppService = whatsAppService;
         _hubContext = hubContext;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     public record SendMessageRequest(
@@ -128,7 +131,7 @@ public class MessagesController : ControllerBase
         var contactCreated = false;
         if (chat is null)
         {
-            chat = new Chat { ReceiverId = request.To, Name = request.Name ?? request.To };
+            chat = new Chat { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value, ReceiverId = request.To, Name = request.Name ?? request.To };
             _db.Chats.Add(chat);
             contactCreated = true;
         }

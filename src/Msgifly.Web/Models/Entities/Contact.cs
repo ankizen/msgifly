@@ -6,6 +6,7 @@ namespace Msgifly.Web.Models.Entities;
 public class Contact
 {
     public int Id { get; set; }
+    public int WorkspaceId { get; set; }
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string? Company { get; set; }

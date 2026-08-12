@@ -25,15 +25,19 @@ public class CampaignDispatchJob
 
     public async Task ProcessScheduledCampaignsAsync()
     {
+        // Runs once for the whole app (no per-workspace HttpContext to scope it), so this
+        // deliberately sweeps every workspace's due campaigns in one pass — IgnoreQueryFilters()
+        // on both queries here, not just the outer one. Each enqueued CampaignMessageJob then
+        // bootstraps its own workspace context individually when it actually runs.
         var now = DateTime.UtcNow;
-        var dueCampaigns = await _db.Campaigns
+        var dueCampaigns = await _db.Campaigns.IgnoreQueryFilters()
             .Where(c => !c.IsSent && !c.PauseCampaign)
             .Where(c => c.SendNow || (c.ScheduledSendTime != null && c.ScheduledSendTime <= now))
             .ToListAsync();
 
         foreach (var campaign in dueCampaigns)
         {
-            var pendingDetailIds = await _db.CampaignDetails
+            var pendingDetailIds = await _db.CampaignDetails.IgnoreQueryFilters()
                 .Where(d => d.CampaignId == campaign.Id && d.Status == CampaignDetailStatus.Pending)
                 .Select(d => d.Id)
                 .ToListAsync();

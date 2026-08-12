@@ -4,9 +4,10 @@ namespace Msgifly.Web.Models.Entities;
 public class Chat
 {
     public int Id { get; set; }
+    public int WorkspaceId { get; set; }
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>The contact's WhatsApp number — the thread key.</summary>
+    /// <summary>The contact's WhatsApp number — the thread key (unique per-Workspace, not globally: the same customer number can message different businesses' numbers, each its own Chat).</summary>
     public string ReceiverId { get; set; } = string.Empty;
 
     public string? LastMessage { get; set; }

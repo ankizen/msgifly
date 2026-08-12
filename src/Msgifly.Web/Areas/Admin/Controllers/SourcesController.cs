@@ -6,6 +6,7 @@ using Msgifly.Web.Extensions;
 using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -15,10 +16,12 @@ public class SourcesController : Controller
 {
     private const int PageSize = 15;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public SourcesController(ApplicationDbContext db)
+    public SourcesController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "source.view")]
@@ -63,7 +66,7 @@ public class SourcesController : Controller
 
         if (model.Id is null)
         {
-            _db.Sources.Add(new Source { Name = model.Name });
+            _db.Sources.Add(new Source { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value, Name = model.Name });
             this.Notify("Source created.");
         }
         else

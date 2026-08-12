@@ -12,6 +12,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Automations;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -22,11 +23,13 @@ public class ContactsController : Controller
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
     private readonly AutomationEngine _automationEngine;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public ContactsController(ApplicationDbContext db, AutomationEngine automationEngine)
+    public ContactsController(ApplicationDbContext db, AutomationEngine automationEngine, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
         _automationEngine = automationEngine;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "contact.view")]
@@ -122,6 +125,7 @@ public class ContactsController : Controller
         {
             var contact = new Contact
             {
+                WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
                 Company = model.Company,
@@ -303,6 +307,7 @@ public class ContactsController : Controller
 
             newContacts.Add(new Contact
             {
+                WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
                 FirstName = firstName,
                 LastName = lastName ?? string.Empty,
                 Phone = phone,

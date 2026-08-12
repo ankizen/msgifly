@@ -9,6 +9,7 @@ namespace Msgifly.Web.Models.Entities;
 public class ApiKey
 {
     public int Id { get; set; }
+    public int WorkspaceId { get; set; }
     public string Name { get; set; } = string.Empty;
 
     /// <summary>Short, non-secret display string, e.g. "msgifly_live_a1b2c3d4" — lets the roster show which key is which without ever resurfacing the secret.</summary>

@@ -9,6 +9,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Campaigns;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -18,10 +19,12 @@ public class TemplateBotsController : Controller
 {
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public TemplateBotsController(ApplicationDbContext db)
+    public TemplateBotsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "template_bot.view")]
@@ -101,6 +104,7 @@ public class TemplateBotsController : Controller
         {
             _db.TemplateBots.Add(new TemplateBot
             {
+                WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
                 Name = model.Name,
                 RelType = model.RelType,
                 TemplateId = model.TemplateId,

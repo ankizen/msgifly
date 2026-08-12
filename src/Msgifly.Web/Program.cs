@@ -12,6 +12,7 @@ using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -57,6 +58,11 @@ builder.Services.AddAuthentication()
     .AddScheme<ApiKeyAuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", options => { });
 
 builder.Services.AddScoped<ISettingsService, SettingsService>();
+
+// AsyncLocal-backed, so it stays consistent across a request/job's whole async flow without
+// depending on HttpContext (needed for Hangfire background jobs, which have none) — see
+// ICurrentWorkspaceAccessor's doc comment for the full reasoning.
+builder.Services.AddSingleton<ICurrentWorkspaceAccessor, CurrentWorkspaceAccessor>();
 
 builder.Services.AddHttpClient("GraphApi", client =>
 {
@@ -109,6 +115,12 @@ app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseStaticFiles();
 app.UseRouting();
+
+// Sets a cookie-based default/fallback workspace before authentication runs. ApiKeyAuthentication
+// Handler overwrites this with the authoritative value once it identifies which key (and
+// therefore which workspace) the request belongs to; the WhatsApp webhook controller does the
+// same from the inbound payload. Both run after this and take precedence over the default.
+app.UseMiddleware<WorkspaceResolutionMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();

@@ -1,4 +1,6 @@
-@inject Msgifly.Web.Services.Settings.ISettingsService SettingsService
+@using Microsoft.EntityFrameworkCore
+@inject Msgifly.Web.Data.ApplicationDbContext Db
+@inject Msgifly.Web.Services.Workspaces.ICurrentWorkspaceAccessor WorkspaceAccessor
 @{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
     var currentAction = ViewContext.RouteData.Values["action"]?.ToString();
@@ -16,7 +18,10 @@
         ? "group flex items-center px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white shadow-sm"
         : "group flex items-center px-3 py-2 text-sm font-medium rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-white transition-colors duration-150";
 
-    var waSettings = await SettingsService.GetAsync<Msgifly.Web.Services.Settings.WhatsAppSettings>(nameof(Msgifly.Web.Services.Settings.WhatsAppSettings));
+    var isAccountConnected = await Db.Workspaces.AsNoTracking()
+        .Where(w => w.Id == WorkspaceAccessor.WorkspaceId)
+        .Select(w => w.IsAccountConnected)
+        .FirstOrDefaultAsync();
 }
 
 <a asp-area="Admin" asp-controller="Dashboard" asp-action="Index" class="@LinkClasses(IsActive("Dashboard"))">
@@ -32,7 +37,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
         </svg>
-        @(waSettings.IsAccountConnected ? "WABA" : "Connect WABA")
+        @(isAccountConnected ? "WABA" : "Connect WABA")
     </a>
 }
 
@@ -111,10 +116,19 @@
     </a>
 }
 
-@if (User.HasPermission("user.view", "role.view", "source.view", "status.view", "canned_reply.view", "api_key.view"))
+@if (User.HasPermission("user.view", "role.view", "source.view", "status.view", "canned_reply.view", "api_key.view", "workspace.view"))
 {
     <p class="mt-6 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500/80">Setup</p>
 
+    @if (User.HasPermission("workspace.view"))
+    {
+        <a asp-area="Admin" asp-controller="Workspaces" asp-action="Index" class="@LinkClasses(IsActive("Workspaces"))">
+            <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+            </svg>
+            Workspaces
+        </a>
+    }
     @if (User.HasPermission("user.view"))
     {
         <a asp-area="Admin" asp-controller="Users" asp-action="Index" class="@LinkClasses(IsActive("Users"))">

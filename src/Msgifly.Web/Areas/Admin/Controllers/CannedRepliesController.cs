@@ -6,6 +6,7 @@ using Msgifly.Web.Extensions;
 using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -15,10 +16,12 @@ public class CannedRepliesController : Controller
 {
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public CannedRepliesController(ApplicationDbContext db)
+    public CannedRepliesController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "canned_reply.view")]
@@ -59,7 +62,7 @@ public class CannedRepliesController : Controller
 
         if (model.Id is null)
         {
-            _db.CannedReplies.Add(new CannedReply { Title = model.Title, Description = model.Description, IsPublic = model.IsPublic });
+            _db.CannedReplies.Add(new CannedReply { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value, Title = model.Title, Description = model.Description, IsPublic = model.IsPublic });
             this.Notify("Canned reply created.");
         }
         else

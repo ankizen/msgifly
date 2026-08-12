@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Authorization;
@@ -6,11 +7,12 @@ using Msgifly.Web.Models.Entities;
 namespace Msgifly.Web.Data;
 
 /// <summary>
-/// First-run seed: permissions, an Admin role holding all of them, the lookup tables every
-/// Contact needs (Sources/Statuses), and one superuser account from configuration.
-/// Mirrors the original's DatabaseSeeder (master doc §4.3/§8.3), minus the stale/broken seeders
-/// that were never actually wired in (RolesSeeder referencing a non-existent model, UsersSeeder
-/// inserting a dropped column, etc. — see master doc §10 item 23).
+/// First-run seed: permissions, an Admin role holding all of them, a Default Workspace (with its
+/// lookup tables and, on an upgrade from the pre-multi-tenant single-WABA build, its WhatsApp
+/// connection migrated over from the old global settings), and one superuser account from
+/// configuration. Mirrors the original's DatabaseSeeder (master doc §4.3/§8.3), minus the
+/// stale/broken seeders that were never actually wired in (RolesSeeder referencing a
+/// non-existent model, UsersSeeder inserting a dropped column, etc. — see master doc §10 item 23).
 /// </summary>
 public static class DbSeeder
 {
@@ -46,25 +48,7 @@ public static class DbSeeder
             }
         }
 
-        if (!db.Sources.Any())
-        {
-            db.Sources.AddRange(
-                new Source { Name = "Facebook" },
-                new Source { Name = "WhatsApp" },
-                new Source { Name = "Website" });
-        }
-
-        if (!db.Statuses.Any())
-        {
-            db.Statuses.AddRange(
-                new Status { Name = "New", Color = "#4CAF50", IsDefault = true },
-                new Status { Name = "In Progress", Color = "#2196F3" },
-                new Status { Name = "Contacted", Color = "#FFC107" },
-                new Status { Name = "Qualified", Color = "#9C27B0" },
-                new Status { Name = "Closed", Color = "#F44336" });
-        }
-
-        await db.SaveChangesAsync();
+        await EnsureDefaultWorkspaceAsync(db, logger);
 
         var adminEmail = config["Seed:AdminEmail"] ?? "admin@msgifly.local";
         var adminPassword = config["Seed:AdminPassword"] ?? "Passw0rd!123";
@@ -92,6 +76,123 @@ public static class DbSeeder
 
             await userManager.AddToRoleAsync(adminUser, adminRoleName);
         }
+    }
+
+    /// <summary>
+    /// Runs once, the first time the app starts against a given database. If this is a fresh
+    /// install there's nothing to migrate — just create an empty Default Workspace with its
+    /// default Sources/Statuses. If this is an upgrade from the pre-multi-tenant build, the old
+    /// singleton WhatsApp connection and bot-behavior settings (previously stored as raw JSON
+    /// under AppSettings.Group = "WhatsAppSettings" / "WhatsMarkSettings", back when those were
+    /// C# classes rather than per-Workspace columns) get parsed out and copied onto this
+    /// Workspace, and every pre-existing row across every workspace-scoped table gets backfilled
+    /// to point at it — those rows all predate the WorkspaceId column, so EF Core's migration
+    /// added it with a default value of 0, and this sweep replaces that placeholder with the
+    /// Default Workspace's real id.
+    /// </summary>
+    private static async Task EnsureDefaultWorkspaceAsync(ApplicationDbContext db, ILogger logger)
+    {
+        var existing = await db.Workspaces.FirstOrDefaultAsync();
+        if (existing is not null)
+        {
+            return;
+        }
+
+        var workspace = new Workspace { Name = "My Business" };
+
+        var oldWaba = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Group == "WhatsAppSettings");
+        if (oldWaba?.Value is not null)
+        {
+            try
+            {
+                var node = JsonNode.Parse(oldWaba.Value);
+                workspace.IsAccountConnected = node?["IsAccountConnected"]?.GetValue<bool>() ?? false;
+                workspace.BusinessAccountId = node?["BusinessAccountId"]?.GetValue<string>();
+                workspace.AccessToken = node?["AccessToken"]?.GetValue<string>();
+                workspace.DefaultPhoneNumberId = node?["DefaultPhoneNumberId"]?.GetValue<string>();
+                workspace.DefaultPhoneNumber = node?["DefaultPhoneNumber"]?.GetValue<string>();
+                workspace.ProfilePictureUrl = node?["ProfilePictureUrl"]?.GetValue<string>();
+                workspace.ConnectionMethod = workspace.IsAccountConnected ? "manual" : null;
+                logger.LogInformation("Migrated the existing single-tenant WhatsApp connection into the new Default Workspace.");
+
+                // The Meta App identity (App id/secret, webhook verify token) moves to the new
+                // global "MetaAppSettings" group under the same raw values — same shape, new name.
+                var metaAppJson = new JsonObject
+                {
+                    ["IsWebhookConnected"] = node?["IsWebhookConnected"]?.GetValue<bool>() ?? false,
+                    ["FacebookAppId"] = node?["FacebookAppId"]?.GetValue<string>(),
+                    ["FacebookAppSecret"] = node?["FacebookAppSecret"]?.GetValue<string>(),
+                    ["WebhookVerifyToken"] = node?["WebhookVerifyToken"]?.GetValue<string>(),
+                    ["ApiVersion"] = node?["ApiVersion"]?.GetValue<string>() ?? "v21.0",
+                };
+                db.AppSettings.Add(new AppSetting { Group = "MetaAppSettings", Value = metaAppJson.ToJsonString() });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Couldn't parse the old WhatsAppSettings JSON during Workspace migration — starting with a disconnected Default Workspace instead.");
+            }
+        }
+
+        var oldWmSettings = await db.AppSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Group == "WhatsMarkSettings");
+        if (oldWmSettings?.Value is not null)
+        {
+            try
+            {
+                var node = JsonNode.Parse(oldWmSettings.Value);
+                workspace.AutoCreateLeadOnInboundMessage = node?["AutoCreateLeadOnInboundMessage"]?.GetValue<bool>() ?? true;
+                workspace.DefaultLeadStatusId = node?["DefaultLeadStatusId"]?.GetValue<int?>();
+                workspace.DefaultLeadSourceId = node?["DefaultLeadSourceId"]?.GetValue<int?>();
+                workspace.StopBotKeywords = node?["StopBotKeywords"]?.GetValue<string>() ?? workspace.StopBotKeywords;
+                workspace.RestartBotsAfterHours = node?["RestartBotsAfterHours"]?.GetValue<int?>() ?? workspace.RestartBotsAfterHours;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Couldn't parse the old WhatsMarkSettings JSON during Workspace migration — using defaults instead.");
+            }
+        }
+
+        db.Workspaces.Add(workspace);
+        await db.SaveChangesAsync(); // need workspace.Id before backfilling
+
+        if (!await db.Sources.IgnoreQueryFilters().AnyAsync(s => s.WorkspaceId == workspace.Id))
+        {
+            db.Sources.AddRange(
+                new Source { WorkspaceId = workspace.Id, Name = "Facebook" },
+                new Source { WorkspaceId = workspace.Id, Name = "WhatsApp" },
+                new Source { WorkspaceId = workspace.Id, Name = "Website" });
+        }
+
+        if (!await db.Statuses.IgnoreQueryFilters().AnyAsync(s => s.WorkspaceId == workspace.Id))
+        {
+            db.Statuses.AddRange(
+                new Status { WorkspaceId = workspace.Id, Name = "New", Color = "#4CAF50", IsDefault = true },
+                new Status { WorkspaceId = workspace.Id, Name = "In Progress", Color = "#2196F3" },
+                new Status { WorkspaceId = workspace.Id, Name = "Contacted", Color = "#FFC107" },
+                new Status { WorkspaceId = workspace.Id, Name = "Qualified", Color = "#9C27B0" },
+                new Status { WorkspaceId = workspace.Id, Name = "Closed", Color = "#F44336" });
+        }
+
+        await db.SaveChangesAsync();
+
+        // Every row that existed before the WorkspaceId column was added has it defaulted to 0 by
+        // the migration (see AddWorkspaces migration) — point them all at the Default Workspace.
+        var tables = new[]
+        {
+            "Contacts", "Sources", "Statuses", "Chats", "Campaigns", "WhatsappTemplates",
+            "MessageBots", "TemplateBots", "CannedReplies", "Automations", "ApiKeys",
+        };
+        foreach (var table in tables)
+        {
+            // `table` is one of the fixed literals above, never external/user input, so
+            // interpolating it into the SQL text (identifiers can't be parameterized) is safe —
+            // only the WorkspaceId value below is a real parameter.
+#pragma warning disable EF1002
+            await db.Database.ExecuteSqlRawAsync(
+                $"UPDATE [{table}] SET WorkspaceId = {{0}} WHERE WorkspaceId = 0", workspace.Id);
+#pragma warning restore EF1002
+        }
+
+        logger.LogInformation("Backfilled all pre-existing rows to Default Workspace {WorkspaceId}.", workspace.Id);
     }
 
     /// <summary>

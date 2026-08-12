@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Services.WhatsApp;
 
@@ -19,17 +20,20 @@ public class WhatsAppService : IWhatsAppService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly Settings.ISettingsService _settingsService;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly ILogger<WhatsAppService> _logger;
 
     public WhatsAppService(
         IHttpClientFactory httpClientFactory,
         Settings.ISettingsService settingsService,
         ApplicationDbContext db,
+        ICurrentWorkspaceAccessor workspaceAccessor,
         ILogger<WhatsAppService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _settingsService = settingsService;
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
         _logger = logger;
     }
 
@@ -130,11 +134,15 @@ public class WhatsAppService : IWhatsAppService
                 var existing = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.MetaTemplateId == metaId);
                 if (existing is null)
                 {
+                    parsed.WorkspaceId = _workspaceAccessor.WorkspaceId!.Value;
                     _db.WhatsappTemplates.Add(parsed);
                 }
                 else
                 {
                     parsed.Id = existing.Id;
+                    // ParseTemplateNode never sets WorkspaceId — it can't change on sync, and
+                    // SetValues below would otherwise stamp the existing row's real value to 0.
+                    parsed.WorkspaceId = existing.WorkspaceId;
                     _db.Entry(existing).CurrentValues.SetValues(parsed);
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
@@ -188,6 +196,7 @@ public class WhatsAppService : IWhatsAppService
         }
 
         var entity = MapRequestToEntity(request, validation, new WhatsappTemplate());
+        entity.WorkspaceId = _workspaceAccessor.WorkspaceId!.Value;
         entity.MetaTemplateId = metaId;
         entity.Status = metaStatus.Equals("APPROVED", StringComparison.OrdinalIgnoreCase) ? TemplateStatus.Approved : TemplateStatus.Pending;
         _db.WhatsappTemplates.Add(entity);
@@ -892,10 +901,28 @@ public class WhatsAppService : IWhatsAppService
         return System.Text.RegularExpressions.Regex.Matches(text, @"\{\{\d+\}\}").Count;
     }
 
-    private async Task<Settings.WhatsAppSettings> GetSettingsAsync() =>
-        await _settingsService.GetAsync<Settings.WhatsAppSettings>(nameof(Settings.WhatsAppSettings));
+    /// <summary>Merges the current Workspace's WABA connection with the global Meta App identity — see ResolvedWhatsAppSettings.</summary>
+    private async Task<ResolvedWhatsAppSettings> GetSettingsAsync()
+    {
+        var metaApp = await _settingsService.GetAsync<Settings.MetaAppSettings>(nameof(Settings.MetaAppSettings));
+        var workspaceId = _workspaceAccessor.WorkspaceId;
+        var workspace = workspaceId is null
+            ? null
+            : await _db.Workspaces.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.Id == workspaceId);
 
-    private HttpClient CreateClient(Settings.WhatsAppSettings settings)
+        return new ResolvedWhatsAppSettings
+        {
+            FacebookAppId = metaApp.FacebookAppId,
+            FacebookAppSecret = metaApp.FacebookAppSecret,
+            ApiVersion = metaApp.ApiVersion,
+            BusinessAccountId = workspace?.BusinessAccountId,
+            AccessToken = workspace?.AccessToken,
+            DefaultPhoneNumberId = workspace?.DefaultPhoneNumberId,
+            DefaultPhoneNumber = workspace?.DefaultPhoneNumber,
+        };
+    }
+
+    private HttpClient CreateClient(ResolvedWhatsAppSettings settings)
     {
         var client = _httpClientFactory.CreateClient("GraphApi");
         client.BaseAddress = new Uri($"https://graph.facebook.com/{settings.ApiVersion}/");
@@ -903,7 +930,7 @@ public class WhatsAppService : IWhatsAppService
         return client;
     }
 
-    private async Task<WhatsAppResult<JsonObject>> GetAsync(Settings.WhatsAppSettings settings, string path)
+    private async Task<WhatsAppResult<JsonObject>> GetAsync(ResolvedWhatsAppSettings settings, string path)
     {
         try
         {

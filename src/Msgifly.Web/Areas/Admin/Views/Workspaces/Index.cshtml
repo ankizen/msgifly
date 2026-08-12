@@ -1,0 +1,85 @@
+@model List<Msgifly.Web.Models.Entities.Workspace>
+@{
+    ViewData["Title"] = "Workspaces";
+    var currentId = ViewData["CurrentWorkspaceId"] as int?;
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Workspaces</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Each of your businesses gets its own Contacts, Templates, Campaigns, Chat and Automations.</p>
+    </div>
+    <a asp-action="Create" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+        + Add Business
+    </a>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">WhatsApp</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Any())
+            {
+                <tr><td colspan="3" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No workspaces yet.</td></tr>
+            }
+            @foreach (var workspace in Model)
+            {
+                var isCurrent = workspace.Id == currentId;
+                <tr class="@(isCurrent ? "bg-emerald-50 dark:bg-emerald-900/20" : "")">
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">
+                        @workspace.Name
+                        @if (isCurrent)
+                        {
+                            <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-100">Current</span>
+                        }
+                    </td>
+                    <td class="px-4 py-3 text-sm">
+                        @if (workspace.IsAccountConnected)
+                        {
+                            <span class="text-emerald-600 dark:text-emerald-400">Connected @(workspace.DefaultPhoneNumber is null ? "" : $"({workspace.DefaultPhoneNumber})")</span>
+                        }
+                        else
+                        {
+                            <span class="text-gray-400 dark:text-slate-500">Not connected</span>
+                        }
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm space-x-3">
+                        @if (!isCurrent)
+                        {
+                            <form asp-action="Switch" asp-route-id="@workspace.Id" method="post" class="inline">
+                                <button type="submit" class="text-emerald-600 hover:text-emerald-500">Switch to</button>
+                            </form>
+                        }
+                        <button type="button" class="text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200"
+                                x-data x-on:click="$dispatch('prompt-rename', { workspaceId: @workspace.Id, currentName: @(System.Text.Json.JsonSerializer.Serialize(workspace.Name)) })">
+                            Rename
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<form id="renameForm" asp-action="Rename" method="post" class="hidden">
+    <input type="hidden" name="id" id="renameId" />
+    <input type="hidden" name="name" id="renameName" />
+</form>
+
+@section Scripts {
+<script>
+    window.addEventListener('prompt-rename', (e) => {
+        const name = window.prompt('Rename workspace', e.detail.currentName);
+        if (!name || !name.trim()) return;
+        document.getElementById('renameId').value = e.detail.workspaceId;
+        document.getElementById('renameName').value = name.trim();
+        document.getElementById('renameForm').submit();
+    });
+</script>
+}

@@ -6,6 +6,7 @@ namespace Msgifly.Web.Models.Entities;
 public class MessageBot
 {
     public int Id { get; set; }
+    public int WorkspaceId { get; set; }
     public string Name { get; set; } = string.Empty;
     public ContactType RelType { get; set; } = ContactType.Lead;
     public string ReplyText { get; set; } = string.Empty;

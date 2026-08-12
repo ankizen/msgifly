@@ -12,6 +12,7 @@ using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Controllers;
 
@@ -25,6 +26,12 @@ namespace Msgifly.Web.Controllers;
 /// Known gap: only text/button/interactive message types are read for bot-matching purposes;
 /// media messages (image/audio/document/video) are stored with a placeholder and can still
 /// trigger first-message/catch-all bots, but their content isn't downloaded in this phase.
+///
+/// Multi-tenant note: Meta calls ONE webhook URL for the whole App, shared by every Workspace's
+/// WABA — so before touching any workspace-scoped table, Receive() resolves which Workspace the
+/// payload belongs to (via entry[].id, the WABA id) and sets ICurrentWorkspaceAccessor itself.
+/// Everything downstream (Contacts, Chat, bots, automations) then sees the right tenant's data
+/// through the normal EF Core query filters, same as any cookie-scoped Admin request.
 /// </summary>
 [AllowAnonymous]
 [Route("whatsapp/webhook")]
@@ -37,6 +44,7 @@ public class WhatsAppWebhookController : Controller
     private readonly AutomationEngine _automationEngine;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly IWebHostEnvironment _environment;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -47,6 +55,7 @@ public class WhatsAppWebhookController : Controller
         AutomationEngine automationEngine,
         IHubContext<ChatHub> hubContext,
         IWebHostEnvironment environment,
+        ICurrentWorkspaceAccessor workspaceAccessor,
         ILogger<WhatsAppWebhookController> logger)
     {
         _settingsService = settingsService;
@@ -56,6 +65,7 @@ public class WhatsAppWebhookController : Controller
         _automationEngine = automationEngine;
         _hubContext = hubContext;
         _environment = environment;
+        _workspaceAccessor = workspaceAccessor;
         _logger = logger;
     }
 
@@ -65,7 +75,9 @@ public class WhatsAppWebhookController : Controller
         [FromQuery(Name = "hub.challenge")] string? challenge,
         [FromQuery(Name = "hub.verify_token")] string? verifyToken)
     {
-        var settings = await _settingsService.GetAsync<WhatsAppSettings>(nameof(WhatsAppSettings));
+        // The webhook subscription (URL + verify token) is configured once at the Meta App level
+        // and shared by every Workspace's WABA — this check is deliberately global, not per-tenant.
+        var settings = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
 
         if (mode == "subscribe"
             && !string.IsNullOrEmpty(settings.WebhookVerifyToken)
@@ -85,18 +97,31 @@ public class WhatsAppWebhookController : Controller
 
         try
         {
-            var value = JsonNode.Parse(payload)?["entry"]?.AsArray().FirstOrDefault()?["changes"]?.AsArray().FirstOrDefault()?["value"];
+            var entry = JsonNode.Parse(payload)?["entry"]?.AsArray().FirstOrDefault();
+            var value = entry?["changes"]?.AsArray().FirstOrDefault()?["value"];
             if (value is null)
             {
                 return Ok();
             }
+
+            var businessAccountId = entry?["id"]?.GetValue<string>();
+            var workspace = string.IsNullOrEmpty(businessAccountId)
+                ? null
+                : await _db.Workspaces.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.BusinessAccountId == businessAccountId);
+            if (workspace is null)
+            {
+                _logger.LogWarning("WhatsApp webhook payload for unknown WABA {WabaId} — no matching Workspace, ignoring.", businessAccountId);
+                return Ok();
+            }
+
+            _workspaceAccessor.WorkspaceId = workspace.Id;
 
             var messages = value["messages"]?.AsArray();
             var statuses = value["statuses"]?.AsArray();
 
             if (messages is { Count: > 0 })
             {
-                await ProcessIncomingMessagesAsync(value, messages);
+                await ProcessIncomingMessagesAsync(value, messages, workspace);
             }
             else if (statuses is { Count: > 0 })
             {
@@ -111,11 +136,10 @@ public class WhatsAppWebhookController : Controller
         return Ok();
     }
 
-    private async Task ProcessIncomingMessagesAsync(JsonNode value, JsonArray messages)
+    private async Task ProcessIncomingMessagesAsync(JsonNode value, JsonArray messages, Workspace workspace)
     {
         var businessPhoneNumberId = value["metadata"]?["phone_number_id"]?.GetValue<string>();
         var contactName = value["contacts"]?.AsArray().FirstOrDefault()?["profile"]?["name"]?.GetValue<string>();
-        var wmSettings = await _settingsService.GetAsync<WhatsMarkSettings>(nameof(WhatsMarkSettings));
 
         foreach (var message in messages)
         {
@@ -143,11 +167,11 @@ public class WhatsAppWebhookController : Controller
             var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == from);
             var isFirstMessage = chat is null;
 
-            var contact = await ResolveContactAsync(from, contactName, wmSettings);
+            var contact = await ResolveContactAsync(from, contactName, workspace);
 
             if (chat is null)
             {
-                chat = new Chat { ReceiverId = from, Name = contactName ?? from };
+                chat = new Chat { WorkspaceId = workspace.Id, ReceiverId = from, Name = contactName ?? from };
                 _db.Chats.Add(chat);
             }
 
@@ -160,13 +184,13 @@ public class WhatsAppWebhookController : Controller
 
             // Stop-bot keyword / auto-restart window (mirrors the original's per-chat pause state).
             if (chat.IsBotsStopped && chat.BotStoppedTime is not null
-                && DateTime.UtcNow - chat.BotStoppedTime > TimeSpan.FromHours(wmSettings.RestartBotsAfterHours))
+                && DateTime.UtcNow - chat.BotStoppedTime > TimeSpan.FromHours(workspace.RestartBotsAfterHours))
             {
                 chat.IsBotsStopped = false;
                 chat.BotStoppedTime = null;
             }
 
-            var stopKeywords = wmSettings.StopBotKeywords.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var stopKeywords = workspace.StopBotKeywords.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (stopKeywords.Any(k => string.Equals(k, messageText.Trim(), StringComparison.OrdinalIgnoreCase)))
             {
                 chat.IsBotsStopped = true;
@@ -290,17 +314,17 @@ public class WhatsAppWebhookController : Controller
         _ => string.Empty,
     };
 
-    private async Task<Contact?> ResolveContactAsync(string phone, string? name, WhatsMarkSettings wmSettings)
+    private async Task<Contact?> ResolveContactAsync(string phone, string? name, Workspace workspace)
     {
         var digitsOnly = new string(phone.Where(char.IsDigit).ToArray());
         var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == phone || c.Phone == digitsOnly || c.Phone == "+" + digitsOnly);
-        if (contact is not null || !wmSettings.AutoCreateLeadOnInboundMessage)
+        if (contact is not null || !workspace.AutoCreateLeadOnInboundMessage)
         {
             return contact;
         }
 
-        var statusId = wmSettings.DefaultLeadStatusId ?? await _db.Statuses.Select(s => (int?)s.Id).FirstOrDefaultAsync();
-        var sourceId = wmSettings.DefaultLeadSourceId ?? await _db.Sources.Select(s => (int?)s.Id).FirstOrDefaultAsync();
+        var statusId = workspace.DefaultLeadStatusId ?? await _db.Statuses.Select(s => (int?)s.Id).FirstOrDefaultAsync();
+        var sourceId = workspace.DefaultLeadSourceId ?? await _db.Sources.Select(s => (int?)s.Id).FirstOrDefaultAsync();
         if (statusId is null || sourceId is null)
         {
             return null; // no Status/Source configured yet to assign a new lead to
@@ -309,6 +333,7 @@ public class WhatsAppWebhookController : Controller
         var nameParts = (name ?? phone).Split(' ', 2);
         contact = new Contact
         {
+            WorkspaceId = workspace.Id,
             FirstName = nameParts[0],
             LastName = nameParts.Length > 1 ? nameParts[1] : string.Empty,
             Phone = phone,

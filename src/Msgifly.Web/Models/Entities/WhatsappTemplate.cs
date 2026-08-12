@@ -6,6 +6,7 @@ namespace Msgifly.Web.Models.Entities;
 public class WhatsappTemplate
 {
     public int Id { get; set; }
+    public int WorkspaceId { get; set; }
 
     /// <summary>Meta's template id — the business key used by Campaigns/Bots to reference this template. Null until a locally-created DRAFT is first submitted.</summary>
     public string? MetaTemplateId { get; set; }

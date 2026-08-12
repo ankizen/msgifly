@@ -12,6 +12,25 @@ public record WhatsAppResult<T>(bool Success, T? Data, string? ErrorMessage = nu
     public static WhatsAppResult<T> Fail(string message) => new(false, default, message);
 }
 
+/// <summary>
+/// The credentials WhatsAppService actually needs for one Graph API call, merged from two
+/// sources: the current Workspace's WABA connection fields (BusinessAccountId, AccessToken,
+/// DefaultPhoneNumberId — per-business) and the global MetaAppSettings (FacebookAppId/Secret,
+/// ApiVersion — one Meta App shared by every Workspace). See
+/// WhatsAppService.GetSettingsAsync for how this gets built.
+/// </summary>
+public class ResolvedWhatsAppSettings
+{
+    public string? FacebookAppId { get; set; }
+    public string? FacebookAppSecret { get; set; }
+    public string ApiVersion { get; set; } = "v21.0";
+
+    public string? BusinessAccountId { get; set; }
+    public string? AccessToken { get; set; }
+    public string? DefaultPhoneNumberId { get; set; }
+    public string? DefaultPhoneNumber { get; set; }
+}
+
 public class PhoneNumberInfo
 {
     public string Id { get; set; } = string.Empty;

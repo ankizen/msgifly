@@ -9,6 +9,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Campaigns;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -18,10 +19,12 @@ public class CampaignsController : Controller
 {
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public CampaignsController(ApplicationDbContext db)
+    public CampaignsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "campaigns.view")]
@@ -130,6 +133,7 @@ public class CampaignsController : Controller
 
         var campaign = new Campaign
         {
+            WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
             Name = model.Name,
             RelType = model.RelType,
             TemplateId = model.TemplateId,

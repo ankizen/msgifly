@@ -6,6 +6,7 @@ using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Services.Automations;
 
@@ -28,6 +29,7 @@ public class AutomationEngine
     private readonly IWhatsAppService _whatsAppService;
     private readonly IBackgroundJobClient _backgroundJobClient;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly ILogger<AutomationEngine> _logger;
 
     public AutomationEngine(
@@ -35,12 +37,14 @@ public class AutomationEngine
         IWhatsAppService whatsAppService,
         IBackgroundJobClient backgroundJobClient,
         IHttpClientFactory httpClientFactory,
+        ICurrentWorkspaceAccessor workspaceAccessor,
         ILogger<AutomationEngine> logger)
     {
         _db = db;
         _whatsAppService = whatsAppService;
         _backgroundJobClient = backgroundJobClient;
         _httpClientFactory = httpClientFactory;
+        _workspaceAccessor = workspaceAccessor;
         _logger = logger;
     }
 
@@ -75,14 +79,21 @@ public class AutomationEngine
         }
     }
 
-    /// <summary>Invoked by a scheduled Hangfire job after a Wait step's delay elapses.</summary>
+    /// <summary>
+    /// Invoked by a scheduled Hangfire job after a Wait step's delay elapses — runs with no
+    /// HttpContext, so the current-workspace accessor is never set going in. Look the automation
+    /// up unfiltered first (that's the only way to discover which workspace it belongs to), then
+    /// set the accessor before anything else touches a workspace-scoped table.
+    /// </summary>
     public async Task ResumeWaitAsync(int automationId, int? contactId, string contextJson, int? parentStepId, string? branch, int nextPosition, int? logId)
     {
-        var automation = await _db.Automations.FirstOrDefaultAsync(a => a.Id == automationId);
+        var automation = await _db.Automations.IgnoreQueryFilters().FirstOrDefaultAsync(a => a.Id == automationId);
         if (automation is null)
         {
             return;
         }
+
+        _workspaceAccessor.WorkspaceId = automation.WorkspaceId;
 
         var context = JsonSerializer.Deserialize<AutomationContext>(contextJson, JsonOptions) ?? new AutomationContext();
 

@@ -4,6 +4,7 @@ using Msgifly.Web.Data;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Services.Campaigns;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Jobs;
 
@@ -19,17 +20,33 @@ public class CampaignMessageJob
 {
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly ILogger<CampaignMessageJob> _logger;
 
-    public CampaignMessageJob(ApplicationDbContext db, IWhatsAppService whatsAppService, ILogger<CampaignMessageJob> logger)
+    public CampaignMessageJob(ApplicationDbContext db, IWhatsAppService whatsAppService, ICurrentWorkspaceAccessor workspaceAccessor, ILogger<CampaignMessageJob> logger)
     {
         _db = db;
         _whatsAppService = whatsAppService;
+        _workspaceAccessor = workspaceAccessor;
         _logger = logger;
     }
 
     public async Task SendMessageAsync(int campaignDetailId)
     {
+        // No HttpContext here either — bootstrap from the detail's own Campaign before any
+        // filtered query runs, same pattern as AutomationEngine.ResumeWaitAsync.
+        var detailWorkspaceId = await _db.CampaignDetails.IgnoreQueryFilters()
+            .Where(d => d.Id == campaignDetailId)
+            .Select(d => (int?)d.Campaign.WorkspaceId)
+            .FirstOrDefaultAsync();
+        if (detailWorkspaceId is null)
+        {
+            _logger.LogWarning("CampaignDetail {Id} no longer exists; skipping.", campaignDetailId);
+            return;
+        }
+
+        _workspaceAccessor.WorkspaceId = detailWorkspaceId;
+
         var detail = await _db.CampaignDetails
             .Include(d => d.Campaign)
             .Include(d => d.Contact)

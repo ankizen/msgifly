@@ -7,6 +7,7 @@ using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Services.ApiKeys;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Controllers.Api.V1;
 
@@ -16,10 +17,12 @@ namespace Msgifly.Web.Controllers.Api.V1;
 public class ContactsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public ContactsController(ApplicationDbContext db)
+    public ContactsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [HttpGet]
@@ -92,6 +95,7 @@ public class ContactsController : ControllerBase
 
         var contact = new Contact
         {
+            WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
             FirstName = request.FirstName.Trim(),
             LastName = request.LastName?.Trim() ?? string.Empty,
             Phone = request.Phone.Trim(),
