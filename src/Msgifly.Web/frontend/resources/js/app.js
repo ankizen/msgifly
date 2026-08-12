@@ -7,6 +7,7 @@ import './tippy';
 import './chat-realtime';
 import './automation-canvas';
 import './embedded-signup';
+import './lead-ads';
 // NOTE: the original bundled a Livewire data-grid package (PowerGrid) here. This project
 // rebuilds that as a reusable Razor/JS grid component instead — see master doc §7.2/§12.
 import Recorder from 'recorder-core';

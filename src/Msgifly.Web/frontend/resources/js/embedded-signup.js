@@ -12,31 +12,9 @@
 //      callback reads it once `code` arrives (they typically land within milliseconds of each
 //      other, but we don't assume an order).
 
-let fbSdkLoadPromise = null;
+import { loadFacebookSdk } from './facebook-sdk';
+
 let lastSignupData = null;
-
-function loadFacebookSdk(appId, apiVersion) {
-  if (fbSdkLoadPromise) return fbSdkLoadPromise;
-
-  fbSdkLoadPromise = new Promise((resolve) => {
-    window.fbAsyncInit = function () {
-      window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version: apiVersion });
-      resolve();
-    };
-
-    if (document.getElementById('facebook-jssdk')) {
-      resolve();
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.src = 'https://connect.facebook.net/en_US/sdk.js';
-    document.body.appendChild(script);
-  });
-
-  return fbSdkLoadPromise;
-}
 
 window.addEventListener('message', (event) => {
   if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') {

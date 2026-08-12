@@ -1,0 +1,24 @@
+@model List<Msgifly.Web.Services.LeadAds.FacebookPageInfo>
+@{
+    ViewData["Title"] = "Choose a Facebook Page";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Choose a Facebook Page</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Pick the Page that runs the Lead Ads you want synced into this workspace.</p>
+</div>
+
+<div class="max-w-lg bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden divide-y divide-gray-200 dark:divide-slate-700">
+    @foreach (var fbPage in Model)
+    {
+        <form asp-action="ConnectPage" method="post" class="flex items-center justify-between p-4">
+            <input type="hidden" name="pageId" value="@fbPage.Id" />
+            <input type="hidden" name="pageName" value="@fbPage.Name" />
+            <input type="hidden" name="pageAccessToken" value="@fbPage.AccessToken" />
+            <span class="text-sm font-medium text-gray-900 dark:text-slate-100">@fbPage.Name</span>
+            <button type="submit" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Connect</button>
+        </form>
+    }
+</div>
+
+<a asp-action="Index" class="mt-4 inline-block text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">&larr; Cancel</a>
