@@ -60,7 +60,7 @@ public class WabaController : Controller
     [HttpPost]
     [Authorize(Policy = "connect_account.connect")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ConnectWebhook(WabaWebhookFormViewModel form)
+    public async Task<IActionResult> ConnectWebhook([Bind(Prefix = "WebhookForm")] WabaWebhookFormViewModel form)
     {
         if (!ModelState.IsValid)
         {
@@ -82,7 +82,7 @@ public class WabaController : Controller
     [HttpPost]
     [Authorize(Policy = "connect_account.connect")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ConnectAccount(WabaAccountFormViewModel form)
+    public async Task<IActionResult> ConnectAccount([Bind(Prefix = "AccountForm")] WabaAccountFormViewModel form)
     {
         if (!ModelState.IsValid)
         {
