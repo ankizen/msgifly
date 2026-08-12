@@ -12,7 +12,7 @@
          x-show="!activeChatId || !isMobile" x-cloak>
         <div class="p-3 border-b border-gray-200 dark:border-slate-700">
             <input type="text" placeholder="Search conversations..." x-model="search" x-on:input.debounce.400ms="loadChats()"
-                   class="w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                   class="w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
         <div class="flex-1 overflow-y-auto">
             <template x-if="chats.length === 0">
@@ -21,8 +21,8 @@
             <template x-for="chat in chats" :key="chat.id">
                 <button type="button" x-on:click="selectChat(chat.id)"
                         class="w-full text-left px-3 py-3 flex items-center gap-3 border-b border-gray-100 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700"
-                        :class="chat.id === activeChatId ? 'bg-indigo-50 dark:bg-slate-900' : ''">
-                    <span class="flex-shrink-0 h-10 w-10 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-semibold"
+                        :class="chat.id === activeChatId ? 'bg-emerald-50 dark:bg-slate-900' : ''">
+                    <span class="flex-shrink-0 h-10 w-10 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-semibold"
                           x-text="(chat.name || '?').charAt(0).toUpperCase()"></span>
                     <span class="flex-1 min-w-0">
                         <span class="flex items-center justify-between">
@@ -32,7 +32,7 @@
                         <span class="flex items-center justify-between">
                             <span class="text-xs text-gray-500 dark:text-slate-400 truncate" x-text="chat.lastMessage"></span>
                             <template x-if="chat.unreadCount > 0">
-                                <span class="ml-2 flex-shrink-0 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full bg-indigo-600 text-white text-xs" x-text="chat.unreadCount"></span>
+                                <span class="ml-2 flex-shrink-0 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full bg-emerald-600 text-white text-xs" x-text="chat.unreadCount"></span>
                             </template>
                         </span>
                     </span>
@@ -66,12 +66,12 @@
 
                 <div class="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50 dark:bg-slate-900" x-ref="messageList">
                     <button type="button" x-show="hasMoreMessages" x-on:click="loadMessages(activeChatId, true)"
-                            class="mx-auto block text-xs text-indigo-600 hover:text-indigo-500 mb-2">Load older messages</button>
+                            class="mx-auto block text-xs text-emerald-600 hover:text-emerald-500 mb-2">Load older messages</button>
 
                     <template x-for="message in messages" :key="message.id">
                         <div class="flex" :class="message.isOutbound ? 'justify-end' : 'justify-start'">
                             <div class="max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm"
-                                 :class="message.isOutbound ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100'">
+                                 :class="message.isOutbound ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100'">
                                 <p class="whitespace-pre-wrap break-words" x-text="message.message"></p>
                                 <p class="mt-1 text-[10px] opacity-70 text-right" x-text="formatTime(message.timeSent) + (message.isOutbound ? ' · ' + message.status : '')"></p>
                             </div>
@@ -104,10 +104,10 @@
 
                         <textarea x-model="composeText" rows="1" placeholder="Type a message..."
                                   x-on:keydown.enter.prevent="sendMessage()"
-                                  class="flex-1 resize-none rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></textarea>
+                                  class="flex-1 resize-none rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea>
 
                         <button type="button" x-on:click="sendMessage()" :disabled="sending || !composeText.trim()"
-                                class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-medium">
+                                class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">
                             Send
                         </button>
                     </div>

@@ -8,7 +8,7 @@
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Message Bots</h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Free-text auto-replies triggered by keywords.</p>
     </div>
-    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">+ New Bot</a>
+    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">+ New Bot</a>
 </div>
 
 <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
@@ -41,7 +41,7 @@
                         </span>
                     </td>
                     <td class="px-4 py-3 text-right text-sm space-x-3">
-                        <a asp-action="Save" asp-route-id="@bot.Id" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                        <a asp-action="Save" asp-route-id="@bot.Id" class="text-emerald-600 hover:text-emerald-500">Edit</a>
                         <button type="button" class="text-red-600 hover:text-red-500"
                                 x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = bot.Id })', message: 'Delete this bot?' })">
                             Delete

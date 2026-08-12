@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Only update if the value has changed
         if (input.value !== fullPhoneNumber) {
           input.value = fullPhoneNumber;
-          input.dispatchEvent(new Event('input')); // Sync with Livewire
+          input.dispatchEvent(new Event('input'));
         }
       });
     })

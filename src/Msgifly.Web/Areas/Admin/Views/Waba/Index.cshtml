@@ -13,7 +13,7 @@
     <div class="max-w-2xl space-y-6">
         <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
             <div class="flex items-center gap-2 mb-3">
-                <span class="flex h-6 w-6 items-center justify-center rounded-full @(Model.IsWebhookConnected ? "bg-green-600" : "bg-indigo-600") text-white text-xs font-bold">1</span>
+                <span class="flex h-6 w-6 items-center justify-center rounded-full @(Model.IsWebhookConnected ? "bg-green-600" : "bg-emerald-600") text-white text-xs font-bold">1</span>
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white">Register your Meta App</h2>
             </div>
 
@@ -36,14 +36,14 @@
             <form asp-action="ConnectWebhook" method="post" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <label asp-for="WebhookForm.FacebookAppId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                    <input asp-for="WebhookForm.FacebookAppId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    <input asp-for="WebhookForm.FacebookAppId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                 </div>
                 <div>
                     <label asp-for="WebhookForm.FacebookAppSecret" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                    <input asp-for="WebhookForm.FacebookAppSecret" type="password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    <input asp-for="WebhookForm.FacebookAppSecret" type="password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                 </div>
                 <div class="sm:col-span-2">
-                    <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">
+                    <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
                         @(Model.IsWebhookConnected ? "Update" : "Save & Continue")
                     </button>
                 </div>
@@ -52,7 +52,7 @@
 
         <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 @(Model.IsWebhookConnected ? "" : "opacity-50 pointer-events-none")">
             <div class="flex items-center gap-2 mb-3">
-                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white text-xs font-bold">2</span>
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-xs font-bold">2</span>
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white">Connect your Business Account</h2>
             </div>
             <p class="text-sm text-gray-600 dark:text-slate-400 mb-3">
@@ -61,14 +61,14 @@
             <form asp-action="ConnectAccount" method="post" class="grid grid-cols-1 gap-4">
                 <div>
                     <label asp-for="AccountForm.BusinessAccountId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                    <input asp-for="AccountForm.BusinessAccountId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    <input asp-for="AccountForm.BusinessAccountId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                 </div>
                 <div>
                     <label asp-for="AccountForm.AccessToken" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                    <input asp-for="AccountForm.AccessToken" type="password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                    <input asp-for="AccountForm.AccessToken" type="password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                 </div>
                 <div>
-                    <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Connect Account</button>
+                    <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Connect Account</button>
                 </div>
             </form>
         </div>
@@ -94,7 +94,7 @@ else
                                     @number.DisplayPhoneNumber
                                     @if (isDefault)
                                     {
-                                        <span class="ml-2 inline-flex items-center rounded-full bg-indigo-100 dark:bg-indigo-900 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">Default</span>
+                                        <span class="ml-2 inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">Default</span>
                                     }
                                 </p>
                                 <p class="text-xs text-gray-400 dark:text-slate-500">@number.VerifiedName &middot; Quality: @(number.QualityRating ?? "unknown")</p>
@@ -104,7 +104,7 @@ else
                                 <form asp-action="SetDefaultNumber" method="post">
                                     <input type="hidden" name="phoneNumberId" value="@number.Id" />
                                     <input type="hidden" name="phoneNumber" value="@number.DisplayPhoneNumber" />
-                                    <button type="submit" class="text-sm text-indigo-600 hover:text-indigo-500">Set as default</button>
+                                    <button type="submit" class="text-sm text-emerald-600 hover:text-emerald-500">Set as default</button>
                                 </form>
                             }
                         </div>
@@ -116,8 +116,8 @@ else
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Send a Test Message</h2>
                 <form asp-action="SendTestMessage" method="post" class="flex flex-wrap gap-2">
                     <input type="text" name="phoneNumber" placeholder="+91XXXXXXXXXX" required
-                           class="flex-1 min-w-[200px] rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-                    <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Send</button>
+                           class="flex-1 min-w-[200px] rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                    <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Send</button>
                 </form>
             </div>
         </div>

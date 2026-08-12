@@ -8,7 +8,7 @@
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Campaigns</h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Bulk WhatsApp template sends to your contacts.</p>
     </div>
-    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">
+    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
         + New Campaign
     </a>
 </div>
@@ -63,10 +63,10 @@
                         @(campaign.ScheduledSendTime?.ToString("dd MMM yyyy, HH:mm") ?? "Immediately")
                     </td>
                     <td class="px-4 py-3 text-right text-sm space-x-3">
-                        <a asp-action="Details" asp-route-id="@campaign.Id" class="text-indigo-600 hover:text-indigo-500">Details</a>
+                        <a asp-action="Details" asp-route-id="@campaign.Id" class="text-emerald-600 hover:text-emerald-500">Details</a>
                         @if (!campaign.IsSent)
                         {
-                            <a asp-action="Save" asp-route-id="@campaign.Id" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                            <a asp-action="Save" asp-route-id="@campaign.Id" class="text-emerald-600 hover:text-emerald-500">Edit</a>
                         }
                         <button type="button" class="text-red-600 hover:text-red-500"
                                 x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = campaign.Id })', message: 'Delete this campaign and all its send records?' })">

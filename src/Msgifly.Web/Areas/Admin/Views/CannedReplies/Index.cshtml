@@ -8,7 +8,7 @@
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Canned Replies</h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Quick-insert snippets for the chat compose box.</p>
     </div>
-    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">+ New Reply</a>
+    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">+ New Reply</a>
 </div>
 
 <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
@@ -33,7 +33,7 @@
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400 max-w-md truncate" title="@reply.Description">@reply.Description</td>
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(reply.IsPublic ? "All agents" : "Private")</td>
                     <td class="px-4 py-3 text-right text-sm space-x-3">
-                        <a asp-action="Save" asp-route-id="@reply.Id" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                        <a asp-action="Save" asp-route-id="@reply.Id" class="text-emerald-600 hover:text-emerald-500">Edit</a>
                         <button type="button" class="text-red-600 hover:text-red-500"
                                 x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = reply.Id })', message: 'Delete this canned reply?' })">
                             Delete

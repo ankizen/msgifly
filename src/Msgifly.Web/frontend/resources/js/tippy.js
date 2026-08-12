@@ -11,17 +11,6 @@ function initTippy() {
   }
 }
 
-// Initialize on first load
 document.addEventListener('DOMContentLoaded', () => {
-  initTippy();
-});
-
-// Reinitialize tooltips after Livewire navigation
-document.addEventListener('livewire:navigated', () => {
-  initTippy();
-});
-
-// Also reapply tooltips when Livewire updates components
-Livewire.hook('message.processed', () => {
   initTippy();
 });

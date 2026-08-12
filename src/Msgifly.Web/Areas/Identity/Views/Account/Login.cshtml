@@ -7,8 +7,9 @@
 <div class="grid grid-cols-1 md:grid-cols-12 sm:h-screen h-screen">
     <div class="col-span-1 md:col-span-12 lg:col-span-4 flex flex-col justify-center items-center px-6 sm:px-20">
         <div class="lg:w-full md:w-1/2">
-            <div class="w-full flex items-center my-4 justify-center p-6">
-                <h1 class="text-center text-2xl font-bold dark:text-slate-200">Login</h1>
+            <div class="w-full flex flex-col items-center my-4 justify-center p-6 gap-3">
+                <img src="~/img/dark_logo.png" alt="Msgifly" class="h-10 w-auto" />
+                <h1 class="text-center text-xl font-semibold text-gray-700 dark:text-slate-300">Welcome back</h1>
             </div>
 
             @if (!ViewData.ModelState.IsValid)
@@ -24,7 +25,7 @@
 
                 <div>
                     <label asp-for="Email" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Email</label>
-                    <input asp-for="Email" class="block mt-1 w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    <input asp-for="Email" class="block mt-1 w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
                            autofocus autocomplete="username" />
                     <span asp-validation-for="Email" class="mt-1 block text-sm text-red-600"></span>
                 </div>
@@ -33,7 +34,7 @@
                     <label asp-for="Password" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Password</label>
                     <div class="relative">
                         <input asp-for="Password" x-bind:type="showPassword ? 'text' : 'password'"
-                               class="block mt-1 w-full pr-10 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                               class="block mt-1 w-full pr-10 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
                                autocomplete="current-password" />
                         <button type="button" class="absolute inset-y-0 right-3 flex items-center text-gray-500"
                                 x-on:click="showPassword = !showPassword">
@@ -48,14 +49,14 @@
 
                 <div class="flex items-center justify-between mt-4">
                     <label for="RememberMe" class="inline-flex items-center">
-                        <input asp-for="RememberMe" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+                        <input asp-for="RememberMe" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
                         <span class="ms-2 text-sm text-gray-600 dark:text-slate-400">Remember me</span>
                     </label>
                 </div>
 
                 <div class="mt-6 flex flex-col justify-center items-center gap-4">
                     <button type="submit" x-bind:disabled="loading"
-                            class="relative w-full px-3 py-3 font-medium text-white bg-indigo-600 hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 rounded-lg min-h-12">
+                            class="relative w-full px-3 py-3 font-medium text-white bg-emerald-700 hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-600 rounded-lg min-h-12">
                         <span x-show="!loading">Login</span>
                         <span x-show="loading">Signing in…</span>
                     </button>
@@ -64,7 +65,7 @@
         </div>
     </div>
 
-    <div class="hidden lg:block md:col-span-8 bg-gradient-to-r from-indigo-500 to-purple-500 relative">
+    <div class="hidden lg:block md:col-span-8 bg-gradient-to-br from-emerald-700 via-emerald-800 to-teal-950 relative">
         <div class="absolute inset-0 flex justify-center items-center">
             <img src="~/img/coverpage.png" alt="" class="object-cover" />
         </div>

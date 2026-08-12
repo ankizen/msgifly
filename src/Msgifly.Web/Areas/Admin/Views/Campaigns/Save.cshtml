@@ -38,21 +38,21 @@
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
         <div>
             <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-            <input asp-for="Name" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input asp-for="Name" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
             <span asp-validation-for="Name" class="text-sm text-red-600"></span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label asp-for="RelType" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                <select asp-for="RelType" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select asp-for="RelType" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                     <option value="Lead">Lead</option>
                     <option value="Customer">Customer</option>
                 </select>
             </div>
             <div>
                 <label asp-for="TemplateId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-                <select asp-for="TemplateId" x-model="selectedTemplateId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select asp-for="TemplateId" x-model="selectedTemplateId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                     <option value="">Choose a template...</option>
                     @foreach (var t in Model.TemplateOptions)
                     {
@@ -74,14 +74,14 @@
 
         <div x-show="selectedTemplate && selectedTemplate.headerFormat === 'TEXT' && selectedTemplate.headerParamsCount > 0" class="grid grid-cols-2 gap-3">
             <select name="HeaderParams[0].Source" asp-items="@(paramSourceOptions.Select(o => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(o.Label, o.Value)))"
-                    class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                    class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
             <input name="HeaderParams[0].StaticValue" value="@Model.HeaderParams[0]?.StaticValue" placeholder="Static value (used if source = Static text)"
-                   class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                   class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
 
         <div x-show="selectedTemplate && ['IMAGE','DOCUMENT','VIDEO'].includes(selectedTemplate.headerFormat)">
             <label asp-for="HeaderMediaUrl" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Header media URL</label>
-            <input asp-for="HeaderMediaUrl" placeholder="https://..." class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input asp-for="HeaderMediaUrl" placeholder="https://..." class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
             <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">A publicly reachable image/document/video URL — same one used for every recipient.</p>
         </div>
     </div>
@@ -95,9 +95,9 @@
         {
             <div x-show="selectedTemplate && @i < selectedTemplate.bodyParamsCount" class="grid grid-cols-2 gap-3">
                 <select name="BodyParams[@i].Source" asp-items="@(paramSourceOptions.Select(o => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem(o.Label, o.Value)))"
-                        class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></select>
+                        class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
                 <input name="BodyParams[@i].StaticValue" value="@Model.BodyParams[i]?.StaticValue" placeholder="{{@(i + 1)}} static value"
-                       class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+                       class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
             </div>
         }
     </div>
@@ -105,20 +105,20 @@
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Recipients</h2>
         <label class="inline-flex items-center gap-2">
-            <input type="checkbox" asp-for="SelectAll" x-model="selectAll" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+            <input type="checkbox" asp-for="SelectAll" x-model="selectAll" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
             <span class="text-sm text-gray-700 dark:text-slate-300">All matching contacts of the selected recipient type</span>
         </label>
 
         <div x-show="selectAll" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <label asp-for="FilterStatusId" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Status filter (optional)</label>
-                <select asp-for="FilterStatusId" asp-items="Model.StatusOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select asp-for="FilterStatusId" asp-items="Model.StatusOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                     <option value="">Any status</option>
                 </select>
             </div>
             <div>
                 <label asp-for="FilterSourceId" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Source filter (optional)</label>
-                <select asp-for="FilterSourceId" asp-items="Model.SourceOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <select asp-for="FilterSourceId" asp-items="Model.SourceOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
                     <option value="">Any source</option>
                 </select>
             </div>
@@ -139,18 +139,18 @@
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Schedule</h2>
         <label class="inline-flex items-center gap-2">
-            <input type="checkbox" asp-for="SendNow" x-model="sendNow" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" />
+            <input type="checkbox" asp-for="SendNow" x-model="sendNow" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
             <span class="text-sm text-gray-700 dark:text-slate-300">Send as soon as it's saved</span>
         </label>
         <div x-show="!sendNow" x-cloak>
             <label asp-for="ScheduledSendTime" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-            <input asp-for="ScheduledSendTime" type="datetime-local" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
+            <input asp-for="ScheduledSendTime" type="datetime-local" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
             <span asp-validation-for="ScheduledSendTime" class="text-sm text-red-600"></span>
         </div>
     </div>
 
     <div class="flex gap-3">
-        <button type="submit" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">Save Campaign</button>
+        <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save Campaign</button>
         <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
     </div>
 </form>

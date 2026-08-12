@@ -14,7 +14,7 @@
         <a asp-action="Import" class="inline-flex items-center px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">
             Import CSV
         </a>
-        <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">
+        <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
             + Add Contact
         </a>
     </div>
@@ -22,15 +22,15 @@
 
 <form method="get" class="mb-4 flex flex-wrap gap-3">
     <input type="text" name="search" value="@ViewData["Search"]" placeholder="Search name, phone, email..."
-           class="w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" />
-    <select name="statusId" onchange="this.form.submit()" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+           class="w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+    <select name="statusId" onchange="this.form.submit()" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
         <option value="">All statuses</option>
         @foreach (var opt in statusOptions)
         {
             <option value="@opt.Value" selected="@(ViewData["StatusId"]?.ToString() == opt.Value)">@opt.Text</option>
         }
     </select>
-    <select name="sourceId" onchange="this.form.submit()" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+    <select name="sourceId" onchange="this.form.submit()" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
         <option value="">All sources</option>
         @foreach (var opt in sourceOptions)
         {
@@ -74,7 +74,7 @@
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@contact.Source.Name</td>
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(contact.AssignedTo?.FullName ?? "-")</td>
                     <td class="px-4 py-3 text-right text-sm space-x-3">
-                        <a asp-action="Save" asp-route-id="@contact.Id" class="text-indigo-600 hover:text-indigo-500">Edit</a>
+                        <a asp-action="Save" asp-route-id="@contact.Id" class="text-emerald-600 hover:text-emerald-500">Edit</a>
                         <button type="button" class="text-red-600 hover:text-red-500"
                                 x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = contact.Id })', message: 'Delete this contact?' })">
                             Delete

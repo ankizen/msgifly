@@ -37,7 +37,7 @@
 }
 
 .ts-dropdown [data-selectable].option{
-    @apply bg-white text-slate-900 dark:bg-slate-800 dark:text-white text-sm hover:bg-indigo-100 dark:hover:bg-indigo-400 !important;
+    @apply bg-white text-slate-900 dark:bg-slate-800 dark:text-white text-sm hover:bg-emerald-100 dark:hover:bg-emerald-400 !important;
 }
 
 ::-webkit-scrollbar {
