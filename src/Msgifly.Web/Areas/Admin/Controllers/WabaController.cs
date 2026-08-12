@@ -24,13 +24,20 @@ public class WabaController : Controller
 {
     private readonly ISettingsService _settingsService;
     private readonly IWhatsAppService _whatsAppService;
+    private readonly Services.WhatsApp.EmbeddedSignupService _embeddedSignupService;
     private readonly ApplicationDbContext _db;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public WabaController(ISettingsService settingsService, IWhatsAppService whatsAppService, ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
+    public WabaController(
+        ISettingsService settingsService,
+        IWhatsAppService whatsAppService,
+        Services.WhatsApp.EmbeddedSignupService embeddedSignupService,
+        ApplicationDbContext db,
+        ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _settingsService = settingsService;
         _whatsAppService = whatsAppService;
+        _embeddedSignupService = embeddedSignupService;
         _db = db;
         _workspaceAccessor = workspaceAccessor;
     }
@@ -50,6 +57,9 @@ public class WabaController : Controller
             IsAccountConnected = workspace.IsAccountConnected,
             WebhookUrl = $"{Request.Scheme}://{Request.Host}/whatsapp/webhook",
             WebhookVerifyToken = metaApp.WebhookVerifyToken,
+            FacebookAppId = metaApp.FacebookAppId,
+            EmbeddedSignupConfigId = metaApp.EmbeddedSignupConfigId,
+            ApiVersion = metaApp.ApiVersion,
             DefaultPhoneNumberId = workspace.DefaultPhoneNumberId,
             DefaultPhoneNumber = workspace.DefaultPhoneNumber,
         };
@@ -124,7 +134,8 @@ public class WabaController : Controller
         var settings = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
         settings.FacebookAppId = form.FacebookAppId;
         settings.FacebookAppSecret = form.FacebookAppSecret;
-        settings.WebhookVerifyToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        settings.EmbeddedSignupConfigId = string.IsNullOrWhiteSpace(form.EmbeddedSignupConfigId) ? settings.EmbeddedSignupConfigId : form.EmbeddedSignupConfigId.Trim();
+        settings.WebhookVerifyToken ??= Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         settings.IsWebhookConnected = true;
         await _settingsService.SaveAsync(nameof(MetaAppSettings), settings);
 
@@ -150,18 +161,66 @@ public class WabaController : Controller
         workspace.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
+        await FinalizeConnectionAsync(workspace, preferredPhoneNumberId: null);
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// Step 2 done via WhatsApp Embedded Signup instead of pasting a token manually: the frontend
+    /// FB.login() flow hands back an authorization code plus the WABA (and usually phone number)
+    /// id chosen inside the Facebook popup, delivered here as a plain form post from the hidden
+    /// form in Waba/Index.cshtml (see embedded-signup.js).
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CompleteEmbeddedSignup(EmbeddedSignupCompleteRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            this.Notify("The Facebook signup flow didn't return the expected data — try again.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var tokenResult = await _embeddedSignupService.ExchangeCodeForLongLivedTokenAsync(request.Code);
+        if (!tokenResult.Success)
+        {
+            this.Notify($"Couldn't complete signup: {tokenResult.ErrorMessage}", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var workspace = await CurrentWorkspaceAsync();
+        workspace.BusinessAccountId = request.WabaId;
+        workspace.AccessToken = tokenResult.Data;
+        workspace.ConnectionMethod = "embedded_signup";
+        workspace.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await FinalizeConnectionAsync(workspace, request.PhoneNumberId);
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Shared by both connection paths once a Workspace has a BusinessAccountId + AccessToken: verify it works, sync templates, subscribe the webhook, and pick a default sending number.</summary>
+    private async Task FinalizeConnectionAsync(Models.Entities.Workspace workspace, string? preferredPhoneNumberId)
+    {
         var phoneNumbers = await _whatsAppService.GetPhoneNumbersAsync();
         if (!phoneNumbers.Success)
         {
             this.Notify($"Couldn't connect: {phoneNumbers.ErrorMessage}", "danger");
-            return RedirectToAction(nameof(Index));
+            return;
         }
 
         var syncResult = await _whatsAppService.SyncTemplatesAsync();
         var subscribeResult = await _whatsAppService.SubscribeWebhookAsync();
 
         workspace.IsAccountConnected = true;
-        if (workspace.DefaultPhoneNumberId is null && phoneNumbers.Data!.Count > 0)
+        var preferred = preferredPhoneNumberId is null ? null : phoneNumbers.Data!.FirstOrDefault(p => p.Id == preferredPhoneNumberId);
+        if (preferred is not null)
+        {
+            workspace.DefaultPhoneNumberId = preferred.Id;
+            workspace.DefaultPhoneNumber = preferred.DisplayPhoneNumber;
+        }
+        else if (workspace.DefaultPhoneNumberId is null && phoneNumbers.Data!.Count > 0)
         {
             workspace.DefaultPhoneNumberId = phoneNumbers.Data![0].Id;
             workspace.DefaultPhoneNumber = phoneNumbers.Data![0].DisplayPhoneNumber;
@@ -177,7 +236,6 @@ public class WabaController : Controller
         }
 
         this.Notify(message, subscribeResult.Success && syncResult.Success ? "success" : "warning");
-        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]

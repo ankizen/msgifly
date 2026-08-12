@@ -73,6 +73,7 @@ builder.Services.AddHttpClient("AutomationWebhook", client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
+builder.Services.AddScoped<EmbeddedSignupService>();
 builder.Services.AddScoped<BotMatchingService>();
 builder.Services.AddScoped<AutomationEngine>();
 builder.Services.AddSignalR();

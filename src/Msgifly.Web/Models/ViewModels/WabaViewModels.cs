@@ -12,6 +12,20 @@ public class WabaWebhookFormViewModel
     [Required]
     [Display(Name = "Facebook App Secret")]
     public string FacebookAppSecret { get; set; } = string.Empty;
+
+    [Display(Name = "Embedded Signup configuration ID")]
+    public string? EmbeddedSignupConfigId { get; set; }
+}
+
+public class EmbeddedSignupCompleteRequest
+{
+    [Required]
+    public string Code { get; set; } = string.Empty;
+
+    [Required]
+    public string WabaId { get; set; } = string.Empty;
+
+    public string? PhoneNumberId { get; set; }
 }
 
 public class WabaAccountFormViewModel
@@ -50,6 +64,9 @@ public class WabaIndexViewModel
 
     public string WebhookUrl { get; set; } = string.Empty;
     public string? WebhookVerifyToken { get; set; }
+    public string? FacebookAppId { get; set; }
+    public string? EmbeddedSignupConfigId { get; set; }
+    public string ApiVersion { get; set; } = "v21.0";
 
     public List<PhoneNumberInfo> PhoneNumbers { get; set; } = [];
     public string? DefaultPhoneNumberId { get; set; }
