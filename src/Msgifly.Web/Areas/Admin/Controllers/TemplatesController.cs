@@ -76,6 +76,81 @@ public class TemplatesController : Controller
         return View(await PagedList<WhatsappTemplate>.CreateAsync(query, page, PageSize));
     }
 
+    /// <summary>
+    /// Sent/delivered/read/failed/clicked, combined across every way this template can go out —
+    /// Campaign sends (CampaignDetail, joined on Campaign.TemplateId) and everything else
+    /// (ChatMessage.TemplateName: single quick-sends, bot replies, automations, the public API).
+    /// Counts key off the existing Status/DeliveryStatus enums (works for data from before this
+    /// feature shipped too), not the newer per-stage timestamp columns, which are for the funnel
+    /// visualization the counts alone can't show — when a message actually reached each stage.
+    /// </summary>
+    [Authorize(Policy = "template.view")]
+    public async Task<IActionResult> Report(int id)
+    {
+        var template = await _db.WhatsappTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id);
+        if (template is null)
+        {
+            return NotFound();
+        }
+
+        var campaignCounts = await _db.CampaignDetails.AsNoTracking()
+            .Where(d => d.Campaign.TemplateId == template.MetaTemplateId)
+            .GroupBy(d => 1)
+            .Select(g => new
+            {
+                Sent = g.Count(d => d.Status == CampaignDetailStatus.Sent),
+                Delivered = g.Count(d => d.DeliveryStatus == MessageDeliveryStatus.Delivered || d.DeliveryStatus == MessageDeliveryStatus.Read),
+                Read = g.Count(d => d.DeliveryStatus == MessageDeliveryStatus.Read),
+                Failed = g.Count(d => d.Status == CampaignDetailStatus.Failed || d.DeliveryStatus == MessageDeliveryStatus.Failed),
+                Clicked = g.Count(d => d.Clicked),
+            })
+            .FirstOrDefaultAsync();
+
+        var chatCounts = await _db.ChatMessages.AsNoTracking()
+            .Where(m => m.TemplateName == template.TemplateName)
+            .GroupBy(m => 1)
+            .Select(g => new
+            {
+                Sent = g.Count(),
+                Delivered = g.Count(m => m.Status == MessageDeliveryStatus.Delivered || m.Status == MessageDeliveryStatus.Read),
+                Read = g.Count(m => m.Status == MessageDeliveryStatus.Read),
+                Failed = g.Count(m => m.Status == MessageDeliveryStatus.Failed),
+                Clicked = g.Count(m => m.Clicked),
+            })
+            .FirstOrDefaultAsync();
+
+        var campaignFailures = await _db.CampaignDetails.AsNoTracking()
+            .Where(d => d.Campaign.TemplateId == template.MetaTemplateId
+                && (d.Status == CampaignDetailStatus.Failed || d.DeliveryStatus == MessageDeliveryStatus.Failed)
+                && d.ResponseMessage != null)
+            .GroupBy(d => d.ResponseMessage)
+            .Select(g => new { Reason = g.Key!, Count = g.Count() })
+            .ToListAsync();
+
+        var chatFailures = await _db.ChatMessages.AsNoTracking()
+            .Where(m => m.TemplateName == template.TemplateName && m.Status == MessageDeliveryStatus.Failed && m.StatusDetail != null)
+            .GroupBy(m => m.StatusDetail)
+            .Select(g => new { Reason = g.Key!, Count = g.Count() })
+            .ToListAsync();
+
+        var model = new TemplateReportViewModel
+        {
+            TemplateId = template.Id,
+            TemplateName = template.TemplateName,
+            SentCount = (campaignCounts?.Sent ?? 0) + (chatCounts?.Sent ?? 0),
+            DeliveredCount = (campaignCounts?.Delivered ?? 0) + (chatCounts?.Delivered ?? 0),
+            ReadCount = (campaignCounts?.Read ?? 0) + (chatCounts?.Read ?? 0),
+            FailedCount = (campaignCounts?.Failed ?? 0) + (chatCounts?.Failed ?? 0),
+            ClickedCount = (campaignCounts?.Clicked ?? 0) + (chatCounts?.Clicked ?? 0),
+            FailureReasons = [.. campaignFailures.Concat(chatFailures)
+                .GroupBy(f => f.Reason)
+                .Select(g => new TemplateFailureReason(g.Key, g.Sum(x => x.Count)))
+                .OrderByDescending(f => f.Count)],
+        };
+
+        return View(model);
+    }
+
     [HttpPost]
     [Authorize(Policy = "template.load_template")]
     [ValidateAntiForgeryToken]

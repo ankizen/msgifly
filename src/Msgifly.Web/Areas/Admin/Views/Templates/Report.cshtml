@@ -1,0 +1,93 @@
+@model Msgifly.Web.Models.ViewModels.TemplateReportViewModel
+@{
+    ViewData["Title"] = $"Report — {Model.TemplateName}";
+    var funnelBase = Math.Max(Model.SentCount, 1);
+    int PercentOf(int count) => (int)Math.Round(count * 100.0 / funnelBase);
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.TemplateName</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Combined across every campaign, quick-send, bot reply, and automation that used this template.</p>
+    </div>
+    <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Back to Templates</a>
+</div>
+
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Sent</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.SentCount</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Delivered</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.DeliveredCount</p>
+        <p class="text-xs text-gray-400 dark:text-slate-500">@PercentOf(Model.DeliveredCount)% of sent</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Read</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.ReadCount</p>
+        <p class="text-xs text-gray-400 dark:text-slate-500">@PercentOf(Model.ReadCount)% of sent</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Button clicked</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.ClickedCount</p>
+        <p class="text-xs text-gray-400 dark:text-slate-500">@PercentOf(Model.ClickedCount)% of sent</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Failed</p>
+        <p class="text-2xl font-semibold text-red-600 dark:text-red-400">@Model.FailedCount</p>
+    </div>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 mb-6">
+    <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Delivery funnel</h2>
+    <div class="space-y-2">
+        @{
+            var stages = new (string Label, int Count, string Color)[]
+            {
+                ("Sent", Model.SentCount, "bg-gray-400 dark:bg-slate-500"),
+                ("Delivered", Model.DeliveredCount, "bg-blue-500"),
+                ("Read", Model.ReadCount, "bg-emerald-500"),
+                ("Clicked", Model.ClickedCount, "bg-purple-500"),
+            };
+        }
+        @foreach (var stage in stages)
+        {
+            <div class="flex items-center gap-3">
+                <span class="w-20 text-xs text-gray-500 dark:text-slate-400 flex-shrink-0">@stage.Label</span>
+                <div class="flex-1 h-5 rounded-full bg-gray-100 dark:bg-slate-900 overflow-hidden">
+                    <div class="h-full @stage.Color rounded-full" style="width: @(PercentOf(stage.Count))%"></div>
+                </div>
+                <span class="w-12 text-xs text-gray-700 dark:text-slate-300 text-right flex-shrink-0">@stage.Count</span>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+    <h2 class="text-base font-semibold text-gray-900 dark:text-white p-6 pb-3">Failure reasons</h2>
+    @if (Model.FailureReasons.Count == 0)
+    {
+        <p class="px-6 pb-6 text-sm text-gray-500 dark:text-slate-400">No failures recorded for this template.</p>
+    }
+    else
+    {
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+            <thead class="bg-gray-50 dark:bg-slate-900">
+                <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Reason</th>
+                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Count</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+                @foreach (var reason in Model.FailureReasons)
+                {
+                    <tr>
+                        <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@reason.Reason</td>
+                        <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400 text-right">@reason.Count</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
