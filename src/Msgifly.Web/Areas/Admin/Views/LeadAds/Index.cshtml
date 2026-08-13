@@ -42,10 +42,12 @@
     @if (isConnected)
     {
         var forms = (List<LeadAdsForm>)ViewData["Forms"]!;
+        var formImportCounts = (Dictionary<string, int>)ViewData["FormImportCounts"]!;
         <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
             <div class="p-6 pb-3">
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white">Instant Forms</h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">A Page can run many forms over time and not all stay active — turn on only the ones you want new leads pulled from.</p>
+                <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">A Page can run many forms over time and not all stay active — turn on only the ones you want new leads pulled from. Newest forms first.</p>
+                <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">Meta only keeps a lead's data for 90 days, so syncing regularly (every 10 minutes here) is what keeps it from being lost — not a setting to worry about.</p>
             </div>
             @if (forms.Count == 0)
             {
@@ -56,10 +58,21 @@
                 <ul class="divide-y divide-gray-200 dark:divide-slate-700">
                     @foreach (var form in forms)
                     {
+                        var syncedCount = formImportCounts.GetValueOrDefault(form.FormId, 0);
                         <li class="flex items-center justify-between px-6 py-3">
                             <div>
                                 <p class="text-sm font-medium text-gray-900 dark:text-slate-100">@form.FormName</p>
-                                <p class="text-xs text-gray-500 dark:text-slate-400">Status: @form.Status</p>
+                                <p class="text-xs text-gray-500 dark:text-slate-400">
+                                    Status: @form.Status
+                                    @if (form.FormCreatedTime.HasValue)
+                                    {
+                                        <text> &middot; Created @form.FormCreatedTime.Value.ToString("MMM d, yyyy")</text>
+                                    }
+                                    @if (syncedCount > 0)
+                                    {
+                                        <text> &middot; @syncedCount lead(s) already synced</text>
+                                    }
+                                </p>
                             </div>
                             <form asp-action="ToggleForm" asp-route-id="@form.Id" method="post">
                                 <button type="submit"

@@ -60,11 +60,16 @@ public class LeadAdsController : Controller
             .ToListAsync();
 
         var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
-        var forms = await _db.LeadAdsForms.OrderBy(f => f.FormName).ToListAsync();
+        var forms = await _db.LeadAdsForms.OrderByDescending(f => f.FormCreatedTime ?? f.CreatedAt).ToListAsync();
+        var formImportCounts = await _db.LeadAdsImports
+            .GroupBy(l => l.FormId)
+            .Select(g => new { FormId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.FormId, g => g.Count);
 
         ViewData["Workspace"] = workspace;
         ViewData["ImportedCount"] = importedCount;
         ViewData["RecentImports"] = recentImports;
+        ViewData["FormImportCounts"] = formImportCounts;
         ViewData["FacebookAppId"] = metaApp.FacebookAppId;
         ViewData["ApiVersion"] = metaApp.ApiVersion;
         ViewData["Forms"] = forms;

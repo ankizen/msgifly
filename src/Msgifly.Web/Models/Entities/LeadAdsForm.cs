@@ -16,6 +16,15 @@ public class LeadAdsForm
     public string FormName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public bool IsEnabled { get; set; }
+
+    /// <summary>When the form itself was created on Facebook (not when Msgifly discovered it) — used to sort the forms list newest-first.</summary>
+    public DateTime? FormCreatedTime { get; set; }
+
+    /// <summary>JSON-encoded List&lt;LeadFormQuestion&gt; — this form's question schema, fetched once
+    /// (published forms' questions don't change) and used to interpret each lead's field_data
+    /// reliably instead of guessing at key names.</summary>
+    public string? QuestionsJson { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

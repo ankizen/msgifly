@@ -54,7 +54,7 @@ public class MetaLeadAdsService
 
     public async Task<LeadAdsResult<List<LeadFormInfo>>> GetLeadFormsAsync(string pageId, string pageAccessToken)
     {
-        var response = await GetAsync(pageAccessToken, $"{pageId}/leadgen_forms?fields=id,name,status&limit=200");
+        var response = await GetAsync(pageAccessToken, $"{pageId}/leadgen_forms?fields=id,name,status,created_time&limit=200");
         if (!response.Success)
         {
             return LeadAdsResult<List<LeadFormInfo>>.Fail(response.ErrorMessage!);
@@ -73,10 +73,42 @@ public class MetaLeadAdsService
                 Id = item["id"]?.GetValue<string>() ?? string.Empty,
                 Name = item["name"]?.GetValue<string>() ?? string.Empty,
                 Status = item["status"]?.GetValue<string>() ?? string.Empty,
+                CreatedTime = item["created_time"]?.GetValue<DateTime>(),
             });
         }
 
         return LeadAdsResult<List<LeadFormInfo>>.Ok(forms);
+    }
+
+    /// <summary>The form's question schema (key/label/type per question) — fetched once per form
+    /// and cached locally (LeadAdsSyncJob.UpsertFormsAsync) since a published form's questions
+    /// don't change, and this is what lets a lead's field_data (keyed by arbitrary strings for
+    /// CUSTOM questions) get interpreted reliably instead of guessed at by key name.</summary>
+    public async Task<LeadAdsResult<List<LeadFormQuestion>>> GetFormQuestionsAsync(string formId, string pageAccessToken)
+    {
+        var response = await GetAsync(pageAccessToken, $"{formId}?fields=questions{{key,label,type}}");
+        if (!response.Success)
+        {
+            return LeadAdsResult<List<LeadFormQuestion>>.Fail(response.ErrorMessage!);
+        }
+
+        var questions = new List<LeadFormQuestion>();
+        foreach (var item in response.Data!["questions"]?.AsArray() ?? [])
+        {
+            if (item is null)
+            {
+                continue;
+            }
+
+            questions.Add(new LeadFormQuestion
+            {
+                Key = item["key"]?.GetValue<string>() ?? string.Empty,
+                Label = item["label"]?.GetValue<string>() ?? string.Empty,
+                Type = item["type"]?.GetValue<string>() ?? string.Empty,
+            });
+        }
+
+        return LeadAdsResult<List<LeadFormQuestion>>.Ok(questions);
     }
 
     /// <summary>Most-recent-first, capped at `limit` — LeadAdsSyncJob dedupes against LeadAdsImport rather than asking Meta to filter by time, so a modest fixed page size is enough to always cover what's arrived since the last poll.</summary>

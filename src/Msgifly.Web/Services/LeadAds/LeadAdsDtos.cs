@@ -26,6 +26,19 @@ public class LeadFormInfo
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public DateTime? CreatedTime { get; set; }
+}
+
+/// <summary>One question on a Lead Ads form's schema — Type is Meta's fixed PII enum (PHONE,
+/// EMAIL, FULL_NAME, CITY, CUSTOM, …) and Key is what actually shows up as the "name" in a lead's
+/// field_data. Standard question types get a predictable key (e.g. PHONE -> "phone_number"), but
+/// CUSTOM questions get an arbitrary one derived from the question text at creation time, which is
+/// exactly why leads need to be interpreted against this schema rather than fixed key names.</summary>
+public class LeadFormQuestion
+{
+    public string Key { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
 }
 
 public class LeadInfo
