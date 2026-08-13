@@ -94,5 +94,9 @@ public class CampaignDetailsViewModel
     public int FailedCount { get; set; }
     public int DeliveredCount { get; set; }
     public int ReadCount { get; set; }
+    public int ClickedCount { get; set; }
+    public int RepliedCount { get; set; }
+    public int NoResponseCount { get; set; }
+    public string? Segment { get; set; }
     public PagedList<CampaignDetail> Details { get; set; } = null!;
 }

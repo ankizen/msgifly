@@ -160,7 +160,7 @@ public class CampaignsController : Controller
     }
 
     [Authorize(Policy = "campaigns.show_campaign")]
-    public async Task<IActionResult> Details(int id, int page = 1)
+    public async Task<IActionResult> Details(int id, string? segment = null, int page = 1)
     {
         var campaign = await _db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
         if (campaign is null)
@@ -170,8 +170,19 @@ public class CampaignsController : Controller
 
         var detailsQuery = _db.CampaignDetails.AsNoTracking()
             .Include(d => d.Contact)
-            .Where(d => d.CampaignId == id)
-            .OrderByDescending(d => d.UpdatedAt);
+            .Where(d => d.CampaignId == id);
+
+        detailsQuery = segment switch
+        {
+            "read" => detailsQuery.Where(d => d.DeliveryStatus == MessageDeliveryStatus.Read),
+            "clicked" => detailsQuery.Where(d => d.Clicked),
+            "replied" => detailsQuery.Where(d => d.RepliedAt != null),
+            "no-response" => detailsQuery.Where(d => d.RepliedAt == null && !d.Clicked
+                && (d.DeliveryStatus == MessageDeliveryStatus.Sent || d.DeliveryStatus == MessageDeliveryStatus.Delivered)),
+            _ => detailsQuery,
+        };
+
+        detailsQuery = detailsQuery.OrderByDescending(d => d.UpdatedAt);
 
         var counts = await _db.CampaignDetails.AsNoTracking()
             .Where(d => d.CampaignId == id)
@@ -183,6 +194,10 @@ public class CampaignsController : Controller
                 Failed = g.Count(d => d.Status == CampaignDetailStatus.Failed),
                 Delivered = g.Count(d => d.DeliveryStatus == MessageDeliveryStatus.Delivered || d.DeliveryStatus == MessageDeliveryStatus.Read),
                 Read = g.Count(d => d.DeliveryStatus == MessageDeliveryStatus.Read),
+                Clicked = g.Count(d => d.Clicked),
+                Replied = g.Count(d => d.RepliedAt != null),
+                NoResponse = g.Count(d => d.RepliedAt == null && !d.Clicked
+                    && (d.DeliveryStatus == MessageDeliveryStatus.Sent || d.DeliveryStatus == MessageDeliveryStatus.Delivered)),
             })
             .FirstOrDefaultAsync();
 
@@ -197,10 +212,70 @@ public class CampaignsController : Controller
             FailedCount = counts?.Failed ?? 0,
             DeliveredCount = counts?.Delivered ?? 0,
             ReadCount = counts?.Read ?? 0,
+            ClickedCount = counts?.Clicked ?? 0,
+            RepliedCount = counts?.Replied ?? 0,
+            NoResponseCount = counts?.NoResponse ?? 0,
+            Segment = segment,
             Details = await PagedList<CampaignDetail>.CreateAsync(detailsQuery, page, PageSize),
         };
 
         return View(model);
+    }
+
+    /// <summary>
+    /// Snapshots the contacts matching a Details() segment (e.g. everyone who read or replied to
+    /// campaign X) into a new campaign's recipient list — a fixed list, not a live filter, since
+    /// "who engaged with campaign X" is a one-time fact that shouldn't silently drift if a
+    /// contact's other fields change later. Reuses the existing New Campaign form/flow rather
+    /// than a second send pipeline.
+    /// </summary>
+    [Authorize(Policy = "campaigns.create,campaigns.edit")]
+    public async Task<IActionResult> CreateFollowUp(int campaignId, string segment)
+    {
+        var campaign = await _db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.Id == campaignId);
+        if (campaign is null)
+        {
+            return NotFound();
+        }
+
+        var detailsQuery = _db.CampaignDetails.AsNoTracking().Where(d => d.CampaignId == campaignId && d.ContactId != null);
+        detailsQuery = segment switch
+        {
+            "read" => detailsQuery.Where(d => d.DeliveryStatus == MessageDeliveryStatus.Read),
+            "clicked" => detailsQuery.Where(d => d.Clicked),
+            "replied" => detailsQuery.Where(d => d.RepliedAt != null),
+            "no-response" => detailsQuery.Where(d => d.RepliedAt == null && !d.Clicked
+                && (d.DeliveryStatus == MessageDeliveryStatus.Sent || d.DeliveryStatus == MessageDeliveryStatus.Delivered)),
+            _ => detailsQuery.Where(d => false),
+        };
+
+        var contactIds = await detailsQuery.Select(d => d.ContactId!.Value).Distinct().ToListAsync();
+        if (contactIds.Count == 0)
+        {
+            this.Notify("No recipients in that segment to follow up with.", "warning");
+            return RedirectToAction(nameof(Details), new { id = campaignId, segment });
+        }
+
+        var segmentLabel = segment switch
+        {
+            "read" => "read",
+            "clicked" => "clicked",
+            "replied" => "replied",
+            "no-response" => "no response",
+            _ => segment,
+        };
+
+        var model = new CampaignFormViewModel
+        {
+            Name = $"{campaign.Name} — follow-up ({segmentLabel})",
+            RelType = campaign.RelType,
+            SelectAll = false,
+            SelectedContactIds = contactIds,
+        };
+
+        await PopulateOptionsAsync(model);
+        this.Notify($"{contactIds.Count} recipient(s) from \"{campaign.Name}\" ({segmentLabel}) pre-selected below — pick a template and send.");
+        return View(nameof(Save), model);
     }
 
     [HttpPost]
