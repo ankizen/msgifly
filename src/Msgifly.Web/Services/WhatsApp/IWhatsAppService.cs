@@ -94,4 +94,24 @@ public interface IWhatsAppService
 
     /// <summary>Overwrites both lists wholesale — Meta's endpoint takes commands+prompts together in one call, not an append.</summary>
     Task<WhatsAppResult> UpdateConversationalAutomationAsync(string phoneNumberId, List<string> prompts, List<CommandInfo> commands);
+
+    // ---- WhatsApp Flows (static flows only — see Models.Entities.Flow) ----
+
+    /// <summary>Pulls Meta's flows for the current WABA into the local Flow table (updateOrCreate). Returns the count synced.</summary>
+    Task<WhatsAppResult<List<FlowSummary>>> SyncFlowsAsync();
+
+    /// <summary>Creates a draft flow on Meta (name + categories only), then uploads the Flow JSON as its first asset. Returns Meta's flow id.</summary>
+    Task<WhatsAppResult<string>> CreateFlowAsync(string name, List<string> categories, string flowJson);
+
+    /// <summary>Re-uploads the Flow JSON asset for an existing (still-Draft) flow.</summary>
+    Task<WhatsAppResult> UpdateFlowJsonAsync(string metaFlowId, string flowJson);
+
+    /// <summary>Publishes a draft flow — irreversible on Meta's side; the Flow JSON can no longer be edited after this.</summary>
+    Task<WhatsAppResult> PublishFlowAsync(string metaFlowId);
+
+    /// <summary>Deletes a flow on Meta. Meta only allows this while still Draft.</summary>
+    Task<WhatsAppResult> DeleteFlowAsync(string metaFlowId);
+
+    /// <summary>Sends a session-initiated "flow" interactive message that opens the given published flow. flowToken should be unique per send (used to correlate the eventual nfm_reply).</summary>
+    Task<WhatsAppResult<string>> SendFlowMessageAsync(string toPhoneNumber, string metaFlowId, string flowToken, string bodyText, string ctaText, string firstScreenId, string? headerText = null, string? footerText = null);
 }

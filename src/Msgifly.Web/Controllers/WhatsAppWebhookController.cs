@@ -314,6 +314,13 @@ public class WhatsAppWebhookController : Controller
             _db.ChatMessages.Add(inboundMessage);
             await _db.SaveChangesAsync();
 
+            var flowResponseNote = ExtractFlowResponseNote(message);
+            if (flowResponseNote is not null && contact is not null)
+            {
+                _db.ContactNotes.Add(new ContactNote { ContactId = contact.Id, Description = flowResponseNote });
+                await _db.SaveChangesAsync();
+            }
+
             var contextMessageId = message["context"]?["id"]?.GetValue<string>();
             if (!string.IsNullOrEmpty(contextMessageId))
             {
@@ -638,12 +645,60 @@ public class WhatsAppWebhookController : Controller
         {
             "text" => message["text"]?["body"]?.GetValue<string>() ?? string.Empty,
             "button" => message["button"]?["text"]?.GetValue<string>() ?? string.Empty,
-            "interactive" => message["interactive"]?["button_reply"]?["title"]?.GetValue<string>()
-                ?? message["interactive"]?["list_reply"]?["title"]?.GetValue<string>()
-                ?? string.Empty,
+            "interactive" => message["interactive"]?["nfm_reply"] is not null
+                ? "Flow response received"
+                : message["interactive"]?["button_reply"]?["title"]?.GetValue<string>()
+                    ?? message["interactive"]?["list_reply"]?["title"]?.GetValue<string>()
+                    ?? string.Empty,
             "image" or "video" or "document" => message[type]?["caption"]?.GetValue<string>() ?? string.Empty,
             _ => string.Empty,
         };
     }
 
+    /// <summary>
+    /// A static WhatsApp Flow submission arrives through this same webhook as a normal inbound
+    /// message, type "interactive"/"nfm_reply" — nfm_reply.response_json is a JSON-ENCODED STRING
+    /// (not a nested object) holding the screen's field answers. Stored as a Contact note rather
+    /// than mapped onto dedicated fields, matching how Lead Ads' BuildAnswersNote already handles
+    /// unstructured form Q&amp;A with no fixed schema.
+    /// </summary>
+    private static string? ExtractFlowResponseNote(JsonNode message)
+    {
+        var nfmReply = message["interactive"]?["nfm_reply"];
+        var responseJson = nfmReply?["response_json"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(responseJson))
+        {
+            return null;
+        }
+
+        var flowName = nfmReply?["name"]?.GetValue<string>();
+        var lines = new List<string> { $"Flow response{(string.IsNullOrEmpty(flowName) ? "" : $" (\"{flowName}\")")}:" };
+
+        try
+        {
+            var answers = JsonNode.Parse(responseJson)?.AsObject();
+            if (answers is not null)
+            {
+                foreach (var (key, value) in answers)
+                {
+                    if (value is null)
+                    {
+                        continue;
+                    }
+
+                    var displayValue = value.GetValueKind() == System.Text.Json.JsonValueKind.String ? value.GetValue<string>() : value.ToJsonString();
+                    if (!string.IsNullOrWhiteSpace(displayValue))
+                    {
+                        lines.Add($"{key}: {displayValue}");
+                    }
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            lines.Add(responseJson);
+        }
+
+        return lines.Count > 1 ? string.Join('\n', lines) : null;
+    }
 }

@@ -1064,6 +1064,211 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult.Ok();
     }
 
+    public async Task<WhatsAppResult<List<FlowSummary>>> SyncFlowsAsync()
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.BusinessAccountId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<List<FlowSummary>>.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var response = await GetAsync(settings, $"{settings.BusinessAccountId}/flows?fields=id,name,categories,status&limit=200");
+        if (!response.Success)
+        {
+            return WhatsAppResult<List<FlowSummary>>.Fail(response.ErrorMessage!);
+        }
+
+        var summaries = new List<FlowSummary>();
+        var flowsArray = response.Data!["data"]?.AsArray();
+        if (flowsArray is not null)
+        {
+            foreach (var node in flowsArray)
+            {
+                if (node is null)
+                {
+                    continue;
+                }
+
+                var metaId = node["id"]?.GetValue<string>();
+                if (string.IsNullOrEmpty(metaId))
+                {
+                    continue;
+                }
+
+                summaries.Add(new FlowSummary
+                {
+                    MetaFlowId = metaId,
+                    Name = node["name"]?.GetValue<string>() ?? string.Empty,
+                    Categories = node["categories"]?.AsArray().Select(c => c?.GetValue<string>()).Where(c => !string.IsNullOrEmpty(c)).Select(c => c!).ToList() ?? [],
+                    Status = node["status"]?.GetValue<string>() ?? "DRAFT",
+                });
+            }
+        }
+
+        foreach (var summary in summaries)
+        {
+            var existing = await _db.Flows.FirstOrDefaultAsync(f => f.MetaFlowId == summary.MetaFlowId);
+            var status = summary.Status.Equals("PUBLISHED", StringComparison.OrdinalIgnoreCase) ? Models.Enums.FlowStatus.Published
+                : summary.Status.Equals("DEPRECATED", StringComparison.OrdinalIgnoreCase) ? Models.Enums.FlowStatus.Deprecated
+                : Models.Enums.FlowStatus.Draft;
+
+            if (existing is null)
+            {
+                _db.Flows.Add(new Models.Entities.Flow
+                {
+                    WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
+                    MetaFlowId = summary.MetaFlowId,
+                    Name = summary.Name,
+                    CategoriesJson = JsonSerializer.Serialize(summary.Categories),
+                    Status = status,
+                });
+            }
+            else
+            {
+                existing.Name = summary.Name;
+                existing.CategoriesJson = JsonSerializer.Serialize(summary.Categories);
+                existing.Status = status;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        await _db.SaveChangesAsync();
+        return WhatsAppResult<List<FlowSummary>>.Ok(summaries);
+    }
+
+    public async Task<WhatsAppResult<string>> CreateFlowAsync(string name, List<string> categories, string flowJson)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.BusinessAccountId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<string>.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var client = CreateClient(settings);
+        var createResponse = await client.PostAsJsonAsync($"{settings.BusinessAccountId}/flows", new { name, categories });
+        if (!createResponse.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(createResponse));
+        }
+
+        var createBody = await createResponse.Content.ReadFromJsonAsync<JsonObject>();
+        var metaFlowId = createBody?["id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(metaFlowId))
+        {
+            return WhatsAppResult<string>.Fail("Meta accepted the flow but returned no id.");
+        }
+
+        var assetResult = await UploadFlowAssetAsync(client, metaFlowId, flowJson);
+        if (!assetResult.Success)
+        {
+            // The flow shell now exists on Meta even though the JSON upload failed — surface both
+            // the id (so it can still be found via Sync) and the asset error.
+            return WhatsAppResult<string>.Fail($"Flow created ({metaFlowId}) but the layout upload failed: {assetResult.ErrorMessage}");
+        }
+
+        return WhatsAppResult<string>.Ok(metaFlowId);
+    }
+
+    public async Task<WhatsAppResult> UpdateFlowJsonAsync(string metaFlowId, string flowJson)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var client = CreateClient(settings);
+        return await UploadFlowAssetAsync(client, metaFlowId, flowJson);
+    }
+
+    private static async Task<WhatsAppResult> UploadFlowAssetAsync(HttpClient client, string metaFlowId, string flowJson)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent("FLOW_JSON"), "asset_type");
+        content.Add(new StringContent("flow.json"), "name");
+
+        using var jsonContent = new StringContent(flowJson);
+        jsonContent.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        content.Add(jsonContent, "file", "flow.json");
+
+        var response = await client.PostAsync($"{metaFlowId}/assets", content);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    public async Task<WhatsAppResult> PublishFlowAsync(string metaFlowId)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var client = CreateClient(settings);
+        var response = await client.PostAsync($"{metaFlowId}/publish", content: null);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    public async Task<WhatsAppResult> DeleteFlowAsync(string metaFlowId)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var client = CreateClient(settings);
+        var response = await client.DeleteAsync(metaFlowId);
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
+    public async Task<WhatsAppResult<string>> SendFlowMessageAsync(
+        string toPhoneNumber, string metaFlowId, string flowToken, string bodyText, string ctaText, string firstScreenId, string? headerText = null, string? footerText = null)
+    {
+        var interactive = new Dictionary<string, object?>
+        {
+            ["type"] = "flow",
+            ["header"] = headerText is null ? null : new { type = "text", text = headerText },
+            ["body"] = new { text = bodyText },
+            ["footer"] = footerText is null ? null : new { text = footerText },
+            ["action"] = new
+            {
+                name = "flow",
+                parameters = new
+                {
+                    flow_message_version = "3",
+                    flow_token = flowToken,
+                    flow_id = metaFlowId,
+                    flow_cta = ctaText,
+                    flow_action = "navigate",
+                    flow_action_payload = new { screen = firstScreenId },
+                },
+            },
+        };
+
+        return await PostMessageAsync(new
+        {
+            messaging_product = "whatsapp",
+            to = toPhoneNumber,
+            type = "interactive",
+            interactive,
+        });
+    }
+
     private HttpClient CreateClient(ResolvedWhatsAppSettings settings)
     {
         var client = _httpClientFactory.CreateClient("GraphApi");

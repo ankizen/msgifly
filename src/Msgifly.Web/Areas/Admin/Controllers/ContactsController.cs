@@ -93,6 +93,11 @@ public class ContactsController : Controller
             .OrderBy(t => t.TemplateName)
             .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText))
             .ToListAsync();
+        ViewData["FlowOptions"] = await _db.Flows.AsNoTracking()
+            .Where(f => f.Status == FlowStatus.Published && f.MetaFlowId != null)
+            .OrderBy(f => f.Name)
+            .Select(f => new FlowOption(f.MetaFlowId!, f.Name))
+            .ToListAsync();
 
         return View(await PagedList<Contact>.CreateAsync(query, page, effectivePageSize));
     }
@@ -172,6 +177,100 @@ public class ContactsController : Controller
 
         this.Notify($"Template sent to {contact.FullName}.");
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// The "Send Flow" quick action on the Contacts list — mirrors SendTemplate above, but for a
+    /// published WhatsApp Flow. flow_token is a fresh guid per send purely to correlate the
+    /// eventual nfm_reply back to who it was sent to; the actual answers are recorded when that
+    /// reply lands, not here.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendFlow(int contactId, string flowId)
+    {
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Id == contactId);
+        if (contact is null)
+        {
+            return NotFound();
+        }
+
+        var flow = await _db.Flows.FirstOrDefaultAsync(f => f.MetaFlowId == flowId && f.Status == FlowStatus.Published);
+        if (flow is null)
+        {
+            this.Notify("Choose a published flow.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var firstScreenId = FirstScreenId(flow.FlowJson);
+        if (firstScreenId is null)
+        {
+            this.Notify("Couldn't determine the flow's first screen — check its JSON.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var flowToken = Guid.NewGuid().ToString("N");
+        var result = await _whatsAppService.SendFlowMessageAsync(contact.Phone, flow.MetaFlowId!, flowToken, $"Please fill out {flow.Name}", "Start", firstScreenId);
+        if (!result.Success)
+        {
+            this.Notify($"Couldn't send: {result.ErrorMessage}", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == contact.Phone);
+        if (chat is null)
+        {
+            chat = new Chat { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value, ReceiverId = contact.Phone, Name = contact.FullName };
+            _db.Chats.Add(chat);
+        }
+
+        chat.Name = chat.Name == contact.Phone ? contact.FullName : chat.Name;
+        chat.LastMessage = Truncate($"Flow: {flow.Name}", 80);
+        chat.LastMessageTime = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _db.ChatMessages.Add(new ChatMessage
+        {
+            ChatId = chat.Id,
+            SenderId = chat.WaNoId ?? "agent",
+            Message = $"Flow: {flow.Name}",
+            MessageType = "text",
+            WhatsappMessageId = result.Data,
+            StaffId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null,
+            Status = MessageDeliveryStatus.Sent,
+            SentAt = DateTime.UtcNow,
+            TimeSent = DateTime.UtcNow,
+            IsRead = true,
+        });
+        await _db.SaveChangesAsync();
+
+        this.Notify($"Flow sent to {contact.FullName}.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    private static string? FirstScreenId(string flowJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(flowJson);
+            var screens = doc.RootElement.GetProperty("screens");
+            foreach (var screen in screens.EnumerateArray())
+            {
+                if (screen.TryGetProperty("id", out var idProp))
+                {
+                    return idProp.GetString();
+                }
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+        catch (KeyNotFoundException)
+        {
+        }
+
+        return null;
     }
 
     private static string Truncate(string text, int maxLength) =>

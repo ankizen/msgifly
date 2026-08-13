@@ -1,0 +1,84 @@
+@model List<Msgifly.Web.Models.Entities.Flow>
+@{
+    ViewData["Title"] = "Flows";
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">WhatsApp Flows</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Multi-screen native forms rendered inside WhatsApp itself — lead capture, bookings, surveys.</p>
+    </div>
+    <div class="flex items-center gap-2">
+        <form asp-action="Sync" method="post">
+            <button type="submit" class="inline-flex items-center px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">
+                Sync from Meta
+            </button>
+        </form>
+        <a asp-action="Create" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+            + New Flow
+        </a>
+    </div>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Category</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Any())
+            {
+                <tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">
+                    No flows yet — sync from Meta, or create one.
+                </td></tr>
+            }
+            @foreach (var flow in Model)
+            {
+                var categories = System.Text.Json.JsonSerializer.Deserialize<List<string>>(flow.CategoriesJson) ?? [];
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">
+                        @flow.Name
+                        @if (!string.IsNullOrEmpty(flow.SubmissionError))
+                        {
+                            <div class="text-xs text-red-500" title="@flow.SubmissionError">@flow.SubmissionError</div>
+                        }
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@string.Join(", ", categories)</td>
+                    <td class="px-4 py-3 text-sm">
+                        @{
+                            var badgeClass = flow.Status switch
+                            {
+                                Msgifly.Web.Models.Enums.FlowStatus.Published => "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300",
+                                Msgifly.Web.Models.Enums.FlowStatus.Deprecated => "bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300",
+                                _ => "bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300",
+                            };
+                        }
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium @badgeClass">@flow.Status</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
+                        @if (flow.Status == Msgifly.Web.Models.Enums.FlowStatus.Draft)
+                        {
+                            <a asp-action="Edit" asp-route-id="@flow.Id" class="text-emerald-600 hover:text-emerald-500 mr-3">Edit</a>
+                            @if (!string.IsNullOrEmpty(flow.MetaFlowId))
+                            {
+                                <form asp-action="Publish" asp-route-id="@flow.Id" method="post" class="inline mr-3"
+                                      onsubmit="return confirm('Publish &quot;@flow.Name&quot;? This locks the layout from further edits.');">
+                                    <button type="submit" class="text-emerald-600 hover:text-emerald-500">Publish</button>
+                                </form>
+                            }
+                        }
+                        <form asp-action="Delete" asp-route-id="@flow.Id" method="post" class="inline"
+                              onsubmit="return confirm('Delete &quot;@flow.Name&quot;? This also removes it on Meta if it was submitted.');">
+                            <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

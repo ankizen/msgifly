@@ -162,6 +162,15 @@ public class TemplateSampleValues
     public List<string> Body { get; set; } = [];
 }
 
+/// <summary>One Flow as listed by GET /{WABA_ID}/flows — used by SyncFlowsAsync to upsert local rows.</summary>
+public class FlowSummary
+{
+    public string MetaFlowId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public List<string> Categories { get; set; } = [];
+    public string Status { get; set; } = string.Empty;
+}
+
 /// <summary>Everything needed to create or edit a template on Meta — the local-authoring equivalent of TemplateSendRequest.</summary>
 public class TemplateCreateRequest
 {

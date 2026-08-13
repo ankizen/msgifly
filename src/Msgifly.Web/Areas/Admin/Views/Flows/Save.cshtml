@@ -1,0 +1,69 @@
+@model Msgifly.Web.Models.ViewModels.FlowFormViewModel
+@{
+    var isEdit = Model.Id.HasValue;
+    ViewData["Title"] = isEdit ? "Edit Flow" : "New Flow";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
+        Paste the Flow JSON document (screens, components, navigation) — build it visually in
+        Meta's own Flow Builder inside WhatsApp Manager, then paste the exported JSON here.
+        @if (isEdit)
+        {
+            <text>Only Draft flows can be edited; publishing locks the layout on Meta's side.</text>
+        }
+    </p>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+@if (isEdit && !string.IsNullOrEmpty(Model.SubmissionError))
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <strong>Meta's error:</strong> @Model.SubmissionError
+    </div>
+}
+
+<form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@Model.Id" method="post" class="max-w-3xl space-y-6">
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" placeholder="Book an appointment"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <span asp-validation-for="Name" class="mt-1 block text-sm text-red-600"></span>
+        </div>
+        <div>
+            <label asp-for="Category" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <select asp-for="Category" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                <option value="SIGN_UP">Sign up</option>
+                <option value="SIGN_IN">Sign in</option>
+                <option value="APPOINTMENT_BOOKING">Appointment booking</option>
+                <option value="LEAD_GENERATION">Lead generation</option>
+                <option value="CONTACT_US">Contact us</option>
+                <option value="CUSTOMER_SUPPORT">Customer support</option>
+                <option value="SURVEY">Survey</option>
+                <option value="OTHER" selected>Other</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <label asp-for="FlowJson" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+        <textarea asp-for="FlowJson" rows="20" spellcheck="false" placeholder='{"version": "7.1", "screens": [...]}'
+                  class="mt-1 block w-full font-mono text-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea>
+        <span asp-validation-for="FlowJson" class="mt-1 block text-sm text-red-600"></span>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+            @(isEdit ? "Save changes" : "Create flow")
+        </button>
+        <a asp-action="Index" class="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</a>
+    </div>
+</form>

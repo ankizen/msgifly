@@ -67,6 +67,9 @@ public record TemplateOption(
     string? FooterText = null,
     string? ButtonsJson = null);
 
+/// <summary>A published Flow, for the "Send Flow" quick action on the Contacts list.</summary>
+public record FlowOption(string MetaFlowId, string Name);
+
 public record ContactOption(int Id, string Label);
 
 public class CampaignListItem
