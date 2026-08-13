@@ -247,6 +247,12 @@ public class WhatsAppWebhookController : Controller
             _db.ChatMessages.Add(inboundMessage);
             await _db.SaveChangesAsync();
 
+            var contextMessageId = message["context"]?["id"]?.GetValue<string>();
+            if (!string.IsNullOrEmpty(contextMessageId))
+            {
+                await ProcessReplyAttributionAsync(contextMessageId, messageType, message);
+            }
+
             await BroadcastMessageAsync(chat, inboundMessage);
 
             if (!chat.IsBotsStopped && !chat.IsBlocked && contact is not null)
@@ -264,6 +270,56 @@ public class WhatsAppWebhookController : Controller
     private static string? ExtractInteractiveReplyId(JsonNode message) =>
         message["interactive"]?["button_reply"]?["id"]?.GetValue<string>()
         ?? message["interactive"]?["list_reply"]?["id"]?.GetValue<string>();
+
+    /// <summary>
+    /// Meta stamps context.id on any inbound message that's a reply to a specific prior send —
+    /// a tapped template quick-reply button (type "button"), a tapped interactive button/list
+    /// (type "interactive"), or a plain quoted text reply alike. Correlating that back to the
+    /// outbound ChatMessage/CampaignDetail row is what powers per-template click counts and
+    /// campaign "who engaged" re-targeting — both need the same context.id lookup, so it's done
+    /// once here rather than duplicated per feature.
+    /// </summary>
+    private async Task ProcessReplyAttributionAsync(string contextMessageId, string messageType, JsonNode message)
+    {
+        var buttonText = messageType switch
+        {
+            "button" => message["button"]?["text"]?.GetValue<string>(),
+            "interactive" => message["interactive"]?["button_reply"]?["title"]?.GetValue<string>()
+                ?? message["interactive"]?["list_reply"]?["title"]?.GetValue<string>(),
+            _ => null,
+        };
+        var isClick = buttonText is not null;
+        var timestamp = DateTime.UtcNow;
+        var changed = false;
+
+        var repliedToChatMessage = await _db.ChatMessages.FirstOrDefaultAsync(m => m.WhatsappMessageId == contextMessageId);
+        if (repliedToChatMessage is not null && isClick)
+        {
+            repliedToChatMessage.Clicked = true;
+            repliedToChatMessage.ClickedButtonText = buttonText;
+            repliedToChatMessage.UpdatedAt = timestamp;
+            changed = true;
+        }
+
+        var repliedToDetail = await _db.CampaignDetails.FirstOrDefaultAsync(d => d.WhatsappMessageId == contextMessageId);
+        if (repliedToDetail is not null)
+        {
+            repliedToDetail.RepliedAt ??= timestamp; // a button tap counts as engagement too, not just free-text replies.
+            if (isClick)
+            {
+                repliedToDetail.Clicked = true;
+                repliedToDetail.ClickedButtonText = buttonText;
+            }
+
+            repliedToDetail.UpdatedAt = timestamp;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await _db.SaveChangesAsync();
+        }
+    }
 
     private async Task FireAutomationsAsync(Chat chat, Contact? contact, string messageText, bool isFirstMessage, string? interactiveReplyId)
     {
