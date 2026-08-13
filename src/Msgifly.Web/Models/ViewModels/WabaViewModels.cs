@@ -69,6 +69,27 @@ public class BusinessProfileFormViewModel
     public string? Vertical { get; set; }
 }
 
+/// <summary>Fixed-size slots for model binding, same pattern as Campaign's body-param inputs —
+/// Meta allows up to 4 prompts / 30 commands, but this keeps the form a fixed, simple shape rather
+/// than needing dynamic client-side add/remove-row JS. Blank slots are dropped on submit.</summary>
+public class ConversationalAutomationFormViewModel
+{
+    public const int MaxPrompts = 4;
+    public const int MaxCommands = 10;
+
+    public string?[] Prompts { get; set; } = new string?[MaxPrompts];
+    public CommandInputViewModel[] Commands { get; set; } = Enumerable.Range(0, MaxCommands).Select(_ => new CommandInputViewModel()).ToArray();
+}
+
+public class CommandInputViewModel
+{
+    [MaxLength(32)]
+    public string? Name { get; set; }
+
+    [MaxLength(256)]
+    public string? Description { get; set; }
+}
+
 public class WabaIndexViewModel
 {
     public bool IsWebhookConnected { get; set; }
@@ -89,4 +110,5 @@ public class WabaIndexViewModel
     public WabaWebhookFormViewModel WebhookForm { get; set; } = new();
     public WabaAccountFormViewModel AccountForm { get; set; } = new();
     public BusinessProfileFormViewModel ProfileForm { get; set; } = new();
+    public ConversationalAutomationFormViewModel ConversationalAutomationForm { get; set; } = new();
 }

@@ -247,6 +247,44 @@ else
                     </p>
                 </div>
             </div>
+
+            <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+                <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">Ice Breakers &amp; Commands</h2>
+                <p class="text-sm text-gray-500 dark:text-slate-400 mb-4">
+                    Ice breakers are tap-to-send prompts shown only in a brand-new chat. Commands appear when a customer types "/" — like a quick menu.
+                    Tapping either just sends the text as a normal message on their end; there's no way to tell it apart from them typing it themselves.
+                </p>
+                <form asp-action="UpdateConversationalAutomation" method="post" class="space-y-5">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Ice breakers <span class="text-xs text-gray-400 dark:text-slate-500">(up to 4, no emoji)</span></h3>
+                        <div class="space-y-2">
+                            @for (var i = 0; i < ConversationalAutomationFormViewModel.MaxPrompts; i++)
+                            {
+                                <input name="ConversationalAutomationForm.Prompts[@i]" value="@Model.ConversationalAutomationForm.Prompts[i]" maxlength="80"
+                                       placeholder="e.g. What are your prices?"
+                                       class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                            }
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Commands <span class="text-xs text-gray-400 dark:text-slate-500">(name + what it does)</span></h3>
+                        <div class="space-y-2">
+                            @for (var i = 0; i < ConversationalAutomationFormViewModel.MaxCommands; i++)
+                            {
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <input name="ConversationalAutomationForm.Commands[@i].Name" value="@Model.ConversationalAutomationForm.Commands[i].Name" maxlength="32"
+                                           placeholder="pricing" class="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                                    <input name="ConversationalAutomationForm.Commands[@i].Description" value="@Model.ConversationalAutomationForm.Commands[i].Description" maxlength="256"
+                                           placeholder="See our price list" class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
+                </form>
+            </div>
         </div>
 
         <div class="space-y-6">

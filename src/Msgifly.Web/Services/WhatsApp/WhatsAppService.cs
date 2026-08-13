@@ -1017,6 +1017,53 @@ public class WhatsAppService : IWhatsAppService
         };
     }
 
+    public async Task<WhatsAppResult<ConversationalAutomationInfo>> GetConversationalAutomationAsync(string phoneNumberId)
+    {
+        var settings = await GetSettingsAsync();
+        var response = await GetAsync(settings, $"{phoneNumberId}?fields=conversational_automation");
+        if (!response.Success)
+        {
+            return WhatsAppResult<ConversationalAutomationInfo>.Fail(response.ErrorMessage!);
+        }
+
+        var node = response.Data!["conversational_automation"];
+        var info = new ConversationalAutomationInfo
+        {
+            Prompts = node?["prompts"]?.AsArray()
+                .Select(p => p?.GetValue<string>())
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Select(p => p!)
+                .ToList() ?? [],
+            Commands = node?["commands"]?.AsArray()
+                .Where(c => c is not null)
+                .Select(c => new CommandInfo
+                {
+                    CommandName = c!["command_name"]?.GetValue<string>() ?? string.Empty,
+                    CommandDescription = c["command_description"]?.GetValue<string>() ?? string.Empty,
+                })
+                .ToList() ?? [],
+        };
+
+        return WhatsAppResult<ConversationalAutomationInfo>.Ok(info);
+    }
+
+    public async Task<WhatsAppResult> UpdateConversationalAutomationAsync(string phoneNumberId, List<string> prompts, List<CommandInfo> commands)
+    {
+        var settings = await GetSettingsAsync();
+        var commandsJson = JsonSerializer.Serialize(commands.Select(c => new { command_name = c.CommandName, command_description = c.CommandDescription }));
+        var promptsJson = JsonSerializer.Serialize(prompts);
+
+        var client = CreateClient(settings);
+        var query = $"{phoneNumberId}/conversational_automation?commands={Uri.EscapeDataString(commandsJson)}&prompts={Uri.EscapeDataString(promptsJson)}";
+        var response = await client.PostAsync(query, content: null);
+        if (!response.IsSuccessStatusCode)
+        {
+            return WhatsAppResult.Fail(await ExtractErrorAsync(response));
+        }
+
+        return WhatsAppResult.Ok();
+    }
+
     private HttpClient CreateClient(ResolvedWhatsAppSettings settings)
     {
         var client = _httpClientFactory.CreateClient("GraphApi");

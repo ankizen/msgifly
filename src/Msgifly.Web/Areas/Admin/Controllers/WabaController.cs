@@ -93,6 +93,27 @@ public class WabaController : Controller
                         Vertical = profile.Data.Vertical,
                     };
                 }
+
+                var conversationalAutomation = await _whatsAppService.GetConversationalAutomationAsync(workspace.DefaultPhoneNumberId);
+                if (conversationalAutomation.Success)
+                {
+                    var form = new ConversationalAutomationFormViewModel();
+                    for (var i = 0; i < form.Prompts.Length && i < conversationalAutomation.Data!.Prompts.Count; i++)
+                    {
+                        form.Prompts[i] = conversationalAutomation.Data.Prompts[i];
+                    }
+
+                    for (var i = 0; i < form.Commands.Length && i < conversationalAutomation.Data!.Commands.Count; i++)
+                    {
+                        form.Commands[i] = new CommandInputViewModel
+                        {
+                            Name = conversationalAutomation.Data.Commands[i].CommandName,
+                            Description = conversationalAutomation.Data.Commands[i].CommandDescription,
+                        };
+                    }
+
+                    model.ConversationalAutomationForm = form;
+                }
             }
         }
 
@@ -123,6 +144,29 @@ public class WabaController : Controller
         });
 
         this.Notify(result.Success ? "Business profile updated." : $"Couldn't update profile: {result.ErrorMessage}", result.Success ? "success" : "danger");
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateConversationalAutomation([Bind(Prefix = "ConversationalAutomationForm")] ConversationalAutomationFormViewModel form)
+    {
+        var workspace = await CurrentWorkspaceAsync();
+        if (string.IsNullOrWhiteSpace(workspace.DefaultPhoneNumberId))
+        {
+            this.Notify("Choose a default number first.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var prompts = form.Prompts.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).ToList();
+        var commands = form.Commands
+            .Where(c => !string.IsNullOrWhiteSpace(c.Name))
+            .Select(c => new CommandInfo { CommandName = c.Name!.Trim(), CommandDescription = (c.Description ?? string.Empty).Trim() })
+            .ToList();
+
+        var result = await _whatsAppService.UpdateConversationalAutomationAsync(workspace.DefaultPhoneNumberId, prompts, commands);
+        this.Notify(result.Success ? "Ice breakers and commands updated." : $"Couldn't update: {result.ErrorMessage}", result.Success ? "success" : "danger");
         return RedirectToAction(nameof(Index));
     }
 

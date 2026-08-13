@@ -127,6 +127,22 @@ public class BusinessProfileUpdateRequest
     public string? Vertical { get; set; }
 }
 
+/// <summary>"Ice breakers" (prompts, max 4) shown only in a brand-new/empty chat, and a "/" commands
+/// menu (max 30) — Meta calls the combined feature "conversational automation." Tapping either one
+/// just sends a normal inbound text message; Meta gives no signal distinguishing that from the
+/// customer typing the same words themselves.</summary>
+public class ConversationalAutomationInfo
+{
+    public List<string> Prompts { get; set; } = [];
+    public List<CommandInfo> Commands { get; set; } = [];
+}
+
+public class CommandInfo
+{
+    public string CommandName { get; set; } = string.Empty;
+    public string CommandDescription { get; set; } = string.Empty;
+}
+
 /// <summary>QUICK_REPLY | URL | PHONE_NUMBER | COPY_CODE — see TemplateValidator for the per-type rules Meta enforces.</summary>
 public class TemplateButtonRequest
 {

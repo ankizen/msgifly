@@ -87,4 +87,11 @@ public interface IWhatsAppService
 
     /// <summary>Runs Meta's two-step Resumable Upload API against the current Meta App to get a photo handle for UpdateBusinessProfilePictureAsync.</summary>
     Task<WhatsAppResult<string>> UploadProfilePictureHandleAsync(Stream fileStream, string fileName, long fileLength, string mimeType);
+
+    // ---- Conversational automation (ice breakers + commands menu) ----
+
+    Task<WhatsAppResult<ConversationalAutomationInfo>> GetConversationalAutomationAsync(string phoneNumberId);
+
+    /// <summary>Overwrites both lists wholesale — Meta's endpoint takes commands+prompts together in one call, not an append.</summary>
+    Task<WhatsAppResult> UpdateConversationalAutomationAsync(string phoneNumberId, List<string> prompts, List<CommandInfo> commands);
 }
