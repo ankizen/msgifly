@@ -43,8 +43,8 @@ public interface IWhatsAppService
 
     // ---- Media API ----
 
-    /// <summary>Uploads a file to Meta's servers, returning a media_id usable in outbound messages (Graph API's /media endpoint requires this per-file upload; ids expire after ~30 days).</summary>
-    Task<WhatsAppResult<string>> UploadMediaAsync(Stream fileStream, string fileName, string mimeType);
+    /// <summary>Uploads a file to Meta's servers against the given phone number, returning a media_id usable in outbound messages or as a whatsapp_business_profile photo handle (Graph API's /media endpoint requires this per-file upload; ids expire after ~30 days).</summary>
+    Task<WhatsAppResult<string>> UploadMediaAsync(string phoneNumberId, Stream fileStream, string fileName, string mimeType);
 
     /// <summary>Resolves a media_id (from an inbound message, or one of ours) to a short-lived signed CDN URL + metadata.</summary>
     Task<WhatsAppResult<MediaInfo>> GetMediaInfoAsync(string mediaId);

@@ -85,8 +85,12 @@ public class WabaController : Controller
                     model.ProfileForm = new BusinessProfileFormViewModel
                     {
                         About = profile.Data!.About,
+                        Description = profile.Data.Description,
                         Email = profile.Data.Email,
-                        Website = profile.Data.Websites,
+                        Address = profile.Data.Address,
+                        Website = profile.Data.Website,
+                        Website2 = profile.Data.Website2,
+                        Vertical = profile.Data.Vertical,
                     };
                 }
             }
@@ -110,12 +114,54 @@ public class WabaController : Controller
         var result = await _whatsAppService.UpdateBusinessProfileAsync(workspace.DefaultPhoneNumberId, new BusinessProfileUpdateRequest
         {
             About = form.About,
+            Description = form.Description,
             Email = form.Email,
+            Address = form.Address,
             Website = form.Website,
+            Website2 = form.Website2,
             Vertical = form.Vertical,
         });
 
         this.Notify(result.Success ? "Business profile updated." : $"Couldn't update profile: {result.ErrorMessage}", result.Success ? "success" : "danger");
+        return RedirectToAction(nameof(Index));
+    }
+
+    private const long MaxProfilePictureBytes = 5 * 1024 * 1024; // Meta's own cap for whatsapp_business_profile photos
+
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadProfilePicture(IFormFile file)
+    {
+        var workspace = await CurrentWorkspaceAsync();
+        if (string.IsNullOrWhiteSpace(workspace.DefaultPhoneNumberId))
+        {
+            this.Notify("Choose a default number first.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            this.Notify("Choose an image to upload.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (file.Length > MaxProfilePictureBytes)
+        {
+            this.Notify("Image is larger than WhatsApp's 5 MB limit for profile photos.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var uploadResult = await _whatsAppService.UploadMediaAsync(workspace.DefaultPhoneNumberId, stream, file.FileName, file.ContentType);
+        if (!uploadResult.Success)
+        {
+            this.Notify($"Upload failed: {uploadResult.ErrorMessage}", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var result = await _whatsAppService.UpdateBusinessProfilePictureAsync(workspace.DefaultPhoneNumberId, uploadResult.Data!);
+        this.Notify(result.Success ? "Profile photo updated." : $"Couldn't set profile photo: {result.ErrorMessage}", result.Success ? "success" : "danger");
         return RedirectToAction(nameof(Index));
     }
 

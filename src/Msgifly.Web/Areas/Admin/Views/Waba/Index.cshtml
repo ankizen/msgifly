@@ -155,11 +155,41 @@ else
             <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">Business Profile</h2>
                 <p class="text-sm text-gray-500 dark:text-slate-400 mb-4">What customers see when they open a chat with your number.</p>
+
+                <div class="flex items-center gap-4 mb-5 pb-5 border-b border-gray-100 dark:border-slate-700">
+                    @if (!string.IsNullOrEmpty(Model.BusinessProfile?.ProfilePictureUrl))
+                    {
+                        <img src="@Model.BusinessProfile.ProfilePictureUrl" alt="Profile photo" class="h-16 w-16 rounded-full object-cover flex-shrink-0" />
+                    }
+                    else
+                    {
+                        <span class="h-16 w-16 rounded-full bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-gray-400 dark:text-slate-500 flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        </span>
+                    }
+                    <form asp-action="UploadProfilePicture" method="post" enctype="multipart/form-data" class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Profile photo</label>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="file" name="file" accept="image/png,image/jpeg" required
+                                   class="text-sm text-gray-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-gray-100 dark:file:bg-slate-700 file:text-gray-700 dark:file:text-slate-200 hover:file:bg-gray-200 dark:hover:file:bg-slate-600" />
+                            <button type="submit" class="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Upload</button>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-400">Square JPEG/PNG works best, up to 5 MB.</p>
+                    </form>
+                </div>
+
                 <form asp-action="UpdateBusinessProfile" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div class="sm:col-span-2">
                         <label asp-for="ProfileForm.About" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
                         <input asp-for="ProfileForm.About" maxlength="139" placeholder="e.g. Marketing automation for growing businesses"
                                class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                        <p class="mt-1 text-xs text-gray-400">Short status line next to your name. Max 139 characters.</p>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label asp-for="ProfileForm.Description" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                        <textarea asp-for="ProfileForm.Description" maxlength="512" rows="2" placeholder="A longer description of what your business does"
+                                  class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea>
+                        <p class="mt-1 text-xs text-gray-400">Shown further down on your profile. Max 512 characters.</p>
                     </div>
                     <div>
                         <label asp-for="ProfileForm.Email" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
@@ -167,8 +197,18 @@ else
                                class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                     </div>
                     <div>
+                        <label asp-for="ProfileForm.Address" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                        <input asp-for="ProfileForm.Address" placeholder="Shop 12, MG Road, Indore"
+                               class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                    </div>
+                    <div>
                         <label asp-for="ProfileForm.Website" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
                         <input asp-for="ProfileForm.Website" placeholder="https://yourbrand.com"
+                               class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                        <label asp-for="ProfileForm.Website2" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                        <input asp-for="ProfileForm.Website2" placeholder="https://instagram.com/yourbrand"
                                class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
                     </div>
                     <div class="sm:col-span-2">
@@ -197,6 +237,15 @@ else
                         <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save Profile</button>
                     </div>
                 </form>
+
+                <div class="mt-5 pt-5 border-t border-gray-100 dark:border-slate-700">
+                    <h3 class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Display name</h3>
+                    <p class="text-xs text-gray-500 dark:text-slate-400">
+                        The name shown next to your number (currently <strong>@(Model.PhoneNumbers.FirstOrDefault(p => p.Id == Model.DefaultPhoneNumberId)?.VerifiedName ?? "—")</strong>) isn't a field the Cloud API lets you set directly —
+                        Meta reviews every change. Submit a new name in <strong>WhatsApp Manager</strong> (business.facebook.com &rarr; Account tools &rarr; Phone numbers &rarr; your number &rarr; Profile), wait for approval,
+                        then click "Register" above once more so Msgifly picks it up.
+                    </p>
+                </div>
             </div>
         </div>
 

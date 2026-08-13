@@ -45,13 +45,25 @@ public class BusinessProfileFormViewModel
     [MaxLength(139)]
     public string? About { get; set; }
 
+    [Display(Name = "Description")]
+    [MaxLength(512)]
+    public string? Description { get; set; }
+
     [Display(Name = "Email")]
     [EmailAddress]
     public string? Email { get; set; }
 
+    [Display(Name = "Address")]
+    [MaxLength(256)]
+    public string? Address { get; set; }
+
     [Display(Name = "Website")]
     [Url]
     public string? Website { get; set; }
+
+    [Display(Name = "Website 2")]
+    [Url]
+    public string? Website2 { get; set; }
 
     [Display(Name = "Industry")]
     public string? Vertical { get; set; }

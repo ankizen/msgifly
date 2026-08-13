@@ -96,19 +96,24 @@ public class WhatsAppService : IWhatsAppService
     public async Task<WhatsAppResult<BusinessProfileInfo>> GetBusinessProfileAsync(string phoneNumberId)
     {
         var settings = await GetSettingsAsync();
-        var response = await GetAsync(settings, $"{phoneNumberId}/whatsapp_business_profile?fields=about,profile_picture_url,email,websites");
+        var response = await GetAsync(settings, $"{phoneNumberId}/whatsapp_business_profile?fields=about,address,description,profile_picture_url,email,websites,vertical");
         if (!response.Success)
         {
             return WhatsAppResult<BusinessProfileInfo>.Fail(response.ErrorMessage!);
         }
 
         var profile = response.Data!["data"]?.AsArray()?.FirstOrDefault();
+        var websites = profile?["websites"]?.AsArray()?.Select(w => w?.GetValue<string>()).Where(w => !string.IsNullOrEmpty(w)).ToList() ?? [];
         var info = new BusinessProfileInfo
         {
             About = profile?["about"]?.GetValue<string>(),
             ProfilePictureUrl = profile?["profile_picture_url"]?.GetValue<string>(),
             Email = profile?["email"]?.GetValue<string>(),
-            Websites = profile?["websites"]?.AsArray()?.FirstOrDefault()?.GetValue<string>(),
+            Address = profile?["address"]?.GetValue<string>(),
+            Description = profile?["description"]?.GetValue<string>(),
+            Vertical = profile?["vertical"]?.GetValue<string>(),
+            Website = websites.ElementAtOrDefault(0),
+            Website2 = websites.ElementAtOrDefault(1),
         };
 
         return WhatsAppResult<BusinessProfileInfo>.Ok(info);
@@ -477,12 +482,12 @@ public class WhatsAppService : IWhatsAppService
         return await PostMessageAsync(payload);
     }
 
-    public async Task<WhatsAppResult<string>> UploadMediaAsync(Stream fileStream, string fileName, string mimeType)
+    public async Task<WhatsAppResult<string>> UploadMediaAsync(string phoneNumberId, Stream fileStream, string fileName, string mimeType)
     {
         var settings = await GetSettingsAsync();
-        if (string.IsNullOrWhiteSpace(settings.DefaultPhoneNumberId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        if (string.IsNullOrWhiteSpace(settings.AccessToken))
         {
-            return WhatsAppResult<string>.Fail("Connect a WhatsApp Business Account and choose a default number first.");
+            return WhatsAppResult<string>.Fail("Connect a WhatsApp Business Account first.");
         }
 
         using var content = new MultipartFormDataContent();
@@ -494,7 +499,7 @@ public class WhatsAppService : IWhatsAppService
         content.Add(streamContent, "file", fileName);
 
         var client = CreateClient(settings);
-        var response = await client.PostAsync($"{settings.DefaultPhoneNumberId}/media", content);
+        var response = await client.PostAsync($"{phoneNumberId}/media", content);
         if (!response.IsSuccessStatusCode)
         {
             return WhatsAppResult<string>.Fail(await ExtractErrorAsync(response));
@@ -771,9 +776,19 @@ public class WhatsAppService : IWhatsAppService
             payload["email"] = request.Email;
         }
 
-        if (request.Website is not null)
+        if (request.Address is not null)
         {
-            payload["websites"] = new[] { request.Website };
+            payload["address"] = request.Address;
+        }
+
+        if (request.Description is not null)
+        {
+            payload["description"] = request.Description;
+        }
+
+        if (request.Website is not null || request.Website2 is not null)
+        {
+            payload["websites"] = new[] { request.Website, request.Website2 }.Where(w => !string.IsNullOrWhiteSpace(w)).ToArray();
         }
 
         if (request.Vertical is not null)

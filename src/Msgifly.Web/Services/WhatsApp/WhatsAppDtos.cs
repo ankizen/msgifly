@@ -44,7 +44,11 @@ public class BusinessProfileInfo
     public string? About { get; set; }
     public string? ProfilePictureUrl { get; set; }
     public string? Email { get; set; }
-    public string? Websites { get; set; }
+    public string? Address { get; set; }
+    public string? Description { get; set; }
+    public string? Vertical { get; set; }
+    public string? Website { get; set; }
+    public string? Website2 { get; set; }
 }
 
 /// <summary>Everything needed to build a Graph API template-send payload for one recipient.</summary>
@@ -109,12 +113,15 @@ public record InteractiveListRow(string Id, string Title, string? Description = 
 
 public record InteractiveListSection(string Title, List<InteractiveListRow> Rows);
 
-/// <summary>What the local Business Profile settings screen can change (about/email/website/vertical/photo — the profile photo is a separate media-upload step).</summary>
+/// <summary>What the local Business Profile settings screen can change (about/email/address/description/websites/vertical/photo — the profile photo is a separate media-upload step).</summary>
 public class BusinessProfileUpdateRequest
 {
     public string? About { get; set; }
     public string? Email { get; set; }
+    public string? Address { get; set; }
+    public string? Description { get; set; }
     public string? Website { get; set; }
+    public string? Website2 { get; set; }
 
     /// <summary>Meta's fixed industry vertical enum, e.g. "RETAIL", "PROF_SERVICES", "OTHER".</summary>
     public string? Vertical { get; set; }
