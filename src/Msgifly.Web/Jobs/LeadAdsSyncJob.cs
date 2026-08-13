@@ -360,6 +360,11 @@ public class LeadAdsSyncJob
             StatusId = statusId.Value,
             SourceId = sourceId,
             IsEnabled = true,
+            // The actual moment the person submitted the Facebook form, not whenever our own
+            // import got around to processing it — otherwise a bulk "Sync all leads" re-run
+            // (which can create/recreate several contacts within the same second) scrambles the
+            // Contacts list's newest-first ordering, since that sorts by CreatedAt.
+            CreatedAt = lead.CreatedTime,
         };
         _db.Contacts.Add(contact);
         await _db.SaveChangesAsync();
