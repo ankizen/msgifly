@@ -69,6 +69,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (!input) return;
 
+  // Contact.Phone is always stored as plain digits with no "+" (that's the canonical form the
+  // WhatsApp Cloud API itself expects), which means an existing number's country code isn't
+  // visually distinguishable from its national number — intl-tel-input can't detect the right
+  // flag from that alone and just shows initialCountry regardless of whose number it actually is.
+  const existingValue = input.value.trim();
+
   const iti = intlTelInput(input, {
     strictMode: true,
     separateDialCode: false,
@@ -81,6 +87,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
   iti.promise
     .then(() => {
+      if (existingValue) {
+        // Feeding it back in with a "+" lets the library's own parser work out the real dial
+        // code and switch the flag to match — e.g. "85297340015" only reads as India until this
+        // reparses it as "+852 9734 0015" (Hong Kong).
+        iti.setNumber('+' + existingValue);
+      }
+
       input.addEventListener('blur', function () {
         const fullPhoneNumber = iti.getNumber(); // Get full phone number with country code
 

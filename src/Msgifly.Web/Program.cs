@@ -142,7 +142,7 @@ RecurringJob.AddOrUpdate<CampaignDispatchJob>(
 RecurringJob.AddOrUpdate<LeadAdsSyncJob>(
     "sync-lead-ads",
     job => job.SyncAllWorkspacesAsync(),
-    "*/10 * * * *");
+    Cron.Minutely());
 
 app.MapHub<ChatHub>("/hubs/chat");
 
