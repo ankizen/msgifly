@@ -259,6 +259,24 @@ else
                 </div>
             }
 
+            @if (Model.IsWebhookConnected)
+            {
+                <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+                    <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Webhook settings</h2>
+                    <p class="text-xs text-gray-500 dark:text-slate-400 mb-3">Shared across every workspace's Meta App registration — needed again if you add another webhook subscription (e.g. Lead Ads) later.</p>
+                    <dl class="text-sm space-y-2">
+                        <div>
+                            <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Callback URL</dt>
+                            <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 break-all">@Model.WebhookUrl</dd>
+                        </div>
+                        <div>
+                            <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Verify Token</dt>
+                            <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 break-all">@Model.WebhookVerifyToken</dd>
+                        </div>
+                    </dl>
+                </div>
+            }
+
             <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-3">Danger zone</h2>
                 <p class="text-sm text-gray-500 dark:text-slate-400 mb-3">Disconnecting removes the stored credentials and clears the synced template cache.</p>
