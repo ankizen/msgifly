@@ -30,6 +30,11 @@ window.startFacebookPageLogin = async function startFacebookPageLogin(options) {
 
       onToken(token);
     },
-    { scope: 'pages_show_list,leads_retrieval,pages_manage_metadata' }
+    // leadgen_forms (listing a Page's Instant Forms) 400s with "(#200) Requires
+    // pages_manage_ads permission" without it — pages_manage_metadata/leads_retrieval alone
+    // are enough to list Pages and pull leads from a form already known, but not to discover
+    // the form list itself. ads_management is requested alongside it since Meta's own
+    // integration guides for this endpoint bundle the two together.
+    { scope: 'pages_show_list,leads_retrieval,pages_manage_metadata,pages_manage_ads,ads_management' }
   );
 };
