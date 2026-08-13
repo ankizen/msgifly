@@ -25,6 +25,50 @@ public class MetaLeadAdsService
         _logger = logger;
     }
 
+    /// <summary>
+    /// FB.login() (lead-ads.js) hands back a short-lived user token — good for roughly 1-2 hours.
+    /// A Page access token requested with THAT token inherits the same short lifetime, so it works
+    /// right after connecting and then silently stops a couple hours later with no obvious signal
+    /// (Meta doesn't push an expiry notification; the next sync attempt just starts 401ing). This
+    /// exchanges it for a long-lived user token (~60 days) first — a Page token derived from THAT
+    /// doesn't expire on its own, which is what the connect flow actually needs.
+    /// </summary>
+    public async Task<LeadAdsResult<string>> ExchangeForLongLivedTokenAsync(string shortLivedToken)
+    {
+        try
+        {
+            var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
+            if (string.IsNullOrWhiteSpace(metaApp.FacebookAppId) || string.IsNullOrWhiteSpace(metaApp.FacebookAppSecret))
+            {
+                return LeadAdsResult<string>.Fail("Meta App ID/Secret not configured.");
+            }
+
+            var client = _httpClientFactory.CreateClient("GraphApi");
+            client.BaseAddress = new Uri($"https://graph.facebook.com/{metaApp.ApiVersion}/");
+            var query = "oauth/access_token"
+                + $"?grant_type=fb_exchange_token&client_id={Uri.EscapeDataString(metaApp.FacebookAppId)}"
+                + $"&client_secret={Uri.EscapeDataString(metaApp.FacebookAppSecret)}&fb_exchange_token={Uri.EscapeDataString(shortLivedToken)}";
+
+            var response = await client.GetAsync(query);
+            var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = body?["error"]?["message"]?.GetValue<string>() ?? $"Graph API returned {(int)response.StatusCode}.";
+                return LeadAdsResult<string>.Fail(message);
+            }
+
+            var longLivedToken = body?["access_token"]?.GetValue<string>();
+            return string.IsNullOrEmpty(longLivedToken)
+                ? LeadAdsResult<string>.Fail("Graph API didn't return a long-lived token.")
+                : LeadAdsResult<string>.Ok(longLivedToken);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to exchange the Facebook user token for a long-lived one");
+            return LeadAdsResult<string>.Fail("Could not reach the Graph API.");
+        }
+    }
+
     public async Task<LeadAdsResult<List<FacebookPageInfo>>> GetUserPagesAsync(string userAccessToken)
     {
         var response = await GetAsync(userAccessToken, "me/accounts?fields=id,name,access_token&limit=200");

@@ -77,6 +77,7 @@ public class LeadAdsController : Controller
         ViewData["ApiVersion"] = metaApp.ApiVersion;
         ViewData["Forms"] = forms;
         ViewData["FormAutomations"] = await BuildFormAutomationLookupAsync();
+        ViewData["WebhookUrl"] = $"{Request.Scheme}://{Request.Host}/whatsapp/webhook";
         return View();
     }
 
@@ -91,7 +92,15 @@ public class LeadAdsController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var result = await _leadAdsService.GetUserPagesAsync(userAccessToken);
+        // Exchange for a long-lived user token before deriving Page tokens from it — a Page token
+        // requested with the short-lived token FB.login() hands back inherits its ~1-2 hour
+        // lifetime and quietly stops working a couple hours after connecting. Falls back to the
+        // short-lived token on exchange failure rather than blocking the connect entirely; it'll
+        // just have the same short lifetime as before this existed.
+        var exchangeResult = await _leadAdsService.ExchangeForLongLivedTokenAsync(userAccessToken);
+        var longLivedToken = exchangeResult.Success ? exchangeResult.Data! : userAccessToken;
+
+        var result = await _leadAdsService.GetUserPagesAsync(longLivedToken);
         if (!result.Success)
         {
             this.Notify($"Couldn't list your Facebook Pages: {result.ErrorMessage}", "danger");

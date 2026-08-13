@@ -17,7 +17,7 @@
         @if (!isConnected)
         {
             <p class="text-sm text-gray-600 dark:text-slate-400 mb-4">
-                Log in with Facebook and choose the Page that runs your Lead Ads. New form submissions are imported as Contacts every few minutes, with Source set to "Facebook Lead Ads".
+                Log in with Facebook and choose the Page that runs your Lead Ads. New form submissions are imported as Contacts — instantly once realtime sync is set up below, every minute either way — with Source set to "Facebook Lead Ads".
             </p>
             <button type="button" id="connectFacebookPageBtn"
                     class="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#1877F2] hover:bg-[#166FE5] text-white text-sm font-medium">
@@ -39,6 +39,15 @@
             </div>
         }
     </div>
+
+    @if (isConnected)
+    {
+        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 text-sm text-amber-800 dark:text-amber-300">
+            <p class="font-medium mb-1">One-time step for instant sync</p>
+            <p class="mb-2">Leads still sync every minute automatically either way, but to have a new lead land the moment it's submitted, add this same callback URL to your Meta App's <span class="font-mono">Webhooks</span> product — subscribe to the <span class="font-mono">page</span> object and its <span class="font-mono">leadgen</span> field (it can't be turned on from here, only per-Page opt-in can):</p>
+            <p class="font-mono bg-white dark:bg-slate-900 rounded px-2 py-1 break-all">@ViewData["WebhookUrl"]</p>
+        </div>
+    }
 
     @if (isConnected)
     {
