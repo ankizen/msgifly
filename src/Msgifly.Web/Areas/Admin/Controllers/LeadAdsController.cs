@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,6 +7,8 @@ using Msgifly.Web.Data;
 using Msgifly.Web.Extensions;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
+using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.LeadAds;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.Workspaces;
@@ -73,6 +76,7 @@ public class LeadAdsController : Controller
         ViewData["FacebookAppId"] = metaApp.FacebookAppId;
         ViewData["ApiVersion"] = metaApp.ApiVersion;
         ViewData["Forms"] = forms;
+        ViewData["FormAutomations"] = await BuildFormAutomationLookupAsync();
         return View();
     }
 
@@ -175,4 +179,46 @@ public class LeadAdsController : Controller
         this.Notify("Facebook Page disconnected. Already-imported leads stay as Contacts.");
         return RedirectToAction(nameof(Index));
     }
+
+    /// <summary>Maps each form to the FacebookLeadReceived automation scoped to it (if any), plus
+    /// a special "" key for a catch-all automation with no form restriction — lets the forms list
+    /// show whether a lead landing on this form will actually trigger anything, instead of the
+    /// admin having to cross-reference the Automations screen by hand.</summary>
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerOptions.Web);
+
+    private async Task<Dictionary<string, FormAutomationInfo>> BuildFormAutomationLookupAsync()
+    {
+        var candidates = await _db.Automations.AsNoTracking()
+            .Where(a => a.TriggerType == AutomationTriggerType.FacebookLeadReceived && a.IsActive)
+            .Select(a => new { a.Id, a.Name, a.TriggerConfigJson })
+            .ToListAsync();
+
+        var lookup = new Dictionary<string, FormAutomationInfo>();
+        foreach (var candidate in candidates)
+        {
+            string formId;
+            try
+            {
+                // TriggerConfigJson is always written camelCase (JsonSerializerOptions.Web, see
+                // AutomationsController.BuildTriggerConfigJson) — deserializing without the same
+                // options here silently no-ops the property match ("formId" != "FormId" under
+                // System.Text.Json's default case-sensitive comparison) and every automation
+                // reads back as the catch-all, which is exactly the bug this line fixes.
+                formId = JsonSerializer.Deserialize<FacebookLeadFormTriggerConfig>(candidate.TriggerConfigJson, JsonOptions)?.FormId ?? string.Empty;
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            // First match wins if two automations somehow target the same form/catch-all — a
+            // deliberately simple tie-break since the UI's job here is discoverability, not
+            // enforcing exactly-one-automation-per-form.
+            lookup.TryAdd(formId, new FormAutomationInfo(candidate.Id, candidate.Name));
+        }
+
+        return lookup;
+    }
 }
+
+public record FormAutomationInfo(int Id, string Name);

@@ -11,6 +11,9 @@ public class AutomationContext
     /// <summary>Button/list-row id the customer tapped, for the InteractiveReply trigger.</summary>
     public string? InteractiveReplyId { get; set; }
 
+    /// <summary>Meta's Lead Ads form id the contact came from, for the FacebookLeadReceived trigger.</summary>
+    public string? LeadFormId { get; set; }
+
     /// <summary>Arbitrary accumulated variables, readable in step text via {{vars.x}}.</summary>
     public Dictionary<string, string> Vars { get; set; } = [];
 }
@@ -28,6 +31,15 @@ public class KeywordMatchTriggerConfig
 public class InteractiveReplyTriggerConfig
 {
     public List<string> ReplyIds { get; set; } = [];
+}
+
+/// <summary>Null/empty FormId means "any Facebook Lead Ads form" (matches the trigger's original,
+/// unscoped behavior) — set it to restrict this automation to leads from one specific form,
+/// since a Page can run several forms for different campaigns that each deserve their own
+/// follow-up message.</summary>
+public class FacebookLeadFormTriggerConfig
+{
+    public string? FormId { get; set; }
 }
 
 public class SendMessageStepConfig

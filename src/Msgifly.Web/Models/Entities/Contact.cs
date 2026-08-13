@@ -30,6 +30,12 @@ public class Contact
     public string? Email { get; set; }
     public string? Website { get; set; }
 
+    /// <summary>Set only for contacts imported via Lead Ads sync — which specific Instant Form
+    /// they came from (a Source of "Facebook Lead Ads" alone doesn't distinguish between a Page's
+    /// several forms, but the CRM needs to for filtering and per-form automation review).</summary>
+    public string? LeadAdsFormId { get; set; }
+    public string? LeadAdsFormName { get; set; }
+
     /// <summary>Primary matching key for inbound webhook contact resolution.</summary>
     public string Phone { get; set; } = string.Empty;
 

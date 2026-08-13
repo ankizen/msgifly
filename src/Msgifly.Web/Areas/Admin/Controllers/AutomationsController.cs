@@ -51,12 +51,24 @@ public class AutomationsController : Controller
     }
 
     [Authorize(Policy = "automation.create,automation.edit")]
-    public async Task<IActionResult> Save(int? id)
+    public async Task<IActionResult> Save(int? id, string? triggerType, string? leadFormId)
     {
+        await PopulateLeadAdsFormsAsync();
+
         if (id is null)
         {
             ViewData["Title"] = "New Automation";
-            return View(new AutomationFormViewModel());
+            // Supports the "Set up automation" deep link from the Lead Ads forms list, which
+            // jumps straight into a pre-scoped FacebookLeadReceived trigger instead of making the
+            // admin remember which raw form id to paste in.
+            var model = new AutomationFormViewModel();
+            if (!string.IsNullOrEmpty(triggerType) && TryParseEnum<AutomationTriggerType>(triggerType, out _))
+            {
+                model.TriggerType = triggerType;
+                model.LeadFormId = leadFormId;
+            }
+
+            return View(model);
         }
 
         var automation = await _db.Automations.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
@@ -76,6 +88,7 @@ public class AutomationsController : Controller
     public async Task<IActionResult> Save(AutomationFormViewModel model)
     {
         ViewData["Title"] = model.Id is null ? "New Automation" : "Edit Automation";
+        await PopulateLeadAdsFormsAsync();
 
         List<AutomationStepNode>? tree;
         try
@@ -195,6 +208,18 @@ public class AutomationsController : Controller
     private static bool TryParseEnum<TEnum>(string value, out TEnum result) where TEnum : struct =>
         Enum.TryParse(value, ignoreCase: true, out result);
 
+    /// <summary>Feeds the trigger canvas's "Facebook Lead Ads form" dropdown (FacebookLeadReceived
+    /// scoping) — populated on every Save GET/POST render regardless of the current trigger type,
+    /// same as how KeywordMatch/InteractiveReply's fields already sit unused-but-present when a
+    /// different trigger is selected.</summary>
+    private async Task PopulateLeadAdsFormsAsync()
+    {
+        ViewData["LeadAdsForms"] = await _db.LeadAdsForms
+            .OrderByDescending(f => f.FormCreatedTime ?? f.CreatedAt)
+            .Select(f => new { id = f.FormId, name = f.FormName })
+            .ToListAsync();
+    }
+
     private static string BuildTriggerConfigJson(AutomationTriggerType triggerType, AutomationFormViewModel model)
     {
         switch (triggerType)
@@ -215,6 +240,12 @@ public class AutomationsController : Controller
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList();
                 return JsonSerializer.Serialize(new InteractiveReplyTriggerConfig { ReplyIds = replyIds }, JsonOptions);
+
+            case AutomationTriggerType.FacebookLeadReceived:
+                return JsonSerializer.Serialize(new FacebookLeadFormTriggerConfig
+                {
+                    FormId = string.IsNullOrWhiteSpace(model.LeadFormId) ? null : model.LeadFormId.Trim(),
+                }, JsonOptions);
 
             default:
                 return "{}";

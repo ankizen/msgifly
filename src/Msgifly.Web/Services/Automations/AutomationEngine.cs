@@ -475,6 +475,14 @@ public class AutomationEngine
                 return cfg.ReplyIds.Contains(context.InteractiveReplyId);
             }
 
+            case AutomationTriggerType.FacebookLeadReceived:
+            {
+                var cfg = Deserialize<FacebookLeadFormTriggerConfig>(automation.TriggerConfigJson);
+                // No FormId configured means "any form" — preserves the original unscoped
+                // behavior for automations saved before per-form scoping existed.
+                return string.IsNullOrEmpty(cfg?.FormId) || string.Equals(cfg.FormId, context.LeadFormId, StringComparison.Ordinal);
+            }
+
             default:
                 return true;
         }

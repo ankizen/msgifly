@@ -38,7 +38,7 @@ public class ContactsController : Controller
     }
 
     [Authorize(Policy = "contact.view")]
-    public async Task<IActionResult> Index(string? search, int? statusId, int? sourceId, int page = 1)
+    public async Task<IActionResult> Index(string? search, int? statusId, int? sourceId, string? leadFormId, int page = 1)
     {
         var query = _db.Contacts.AsNoTracking()
             .Include(c => c.Status)
@@ -63,11 +63,21 @@ public class ContactsController : Controller
             query = query.Where(c => c.SourceId == sourceId);
         }
 
+        if (!string.IsNullOrEmpty(leadFormId))
+        {
+            query = query.Where(c => c.LeadAdsFormId == leadFormId);
+        }
+
         ViewData["Search"] = search;
         ViewData["StatusId"] = statusId;
         ViewData["SourceId"] = sourceId;
+        ViewData["LeadFormId"] = leadFormId;
         ViewData["StatusOptions"] = await BuildOptionsAsync(_db.Statuses, s => s.Id, s => s.Name);
         ViewData["SourceOptions"] = await BuildOptionsAsync(_db.Sources, s => s.Id, s => s.Name);
+        ViewData["LeadAdsFormOptions"] = await _db.LeadAdsForms.AsNoTracking()
+            .OrderBy(f => f.FormName)
+            .Select(f => new SelectListItem { Value = f.FormId, Text = f.FormName })
+            .ToListAsync();
         ViewData["TemplateOptions"] = await _db.WhatsappTemplates.AsNoTracking()
             .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
             .OrderBy(t => t.TemplateName)

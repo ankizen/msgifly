@@ -1,3 +1,4 @@
+@using Msgifly.Web.Areas.Admin.Controllers
 @using Msgifly.Web.Models.Entities
 @{
     ViewData["Title"] = "Lead Ads Sync";
@@ -43,11 +44,13 @@
     {
         var forms = (List<LeadAdsForm>)ViewData["Forms"]!;
         var formImportCounts = (Dictionary<string, int>)ViewData["FormImportCounts"]!;
+        var formAutomations = (Dictionary<string, FormAutomationInfo>)ViewData["FormAutomations"]!;
+        var catchAllAutomation = formAutomations.GetValueOrDefault(string.Empty);
         <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
             <div class="p-6 pb-3">
                 <h2 class="text-base font-semibold text-gray-900 dark:text-white">Instant Forms</h2>
                 <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">A Page can run many forms over time and not all stay active — turn on only the ones you want new leads pulled from. Newest forms first.</p>
-                <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">Meta only keeps a lead's data for 90 days, so syncing regularly (every 10 minutes here) is what keeps it from being lost — not a setting to worry about.</p>
+                <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">Meta only keeps a lead's data for 90 days, so syncing regularly (every minute here) is what keeps it from being lost — not a setting to worry about.</p>
             </div>
             @if (forms.Count == 0)
             {
@@ -59,6 +62,7 @@
                     @foreach (var form in forms)
                     {
                         var syncedCount = formImportCounts.GetValueOrDefault(form.FormId, 0);
+                        var ownAutomation = formAutomations.GetValueOrDefault(form.FormId);
                         <li class="flex items-center justify-between px-6 py-3">
                             <div>
                                 <p class="text-sm font-medium text-gray-900 dark:text-slate-100">@form.FormName</p>
@@ -71,6 +75,20 @@
                                     @if (syncedCount > 0)
                                     {
                                         <text> &middot; @syncedCount lead(s) already synced</text>
+                                    }
+                                </p>
+                                <p class="text-xs mt-0.5">
+                                    @if (ownAutomation is not null)
+                                    {
+                                        <a asp-controller="Automations" asp-action="Save" asp-route-id="@ownAutomation.Id" class="text-emerald-600 hover:text-emerald-500">⚡ Automation: @ownAutomation.Name</a>
+                                    }
+                                    else if (catchAllAutomation is not null)
+                                    {
+                                        <a asp-controller="Automations" asp-action="Save" asp-route-id="@catchAllAutomation.Id" class="text-gray-400 hover:text-emerald-500">⚡ Covered by "@catchAllAutomation.Name" (applies to all forms)</a>
+                                    }
+                                    else
+                                    {
+                                        <a asp-controller="Automations" asp-action="Save" asp-route-triggerType="FacebookLeadReceived" asp-route-leadFormId="@form.FormId" class="text-gray-400 hover:text-emerald-500">+ Set up automation for this form</a>
                                     }
                                 </p>
                             </div>

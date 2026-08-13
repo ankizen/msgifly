@@ -64,6 +64,7 @@
     <input type="hidden" name="KeywordMatchType" x-ref="matchTypeInput" />
     <input type="hidden" name="KeywordCaseSensitive" x-ref="caseSensitiveInput" />
     <input type="hidden" name="InteractiveReplyIdsCsv" x-ref="replyIdsInput" />
+    <input type="hidden" name="LeadFormId" x-ref="leadFormIdInput" />
     <input type="hidden" name="StepsJson" x-ref="stepsJsonInput" />
 
     <div class="flex items-center gap-3">
@@ -127,7 +128,9 @@
                         matchtype: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.KeywordMatchType)),
                         casesensitive: @Html.Raw(Model.KeywordCaseSensitive ? "'true'" : "'false'"),
                         replyids: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.InteractiveReplyIdsCsv ?? "")),
+                        leadformid: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.LeadFormId ?? "")),
                     },
+                    leadForms: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewData["LeadAdsForms"])),
                     steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
                 };
                 this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial);
@@ -139,6 +142,7 @@
                     this.$refs.matchTypeInput.value = data.matchType;
                     this.$refs.caseSensitiveInput.value = data.caseSensitive ? 'true' : 'false';
                     this.$refs.replyIdsInput.value = data.replyIds;
+                    this.$refs.leadFormIdInput.value = data.leadFormId;
                     this.$refs.stepsJsonInput.value = data.stepsJson;
                 });
             },

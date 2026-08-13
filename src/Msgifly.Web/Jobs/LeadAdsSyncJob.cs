@@ -121,9 +121,11 @@ public class LeadAdsSyncJob
                 {
                     // Fire both: NewContactCreated for anyone whose automations already treat
                     // every fresh contact the same regardless of source, and the more specific
-                    // FacebookLeadReceived for "follow up instantly on ad leads" automations.
+                    // FacebookLeadReceived for "follow up instantly on ad leads" automations —
+                    // carrying the form id so an automation scoped to one specific form (not
+                    // every form on the Page) only fires for leads that actually came from it.
                     await _automationEngine.RunForTriggerAsync(AutomationTriggerType.NewContactCreated, contact.Id, new AutomationContext());
-                    await _automationEngine.RunForTriggerAsync(AutomationTriggerType.FacebookLeadReceived, contact.Id, new AutomationContext());
+                    await _automationEngine.RunForTriggerAsync(AutomationTriggerType.FacebookLeadReceived, contact.Id, new AutomationContext { LeadFormId = form.Id });
                 }
             }
         }
@@ -233,6 +235,8 @@ public class LeadAdsSyncJob
             State = ResolveByType(lead, questions, StateTypes) ?? FirstValue(lead, "state"),
             Zip = ResolveByType(lead, questions, ZipTypes) ?? FirstValue(lead, "zip_code"),
             Company = ResolveByType(lead, questions, CompanyTypes) ?? FirstValue(lead, "company_name"),
+            LeadAdsFormId = form.FormId,
+            LeadAdsFormName = form.FormName,
             Type = ContactType.Lead,
             StatusId = statusId.Value,
             SourceId = sourceId,

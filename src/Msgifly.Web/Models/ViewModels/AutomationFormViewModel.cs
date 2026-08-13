@@ -32,6 +32,9 @@ public class AutomationFormViewModel
     public bool KeywordCaseSensitive { get; set; }
     public string? InteractiveReplyIdsCsv { get; set; }
 
+    /// <summary>Null/empty means "any form" — see FacebookLeadFormTriggerConfig.</summary>
+    public string? LeadFormId { get; set; }
+
     public bool IsActive { get; set; }
 
     /// <summary>The whole step tree, as JSON produced by the builder's Alpine component.</summary>
@@ -66,6 +69,11 @@ public class AutomationFormViewModel
             {
                 model.InteractiveReplyIdsCsv = string.Join(", ", cfg.ReplyIds);
             }
+        }
+        else if (automation.TriggerType == AutomationTriggerType.FacebookLeadReceived)
+        {
+            var cfg = SafeDeserialize<FacebookLeadFormTriggerConfig>(automation.TriggerConfigJson);
+            model.LeadFormId = cfg?.FormId;
         }
 
         model.StepsJson = JsonSerializer.Serialize(BuildTree(steps, null, null), new JsonSerializerOptions(JsonSerializerOptions.Web));

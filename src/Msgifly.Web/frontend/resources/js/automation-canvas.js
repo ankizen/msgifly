@@ -152,7 +152,19 @@ const STEP_DEFS = {
   },
 };
 
-const TRIGGER_HTML = () => `
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
+/** @param {{id: string, name: string}[]} leadForms */
+const TRIGGER_HTML = (leadForms) => {
+  const formOptions = (leadForms || [])
+    .map((f) => `<option value="${escapeHtml(f.id)}">${escapeHtml(f.name)}</option>`)
+    .join('');
+
+  return `
   <div class="df-node-card df-trigger-card">
     <div class="df-node-title">⚡ Trigger</div>
     <div class="df-node-body">
@@ -175,8 +187,13 @@ const TRIGGER_HTML = () => `
         <option value="true">Case-sensitive</option>
       </select>
       <input df-replyids placeholder="Button/row ids, comma-separated" class="${FIELD_CLASS}" />
+      <select df-leadformid class="${FIELD_CLASS}" title="Only for 'New Facebook lead received' — leave as Any to match every form on the connected Page">
+        <option value="">Any Facebook Lead Ads form</option>
+        ${formOptions}
+      </select>
     </div>
   </div>`;
+};
 
 export function createAutomationCanvas(container, initial) {
   const editor = new Drawflow(container);
@@ -193,9 +210,11 @@ export function createAutomationCanvas(container, initial) {
     return id;
   }
 
+  const leadForms = initial?.leadForms || [];
+
   function addTriggerNode(x, y, triggerType, data) {
-    const merged = { triggertype: triggerType || 'InboundMessage', keywords: '', matchtype: 'contains', casesensitive: 'false', replyids: '', ...(data || {}) };
-    return editor.addNode('Trigger', 0, 1, x, y, 'df-step df-trigger', merged, TRIGGER_HTML(), false);
+    const merged = { triggertype: triggerType || 'InboundMessage', keywords: '', matchtype: 'contains', casesensitive: 'false', replyids: '', leadformid: '', ...(data || {}) };
+    return editor.addNode('Trigger', 0, 1, x, y, 'df-step df-trigger', merged, TRIGGER_HTML(leadForms), false);
   }
 
   // ---- Initial layout: either a fresh trigger-only canvas, or reconstruct from a saved tree ----
@@ -356,6 +375,7 @@ export function createAutomationCanvas(container, initial) {
       matchType: triggerData.matchtype || 'contains',
       caseSensitive: triggerData.casesensitive === 'true',
       replyIds: triggerData.replyids || '',
+      leadFormId: triggerData.leadformid || '',
       stepsJson: JSON.stringify(stepsTree),
     };
   }
