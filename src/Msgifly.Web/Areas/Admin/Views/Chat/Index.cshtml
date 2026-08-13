@@ -1,9 +1,23 @@
 @{
     ViewData["Title"] = "Chat";
     ViewData["IsChatPage"] = true;
+    var templateOptions = (List<Msgifly.Web.Models.ViewModels.TemplateOption>)ViewData["TemplateOptions"]!;
+    var statusOptions = ViewData["StatusOptions"]!;
+    var sourceOptions = ViewData["SourceOptions"]!;
 }
 
 @Html.AntiForgeryToken()
+
+@* Config is read from a plain <script> variable, not embedded inline in the x-data attribute —
+   the attribute is itself HTML double-quoted, so raw JSON (which is full of ") would prematurely
+   close it and truncate everything after the first quote. *@
+<script>
+    window.__chatConfig = {
+        templates: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(templateOptions, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
+        statusOptions: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(statusOptions, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
+        sourceOptions: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sourceOptions, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
+    };
+</script>
 
 <div class="flex h-[calc(100vh-4rem)]" x-data="chatInbox()" x-init="init()">
 
@@ -58,10 +72,19 @@
                             <p class="text-sm font-semibold text-gray-900 dark:text-slate-100" x-text="activeChat?.name"></p>
                             <p class="text-xs text-gray-400 dark:text-slate-500" x-text="activeChat?.receiverId"></p>
                         </div>
+                        <template x-if="activeChat?.contactType === 'Unknown'">
+                            <button type="button" x-on:click="openContactModal()"
+                                    class="inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50">
+                                Not saved &middot; Add to Contact
+                            </button>
+                        </template>
                     </div>
                     <div class="flex items-center gap-2">
                         <template x-if="activeChat?.isBotsStopped">
                             <span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-900 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:text-yellow-300">Bots paused</span>
+                        </template>
+                        <template x-if="activeChat && !activeChat.windowOpen">
+                            <span class="inline-flex items-center rounded-full bg-orange-100 dark:bg-orange-900 px-2 py-0.5 text-xs font-medium text-orange-700 dark:text-orange-300" title="They haven't messaged in the last 24 hours — only a template message can reach them now.">24h window closed</span>
                         </template>
                         <template x-if="activeChat?.isBlocked">
                             <span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">Blocked</span>
@@ -154,6 +177,12 @@
                         This contact is blocked — <button type="button" x-on:click="toggleBlock()" class="underline font-medium">unblock</button> to send messages.
                     </div>
                 </template>
+                <template x-if="!activeChat?.isBlocked && activeChat && !activeChat.windowOpen">
+                    <div class="p-3 border-t border-gray-200 dark:border-slate-700 bg-orange-50 dark:bg-orange-900/20 text-center text-sm text-orange-700 dark:text-orange-300">
+                        24-hour window closed — they haven't messaged recently, so only a template can reach them.
+                        <button type="button" x-on:click="openTemplateModal()" class="underline font-medium">Send a template</button>
+                    </div>
+                </template>
                 <template x-if="!activeChat?.isBlocked">
                 <div class="p-3 border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
                     <div class="flex items-end gap-2">
@@ -186,6 +215,13 @@
                         </button>
                         <input type="file" x-ref="fileInput" class="hidden" x-on:change="pendingFile = $event.target.files[0] || null" />
 
+                        <button type="button" x-on:click="openTemplateModal()"
+                                class="p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700" title="Send template">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                            </svg>
+                        </button>
+
                         <textarea x-model="composeText" rows="1" :placeholder="pendingFile ? 'Add a caption (optional)...' : 'Type a message...'"
                                   x-on:keydown.enter.prevent="sendMessage()"
                                   class="flex-1 resize-none rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 text-sm shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea>
@@ -200,11 +236,129 @@
             </div>
         </template>
     </div>
+
+    @* ---------- Add to Contact modal ---------- *@
+    <div x-show="contactModalOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+        <div class="fixed inset-0 bg-black/40" x-on:click="contactModalOpen = false"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6" x-on:click.stop>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Add to Contact</h2>
+                <p class="text-sm text-gray-500 dark:text-slate-400 mb-4" x-text="activeChat?.receiverId"></p>
+
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">First name</label>
+                            <input x-model="contactForm.firstName" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Last name</label>
+                            <input x-model="contactForm.lastName" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Type</label>
+                            <select x-model="contactForm.type" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                                <option value="Lead">Lead</option>
+                                <option value="Customer">Customer</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Status</label>
+                            <select x-model.number="contactForm.statusId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                                <template x-for="s in statusOptions" :key="s.id">
+                                    <option :value="s.id" x-text="s.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Source</label>
+                            <select x-model.number="contactForm.sourceId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500">
+                                <template x-for="s in sourceOptions" :key="s.id">
+                                    <option :value="s.id" x-text="s.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3 pt-4">
+                    <button type="button" x-on:click="submitAddContact()" :disabled="!contactForm.firstName.trim()"
+                            class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Add contact</button>
+                    <button type="button" x-on:click="contactModalOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ---------- Send Template modal ---------- *@
+    <div x-show="templateModalOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+        <div class="fixed inset-0 bg-black/40" x-on:click="templateModalOpen = false"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6" x-on:click.stop>
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Send Template</h2>
+                <p class="text-sm text-gray-500 dark:text-slate-400 mb-4" x-text="'To: ' + (activeChat?.name || '')"></p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Template</label>
+                        <select x-model="templateForm.templateId" x-on:change="onTemplateFormChange()"
+                                class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                            <option value="">Choose a template...</option>
+                            <template x-for="t in templates" :key="t.templateId">
+                                <option :value="t.templateId" x-text="t.name"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <template x-if="selectedTemplateForSend && selectedTemplateForSend.headerFormat === 'TEXT' && selectedTemplateForSend.headerParamsCount > 0">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Header text</label>
+                            <input x-model="templateForm.headerParam" placeholder="Value for {{1}} in the header"
+                                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                        </div>
+                    </template>
+                    <template x-if="selectedTemplateForSend && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(selectedTemplateForSend.headerFormat)">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Header media URL</label>
+                            <input x-model="templateForm.headerParam" placeholder="https://..."
+                                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                        </div>
+                    </template>
+
+                    <template x-if="selectedTemplateForSend && selectedTemplateForSend.bodyParamsCount > 0">
+                        <div class="space-y-2">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Body variables</label>
+                            <template x-for="(param, index) in templateForm.bodyParams" :key="index">
+                                <input x-model="templateForm.bodyParams[index]" :placeholder="'{{' + (index + 1) + '}}'"
+                                       class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="selectedTemplateForSend">
+                        <div>
+                            <p class="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Preview</p>
+                            <p class="text-xs text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-slate-900 rounded-md p-3 whitespace-pre-wrap" x-text="templatePreviewText()"></p>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="flex items-center gap-3 pt-4">
+                    <button type="button" x-on:click="submitSendTemplate()" :disabled="!templateForm.templateId || sendingTemplate"
+                            class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Send</button>
+                    <button type="button" x-on:click="templateModalOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
 <script>
 function chatInbox() {
+    const config = window.__chatConfig;
     return {
         chats: [],
         messages: [],
@@ -218,8 +372,23 @@ function chatInbox() {
         isMobile: window.innerWidth < 640,
         connection: null,
 
+        templates: config.templates,
+        statusOptions: config.statusOptions,
+        sourceOptions: config.sourceOptions,
+
+        contactModalOpen: false,
+        contactForm: { firstName: '', lastName: '', type: 'Lead', statusId: config.statusOptions[0]?.id ?? null, sourceId: config.sourceOptions[0]?.id ?? null },
+
+        templateModalOpen: false,
+        templateForm: { templateId: '', headerParam: '', bodyParams: [] },
+        sendingTemplate: false,
+
         get activeChat() {
             return this.chats.find(c => c.id === this.activeChatId) || null;
+        },
+
+        get selectedTemplateForSend() {
+            return this.templates.find(t => t.templateId === this.templateForm.templateId) || null;
         },
 
         antiForgeryToken() {
@@ -380,6 +549,97 @@ function chatInbox() {
             if (!value) return '';
             const date = new Date(value);
             return date.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' });
+        },
+
+        openContactModal() {
+            if (!this.activeChat) return;
+            const guessedName = (this.activeChat.name || '').trim().split(/\s+/);
+            this.contactForm = {
+                firstName: guessedName[0] || '',
+                lastName: guessedName.slice(1).join(' '),
+                type: 'Lead',
+                statusId: this.statusOptions[0]?.id ?? null,
+                sourceId: this.sourceOptions[0]?.id ?? null,
+            };
+            this.contactModalOpen = true;
+        },
+
+        async submitAddContact() {
+            if (!this.contactForm.firstName.trim() || !this.activeChatId) return;
+
+            const res = await fetch('/Admin/Chat/AddContact', {
+                method: 'POST',
+                body: new URLSearchParams({
+                    chatId: this.activeChatId,
+                    firstName: this.contactForm.firstName,
+                    lastName: this.contactForm.lastName,
+                    type: this.contactForm.type,
+                    statusId: this.contactForm.statusId,
+                    sourceId: this.contactForm.sourceId,
+                    __RequestVerificationToken: this.antiForgeryToken(),
+                }),
+            });
+
+            if (!res.ok) {
+                window.showNotification(await res.text(), 'danger');
+                return;
+            }
+
+            const { contactType } = await res.json();
+            const chat = this.chats.find(c => c.id === this.activeChatId);
+            if (chat) chat.contactType = contactType;
+            this.contactModalOpen = false;
+            window.showNotification('Contact added.', 'success');
+        },
+
+        openTemplateModal() {
+            this.templateForm = { templateId: '', headerParam: '', bodyParams: [] };
+            this.templateModalOpen = true;
+        },
+
+        onTemplateFormChange() {
+            const t = this.selectedTemplateForSend;
+            this.templateForm.bodyParams = t ? Array.from({ length: t.bodyParamsCount }, () => '') : [];
+            this.templateForm.headerParam = '';
+        },
+
+        templatePreviewText() {
+            const t = this.selectedTemplateForSend;
+            if (!t) return '';
+            let text = t.bodyText || '';
+            (this.templateForm.bodyParams || []).forEach((value, index) => {
+                text = text.replace(`{{${index + 1}}}`, value || `{{${index + 1}}}`);
+            });
+            return text;
+        },
+
+        async submitSendTemplate() {
+            if (!this.templateForm.templateId || !this.activeChatId || this.sendingTemplate) return;
+            this.sendingTemplate = true;
+
+            try {
+                const body = new URLSearchParams({
+                    chatId: this.activeChatId,
+                    templateId: this.templateForm.templateId,
+                    headerParam: this.templateForm.headerParam || '',
+                    __RequestVerificationToken: this.antiForgeryToken(),
+                });
+                (this.templateForm.bodyParams || []).forEach(v => body.append('bodyParams', v || ''));
+
+                const res = await fetch('/Admin/Chat/SendTemplate', { method: 'POST', body });
+                if (!res.ok) {
+                    window.showNotification(await res.text(), 'danger');
+                    return;
+                }
+
+                const message = await res.json();
+                this.addMessageIfNew(message);
+                this.bumpChat(this.activeChatId, message);
+                this.templateModalOpen = false;
+                this.$nextTick(() => this.scrollToBottom());
+            } finally {
+                this.sendingTemplate = false;
+            }
         },
     };
 }

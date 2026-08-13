@@ -23,6 +23,37 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         _workspaceAccessor = workspaceAccessor;
     }
 
+    /// <summary>
+    /// SQL Server's datetime2 columns carry no timezone info, so EF Core always materializes
+    /// DateTime reads with Kind=Unspecified — even though every DateTime this app writes is
+    /// DateTime.UtcNow. System.Text.Json then serializes an Unspecified-kind value WITHOUT a "Z"
+    /// suffix, and a browser's `new Date(...)` treats a suffix-less ISO string as LOCAL time, not
+    /// UTC — silently double-shifting anything read back from the DB and rendered client-side
+    /// (first surfaced as chat message timestamps looking right on send, the freshly-constructed
+    /// in-memory DateTime still Kind=Utc, but wrong after a refresh once it's round-tripped
+    /// through SQL Server). Stamping Kind=Utc back on every DateTime read fixes this at the root
+    /// for every entity, not just Chat.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        configurationBuilder.Properties<DateTime?>().HaveConversion<NullableUtcDateTimeConverter>();
+    }
+
+    private sealed class UtcDateTimeConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>
+    {
+        public UtcDateTimeConverter() : base(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc))
+        {
+        }
+    }
+
+    private sealed class NullableUtcDateTimeConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime?, DateTime?>
+    {
+        public NullableUtcDateTimeConverter() : base(v => v, v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v)
+        {
+        }
+    }
+
     public DbSet<Workspace> Workspaces => Set<Workspace>();
     public DbSet<Contact> Contacts => Set<Contact>();
     public DbSet<ContactNote> ContactNotes => Set<ContactNote>();

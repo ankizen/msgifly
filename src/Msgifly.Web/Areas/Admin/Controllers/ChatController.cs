@@ -8,8 +8,10 @@ using Msgifly.Web.Hubs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services;
 using Msgifly.Web.Services.Chat;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -29,17 +31,33 @@ public class ChatController : Controller
     private readonly IWhatsAppService _whatsAppService;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly IWebHostEnvironment _environment;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public ChatController(ApplicationDbContext db, IWhatsAppService whatsAppService, IHubContext<ChatHub> hubContext, IWebHostEnvironment environment)
+    public ChatController(ApplicationDbContext db, IWhatsAppService whatsAppService, IHubContext<ChatHub> hubContext, IWebHostEnvironment environment, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
         _whatsAppService = whatsAppService;
         _hubContext = hubContext;
         _environment = environment;
+        _workspaceAccessor = workspaceAccessor;
     }
 
     [Authorize(Policy = "chat.view,chat.read_only")]
-    public IActionResult Index() => View();
+    public async Task<IActionResult> Index()
+    {
+        ViewData["TemplateOptions"] = await _db.WhatsappTemplates.AsNoTracking()
+            .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
+            .OrderBy(t => t.TemplateName)
+            .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText))
+            .ToListAsync();
+
+        ViewData["StatusOptions"] = await _db.Statuses.AsNoTracking().OrderBy(s => s.Name)
+            .Select(s => new { s.Id, s.Name }).ToListAsync();
+        ViewData["SourceOptions"] = await _db.Sources.AsNoTracking().OrderBy(s => s.Name)
+            .Select(s => new { s.Id, s.Name }).ToListAsync();
+
+        return View();
+    }
 
     [HttpGet]
     [Authorize(Policy = "chat.view,chat.read_only")]
@@ -71,6 +89,17 @@ public class ChatController : Controller
             .Select(g => new { ChatId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.ChatId, x => x.Count);
 
+        // Meta's 24-hour customer service window is keyed off the customer's own last message,
+        // not ours — SenderId == the chat's own ReceiverId (matching ToDto's IsOutbound formula
+        // exactly) is what actually distinguishes "the customer sent this" from an
+        // automation/API/bot reply that also happens to carry no StaffId.
+        var lastInboundTimes = await _db.ChatMessages.AsNoTracking()
+            .Where(m => chats.Select(c => c.Id).Contains(m.ChatId) && m.StaffId == null && m.SenderId == m.Chat.ReceiverId)
+            .GroupBy(m => m.ChatId)
+            .Select(g => new { ChatId = g.Key, LastInbound = g.Max(m => m.TimeSent) })
+            .ToDictionaryAsync(x => x.ChatId, x => x.LastInbound);
+
+        var now = DateTime.UtcNow;
         var result = chats.Select(c => new ChatSummaryDto(
             c.Id,
             c.Name,
@@ -80,7 +109,8 @@ public class ChatController : Controller
             unreadCounts.GetValueOrDefault(c.Id),
             contactTypes.TryGetValue(c.ReceiverId, out var t) ? t.ToString() : "Unknown",
             c.IsBotsStopped,
-            c.IsBlocked));
+            c.IsBlocked,
+            lastInboundTimes.TryGetValue(c.Id, out var lastInbound) && now - lastInbound < TimeSpan.FromHours(24)));
 
         return Json(result);
     }
@@ -127,6 +157,11 @@ public class ChatController : Controller
         if (chat.IsBlocked)
         {
             return BadRequest("This contact is blocked — unblock them first to send a message.");
+        }
+
+        if (!await IsWindowOpenAsync(chat))
+        {
+            return BadRequest("The 24-hour window is closed — this contact hasn't messaged in over a day, so only a template message can reach them now.");
         }
 
         var result = await _whatsAppService.SendPlainTextMessageAsync(chat.ReceiverId, text);
@@ -185,6 +220,11 @@ public class ChatController : Controller
         if (chat.IsBlocked)
         {
             return BadRequest("This contact is blocked — unblock them first to send a message.");
+        }
+
+        if (!await IsWindowOpenAsync(chat))
+        {
+            return BadRequest("The 24-hour window is closed — this contact hasn't messaged in over a day, so only a template message can reach them now.");
         }
 
         var mediaType = ResolveMediaType(file.ContentType);
@@ -328,6 +368,138 @@ public class ChatController : Controller
             .ToListAsync();
 
         return Json(replies);
+    }
+
+    /// <summary>
+    /// The "Add to Contact" quick action from an open chat — for a number that messaged in but
+    /// was never (or is no longer) a saved Contact. Reuses whatever number already matches by
+    /// phone rather than creating a duplicate, same guard SendTemplate's Contacts-page equivalent
+    /// already relies on elsewhere.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.create")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddContact(int chatId, string firstName, string? lastName, ContactType type, int statusId, int sourceId)
+    {
+        if (string.IsNullOrWhiteSpace(firstName))
+        {
+            return BadRequest("First name is required.");
+        }
+
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == chatId);
+        if (chat is null)
+        {
+            return NotFound();
+        }
+
+        var normalized = PhoneNumberNormalizer.Normalize(chat.ReceiverId);
+        var existing = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == chat.ReceiverId || c.Phone == normalized || c.Phone == "+" + normalized);
+        if (existing is not null)
+        {
+            return Json(new { contactId = existing.Id, contactType = existing.Type.ToString() });
+        }
+
+        var contact = new Contact
+        {
+            WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
+            FirstName = firstName.Trim(),
+            LastName = (lastName ?? string.Empty).Trim(),
+            Phone = normalized,
+            Type = type,
+            StatusId = statusId,
+            SourceId = sourceId,
+        };
+        _db.Contacts.Add(contact);
+        await _db.SaveChangesAsync();
+
+        return Json(new { contactId = contact.Id, contactType = contact.Type.ToString() });
+    }
+
+    /// <summary>
+    /// Send-Template-from-the-open-chat — the same underlying send as Contacts' SendTemplate quick
+    /// action, but returning a ChatMessageDto so the caller can append it to the open thread
+    /// in-place instead of a full-page redirect. The natural way to re-open a closed 24-hour
+    /// window, since Meta only accepts template sends once it's expired.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "chat.view")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTemplate(int chatId, string templateId, string? headerParam, List<string>? bodyParams)
+    {
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == chatId);
+        if (chat is null)
+        {
+            return NotFound();
+        }
+
+        if (chat.IsBlocked)
+        {
+            return BadRequest("This contact is blocked — unblock them first to send a message.");
+        }
+
+        var template = await _db.WhatsappTemplates.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.MetaTemplateId == templateId && t.Status == TemplateStatus.Approved);
+        if (template is null)
+        {
+            return BadRequest("Choose an approved template.");
+        }
+
+        var request = new TemplateSendRequest
+        {
+            TemplateName = template.TemplateName,
+            Language = template.Language,
+            HeaderFormat = template.HeaderFormat,
+            HeaderText = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) ? headerParam : null,
+            HeaderMediaUrl = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) ? null : headerParam,
+            BodyParams = (bodyParams ?? []).Take(template.BodyParamsCount).ToList(),
+        };
+
+        var result = await _whatsAppService.SendTemplateMessageAsync(chat.ReceiverId, request);
+        if (!result.Success)
+        {
+            return BadRequest(result.ErrorMessage);
+        }
+
+        var userId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : (int?)null;
+        var rendered = TemplateMessageRenderer.ForChatMessage(template, request);
+
+        var message = new ChatMessage
+        {
+            ChatId = chat.Id,
+            SenderId = chat.WaNoId ?? "agent",
+            Message = rendered.DisplayText,
+            MessageType = rendered.MediaMessageType ?? "text",
+            Url = rendered.MediaUrl,
+            WhatsappMessageId = result.Data,
+            StaffId = userId,
+            Status = MessageDeliveryStatus.Sent,
+            TimeSent = DateTime.UtcNow,
+            TemplateName = template.TemplateName,
+            IsRead = true,
+        };
+        _db.ChatMessages.Add(message);
+
+        chat.LastMessage = ChatPreviewText.ForMedia(message.MessageType, message.Message);
+        chat.LastMessageTime = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var dto = ToDto(message, chat);
+        await _hubContext.Clients.All.SendAsync("ReceiveMessage", chatId, dto);
+
+        return Json(dto);
+    }
+
+    /// <summary>True while a free-form (non-template) reply is still allowed — Meta's 24-hour
+    /// customer service window, measured from this chat's last actually-inbound message.</summary>
+    private async Task<bool> IsWindowOpenAsync(Chat chat)
+    {
+        var lastInbound = await _db.ChatMessages.AsNoTracking()
+            .Where(m => m.ChatId == chat.Id && m.StaffId == null && m.SenderId == chat.ReceiverId)
+            .OrderByDescending(m => m.TimeSent)
+            .Select(m => (DateTime?)m.TimeSent)
+            .FirstOrDefaultAsync();
+
+        return lastInbound is not null && DateTime.UtcNow - lastInbound < TimeSpan.FromHours(24);
     }
 
     private static ChatMessageDto ToDto(ChatMessage message, Chat chat) => new(

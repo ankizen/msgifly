@@ -9,7 +9,9 @@ public record ChatSummaryDto(
     int UnreadCount,
     string ContactType,
     bool IsBotsStopped,
-    bool IsBlocked);
+    bool IsBlocked,
+    /// <summary>Meta's 24-hour customer service window — true while a free-form (non-template) reply is still allowed, based on this chat's last INBOUND message. False once it's closed, meaning only a template message can re-open the conversation.</summary>
+    bool WindowOpen);
 
 public record ChatMessageDto(
     int Id,
