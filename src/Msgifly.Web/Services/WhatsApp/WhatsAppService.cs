@@ -667,6 +667,9 @@ public class WhatsAppService : IWhatsAppService
             messaging_product = "whatsapp",
             status = "read",
             message_id = messageId,
+            // Shows "typing…" to the customer for up to 25s (or until the next message) — a
+            // free signal that someone's actually looking at the conversation, not just silence.
+            typing_indicator = new { type = "text" },
         };
 
         var client = CreateClient(settings);

@@ -280,6 +280,20 @@ public class ChatController : Controller
         if (unread.Count > 0)
         {
             await _db.SaveChangesAsync();
+
+            // Meta only needs the newest message id to clear read state up through it on the
+            // customer's side — no need to call once per message. Best-effort: a customer's own
+            // WhatsApp app not showing blue ticks isn't worth failing this request over.
+            var lastWhatsappMessageId = unread
+                .Where(m => !string.IsNullOrEmpty(m.WhatsappMessageId))
+                .OrderByDescending(m => m.TimeSent)
+                .Select(m => m.WhatsappMessageId)
+                .FirstOrDefault();
+
+            if (lastWhatsappMessageId is not null)
+            {
+                await _whatsAppService.MarkMessageAsReadAsync(lastWhatsappMessageId);
+            }
         }
 
         return Ok();
