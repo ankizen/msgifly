@@ -148,6 +148,10 @@ public class WhatsAppWebhookController : Controller
 
                             break;
 
+                        case "message_template_status_update":
+                            await ProcessTemplateStatusUpdateAsync(value);
+                            break;
+
                         default:
                             _logger.LogDebug("Unhandled WhatsApp webhook field {Field}", field ?? "(none)");
                             break;
@@ -553,6 +557,51 @@ public class WhatsAppWebhookController : Controller
                 await _db.SaveChangesAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Meta only sends this field once the workspace owner enables it themselves in the Meta App
+    /// Dashboard (WhatsApp → Configuration → Webhook fields) — subscribed_apps has no per-field
+    /// toggle we can drive from our side. Once enabled, a template getting approved/rejected/paused
+    /// mid-campaign is reflected here immediately instead of waiting on the next manual "Sync".
+    /// </summary>
+    private async Task ProcessTemplateStatusUpdateAsync(JsonNode value)
+    {
+        var metaTemplateId = value["message_template_id"] switch
+        {
+            JsonValue v when v.TryGetValue<string>(out var s) => s,
+            JsonValue v when v.TryGetValue<long>(out var l) => l.ToString(),
+            _ => null,
+        };
+        var templateName = value["message_template_name"]?.GetValue<string>();
+        var eventText = value["event"]?.GetValue<string>()?.ToUpperInvariant();
+        var reason = value["reason"]?.GetValue<string>();
+
+        if (eventText is null || (metaTemplateId is null && templateName is null))
+        {
+            return;
+        }
+
+        var template = metaTemplateId is not null
+            ? await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.MetaTemplateId == metaTemplateId)
+            : await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.TemplateName == templateName);
+        if (template is null)
+        {
+            _logger.LogWarning("Template status update for unknown template {TemplateId}/{TemplateName}", metaTemplateId, templateName);
+            return;
+        }
+
+        template.Status = eventText switch
+        {
+            "APPROVED" => TemplateStatus.Approved,
+            "REJECTED" => TemplateStatus.Rejected,
+            "PAUSED" => TemplateStatus.Paused,
+            "DISABLED" => TemplateStatus.Rejected,
+            _ => template.Status,
+        };
+        template.RejectionReason = eventText == "APPROVED" ? null : reason ?? template.RejectionReason;
+        template.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
     }
 
     private static string ExtractText(JsonNode message)
