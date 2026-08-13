@@ -46,8 +46,11 @@ public class UsersController : Controller
             roleNamesByUserId[user.Id] = roles.FirstOrDefault() ?? "-";
         }
 
+        var workspaceNamesById = await _db.Workspaces.AsNoTracking().ToDictionaryAsync(w => w.Id, w => w.Name);
+
         ViewData["Search"] = search;
         ViewData["RoleNames"] = roleNamesByUserId;
+        ViewData["WorkspaceNames"] = workspaceNamesById;
         return View(paged);
     }
 
@@ -77,10 +80,12 @@ public class UsersController : Controller
                 IsAdmin = user.IsAdmin,
                 Active = user.Active,
                 RoleId = roleId,
+                WorkspaceId = user.WorkspaceId,
             };
         }
 
         model.RoleOptions = await GetRoleOptionsAsync();
+        model.WorkspaceOptions = await GetWorkspaceOptionsAsync();
         return View(model);
     }
 
@@ -94,9 +99,19 @@ public class UsersController : Controller
             ModelState.AddModelError(nameof(model.Password), "A password is required for a new user.");
         }
 
+        if (!model.IsAdmin && model.WorkspaceId is null)
+        {
+            // Every non-admin user must be locked to exactly one Workspace going forward — no
+            // silent unscoped middle state for newly assigned users (pre-existing users keep
+            // today's unscoped behavior until an admin opens and assigns them one, see the
+            // WorkspaceUserScopeMiddleware doc comment).
+            ModelState.AddModelError(nameof(model.WorkspaceId), "Choose the workspace this user belongs to, or make them a super admin.");
+        }
+
         if (!ModelState.IsValid)
         {
             model.RoleOptions = await GetRoleOptionsAsync();
+            model.WorkspaceOptions = await GetWorkspaceOptionsAsync();
             return View(model);
         }
 
@@ -113,6 +128,7 @@ public class UsersController : Controller
                 Phone = model.Phone,
                 IsAdmin = model.IsAdmin,
                 Active = model.Active,
+                WorkspaceId = model.IsAdmin ? null : model.WorkspaceId,
             };
 
             var createResult = await _userManager.CreateAsync(user, model.Password!);
@@ -124,6 +140,7 @@ public class UsersController : Controller
                 }
 
                 model.RoleOptions = await GetRoleOptionsAsync();
+                model.WorkspaceOptions = await GetWorkspaceOptionsAsync();
                 return View(model);
             }
 
@@ -143,6 +160,7 @@ public class UsersController : Controller
             user.Phone = model.Phone;
             user.IsAdmin = model.IsAdmin;
             user.Active = model.Active;
+            user.WorkspaceId = model.IsAdmin ? null : model.WorkspaceId;
 
             if (user.Email != model.Email)
             {
@@ -210,6 +228,15 @@ public class UsersController : Controller
             .Where(r => r.Name != "Admin")
             .OrderBy(r => r.Name)
             .Select(r => new SelectListItem { Value = r.Id.ToString(), Text = r.Name })
+            .ToListAsync();
+    }
+
+    private async Task<List<SelectListItem>> GetWorkspaceOptionsAsync()
+    {
+        return await _db.Workspaces
+            .Where(w => !w.IsArchived)
+            .OrderBy(w => w.Id)
+            .Select(w => new SelectListItem { Value = w.Id.ToString(), Text = w.Name })
             .ToListAsync();
     }
 }

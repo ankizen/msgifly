@@ -33,6 +33,11 @@ public class UserFormViewModel
     [Display(Name = "Role")]
     public int? RoleId { get; set; }
 
+    /// <summary>Locks this user to one Workspace — required unless IsAdmin (validated in
+    /// UsersController.Save, since it depends on that other field's value).</summary>
+    [Display(Name = "Workspace")]
+    public int? WorkspaceId { get; set; }
+
     /// <summary>Required on create; leave blank on edit to keep the current password.</summary>
     [DataType(DataType.Password)]
     public string? Password { get; set; }
@@ -43,4 +48,5 @@ public class UserFormViewModel
     public string? ConfirmPassword { get; set; }
 
     public List<SelectListItem> RoleOptions { get; set; } = [];
+    public List<SelectListItem> WorkspaceOptions { get; set; } = [];
 }

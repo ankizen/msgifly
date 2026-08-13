@@ -127,6 +127,13 @@ app.UseRouting();
 app.UseMiddleware<WorkspaceResolutionMiddleware>();
 
 app.UseAuthentication();
+
+// After authentication (needs context.User populated) and before authorization — locks a
+// workspace-assigned staff user's request to their one Workspace, overriding the cookie-based
+// default above. See WorkspaceUserScopeMiddleware's own doc comment for how this fits alongside
+// the other two overrides mentioned above it.
+app.UseMiddleware<WorkspaceUserScopeMiddleware>();
+
 app.UseAuthorization();
 
 app.UseHangfireDashboard("/hangfire", new DashboardOptions

@@ -17,6 +17,11 @@ public class ApplicationUser : IdentityUser<int>
     public DateTime? LastLogin { get; set; }
     public DateTime? BannedAt { get; set; }
 
+    /// <summary>Locks a non-admin user to exactly one Workspace — null means unscoped (sees/switches
+    /// every Workspace, subject to normal permission checks). Always ignored when IsAdmin is true.</summary>
+    public int? WorkspaceId { get; set; }
+    public Workspace? Workspace { get; set; }
+
     public string FullName => $"{FirstName} {LastName}".Trim();
 
     public ICollection<Contact> AssignedContacts { get; set; } = new List<Contact>();

@@ -7,6 +7,7 @@
     var workspaces = (List<Workspace>)ViewBag.Workspaces;
     var currentWorkspaceId = (int?)ViewBag.CurrentWorkspaceId;
     var currentWorkspace = workspaces.FirstOrDefault(w => w.Id == currentWorkspaceId);
+    var isScoped = (bool)ViewBag.IsScoped;
 }
 <div class="bg-white sticky top-0 z-20 flex-shrink-0 flex h-16 border-b border-slate-200 dark:border-slate-600 dark:bg-slate-800">
     <button x-on:click="open = !open" type="button"
@@ -19,7 +20,14 @@
 
     <div class="flex-1 px-4 flex justify-between">
         <div class="flex-1 flex items-center">
-            @if (workspaces.Count > 0)
+            @if (isScoped)
+            {
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-slate-200">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    @(currentWorkspace?.Name ?? "Workspace")
+                </span>
+            }
+            else if (workspaces.Count > 0)
             {
                 <div class="relative" x-data="{ wsOpen: false }">
                     <button type="button" x-on:click="wsOpen = !wsOpen" x-on:click.outside="wsOpen = false"

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
 using Msgifly.Web.Extensions;
 using Msgifly.Web.Models.Entities;
@@ -11,9 +12,11 @@ namespace Msgifly.Web.Areas.Admin.Controllers;
 /// <summary>
 /// A "business" in the Tech Provider sense — the user's own separate businesses each get their
 /// own Workspace, connected to its own WhatsApp Business Account, with its own Contacts,
-/// Templates, Campaigns, Chat and Automations (see ApplicationDbContext's query filters). The
-/// same admin user(s) can access every Workspace — there's no per-workspace membership model —
-/// they just switch which one is "current" via the header dropdown, backed by a cookie.
+/// Templates, Campaigns, Chat and Automations (see ApplicationDbContext's query filters).
+/// Unscoped users (IsAdmin, or ApplicationUser.WorkspaceId is null) can access every Workspace —
+/// they switch which one is "current" via the header dropdown, backed by a cookie. A user with
+/// WorkspaceId set is locked to exactly that one (see WorkspaceUserScopeMiddleware) — the
+/// switcher doesn't even render for them (HeaderNavigationViewComponent).
 /// </summary>
 [Area("Admin")]
 [Authorize]
@@ -31,10 +34,17 @@ public class WorkspacesController : Controller
     [Authorize(Policy = "workspace.view")]
     public async Task<IActionResult> Index()
     {
-        var workspaces = await _db.Workspaces
-            .Where(w => !w.IsArchived)
-            .OrderBy(w => w.Id)
-            .ToListAsync();
+        var query = _db.Workspaces.Where(w => !w.IsArchived);
+
+        // A workspace-scoped user (see WorkspaceUserScopeMiddleware) shouldn't see that other
+        // businesses even exist — just their own settings.
+        var scopedWorkspaceId = ScopedWorkspaceId();
+        if (scopedWorkspaceId is not null)
+        {
+            query = query.Where(w => w.Id == scopedWorkspaceId);
+        }
+
+        var workspaces = await query.OrderBy(w => w.Id).ToListAsync();
         ViewData["CurrentWorkspaceId"] = _workspaceAccessor.WorkspaceId;
         return View(workspaces);
     }
@@ -79,6 +89,15 @@ public class WorkspacesController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Switch(int id, string? returnUrl)
     {
+        var scopedWorkspaceId = ScopedWorkspaceId();
+        if (scopedWorkspaceId is not null && scopedWorkspaceId != id)
+        {
+            // WorkspaceUserScopeMiddleware would silently re-clamp this back on the very next
+            // request anyway (it overrides the cookie unconditionally) — this just avoids a
+            // confusing dead-end where the switch appears to "work" for one request.
+            return Forbid();
+        }
+
         var exists = await _db.Workspaces.AnyAsync(w => w.Id == id && !w.IsArchived);
         if (!exists)
         {
@@ -112,6 +131,17 @@ public class WorkspacesController : Controller
 
         this.Notify("Workspace renamed.");
         return RedirectToAction(nameof(Index));
+    }
+
+    private int? ScopedWorkspaceId()
+    {
+        if (User.HasClaim(c => c.Type == PermissionAuthorizationHandler.IsAdminClaimType && c.Value == "true"))
+        {
+            return null;
+        }
+
+        var claim = User.FindFirst(WorkspaceUserScopeMiddleware.ClaimType)?.Value;
+        return int.TryParse(claim, out var id) ? id : null;
     }
 
     private void SwitchCookie(int workspaceId)

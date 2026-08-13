@@ -8,7 +8,7 @@
 </div>
 
 <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl">
-    <form asp-action="Save" method="post">
+    <form asp-action="Save" method="post" x-data="{ isAdmin: @(Model.IsAdmin ? "true" : "false") }">
         <input type="hidden" asp-for="Id" />
         <div asp-validation-summary="ModelOnly" class="mb-4 text-sm text-red-600"></div>
 
@@ -39,6 +39,14 @@
                     <option value="">-- No role --</option>
                 </select>
             </div>
+            <div x-show="!isAdmin" x-cloak>
+                <label asp-for="WorkspaceId" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                <select asp-for="WorkspaceId" asp-items="Model.WorkspaceOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                    <option value="">-- Choose a workspace --</option>
+                </select>
+                <span asp-validation-for="WorkspaceId" class="mt-1 block text-sm text-red-600"></span>
+                <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">Locks this user to this one business — they won't see or be able to switch to any other.</p>
+            </div>
             <div>
                 <label asp-for="Password" class="block text-sm font-medium text-gray-700 dark:text-slate-300">
                     Password @(Model.Id is not null ? "(leave blank to keep current)" : "")
@@ -59,7 +67,7 @@
                 <span class="text-sm text-gray-700 dark:text-slate-300">@Html.DisplayNameFor(m => m.Active)</span>
             </label>
             <label class="inline-flex items-center gap-2">
-                <input asp-for="IsAdmin" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                <input asp-for="IsAdmin" x-model="isAdmin" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
                 <span class="text-sm text-gray-700 dark:text-slate-300">@Html.DisplayNameFor(m => m.IsAdmin)</span>
             </label>
         </div>

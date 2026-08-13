@@ -113,6 +113,16 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<ApplicationUser>(e =>
+        {
+            // SetNull, not Restrict/Cascade: deleting a Workspace shouldn't cascade-delete or
+            // block on the staff user(s) assigned to it — they just fall back to unscoped.
+            e.HasOne(u => u.Workspace)
+                .WithMany()
+                .HasForeignKey(u => u.WorkspaceId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
         builder.Entity<Status>(e =>
         {
             e.Property(s => s.Color).HasMaxLength(7);
