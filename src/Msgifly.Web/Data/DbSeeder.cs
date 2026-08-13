@@ -164,7 +164,7 @@ public static class DbSeeder
         var tables = new[]
         {
             "Contacts", "Sources", "Statuses", "Chats", "Campaigns", "WhatsappTemplates",
-            "MessageBots", "TemplateBots", "CannedReplies", "Automations", "ApiKeys",
+            "CannedReplies", "Automations", "ApiKeys",
         };
         foreach (var table in tables)
         {

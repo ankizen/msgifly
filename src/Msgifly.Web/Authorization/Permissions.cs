@@ -12,8 +12,6 @@ public static class Permissions
         "ai_prompt.view", "ai_prompt.create", "ai_prompt.edit", "ai_prompt.delete",
         "canned_reply.view", "canned_reply.create", "canned_reply.edit", "canned_reply.delete",
         "connect_account.view", "connect_account.connect", "connect_account.disconnect",
-        "message_bot.view", "message_bot.create", "message_bot.edit", "message_bot.delete", "message_bot.clone",
-        "template_bot.view", "template_bot.create", "template_bot.edit", "template_bot.delete", "template_bot.clone",
         "template.view", "template.load_template",
         "campaigns.view", "campaigns.create", "campaigns.edit", "campaigns.delete", "campaigns.show_campaign",
         "chat.view", "chat.read_only",

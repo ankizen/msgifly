@@ -11,7 +11,6 @@ using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
-using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.Chat;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
@@ -22,13 +21,9 @@ namespace Msgifly.Web.Controllers;
 /// <summary>
 /// Meta calls this directly (no user session), so it's unauthenticated and lives outside the
 /// Admin area. GET is the webhook verification handshake; POST processes inbound messages and
-/// delivery-status updates — see master doc §5.3-§5.5 for the original's equivalent pipeline.
-/// This phase wires up contact resolution/auto-lead, Chat/ChatMessage storage, and bot
-/// auto-replies; the live chat *UI* (SignalR, the inbox screen itself) is a later phase — bots
-/// already work end-to-end even before that UI exists.
-/// Known gap: only text/button/interactive message types are read for bot-matching purposes;
-/// media messages (image/audio/document/video) are stored with a placeholder and can still
-/// trigger first-message/catch-all bots, but their content isn't downloaded in this phase.
+/// delivery-status updates. Wires up contact resolution/auto-lead, Chat/ChatMessage storage, and
+/// automation triggers (see AutomationEngine) — the standalone Message Bot / Template Bot system
+/// was removed since a one-step Automation already covers everything they could do, and more.
 ///
 /// Multi-tenant note: Meta calls ONE webhook URL for the whole App, shared by every Workspace's
 /// WABA — so before touching any workspace-scoped table, Receive() resolves which Workspace the
@@ -47,7 +42,6 @@ public class WhatsAppWebhookController : Controller
     private readonly ISettingsService _settingsService;
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
-    private readonly BotMatchingService _botMatchingService;
     private readonly AutomationEngine _automationEngine;
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly IWebHostEnvironment _environment;
@@ -59,7 +53,6 @@ public class WhatsAppWebhookController : Controller
         ISettingsService settingsService,
         ApplicationDbContext db,
         IWhatsAppService whatsAppService,
-        BotMatchingService botMatchingService,
         AutomationEngine automationEngine,
         IHubContext<ChatHub> hubContext,
         IWebHostEnvironment environment,
@@ -70,7 +63,6 @@ public class WhatsAppWebhookController : Controller
         _settingsService = settingsService;
         _db = db;
         _whatsAppService = whatsAppService;
-        _botMatchingService = botMatchingService;
         _automationEngine = automationEngine;
         _hubContext = hubContext;
         _environment = environment;
@@ -330,11 +322,6 @@ public class WhatsAppWebhookController : Controller
 
             await BroadcastMessageAsync(chat, inboundMessage);
 
-            if (!chat.IsBotsStopped && !chat.IsBlocked && contact is not null)
-            {
-                await FireMatchingBotsAsync(chat, contact, messageText, isFirstMessage);
-            }
-
             if (!chat.IsBotsStopped && !chat.IsBlocked)
             {
                 await FireAutomationsAsync(chat, contact, messageText, isFirstMessage, ExtractInteractiveReplyId(message));
@@ -512,97 +499,6 @@ public class WhatsAppWebhookController : Controller
         return contact;
     }
 
-    private async Task FireMatchingBotsAsync(Chat chat, Contact contact, string messageText, bool isFirstMessage)
-    {
-        var matches = await _botMatchingService.FindMatchingBotsAsync(contact.Type, messageText, isFirstMessage);
-        if (!matches.Any)
-        {
-            return;
-        }
-
-        foreach (var bot in matches.MessageBots)
-        {
-            var result = await _whatsAppService.SendPlainTextMessageAsync(contact.Phone, ComposeText(bot.HeaderText, bot.ReplyText, bot.FooterText));
-            if (result.Success)
-            {
-                await StoreBotReplyAsync(chat, ComposeText(bot.HeaderText, bot.ReplyText, bot.FooterText), result.Data);
-                bot.SendingCount++;
-            }
-            else
-            {
-                _logger.LogWarning("Message bot {BotId} failed to send: {Error}", bot.Id, result.ErrorMessage);
-            }
-        }
-
-        foreach (var bot in matches.TemplateBots)
-        {
-            var template = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.MetaTemplateId == bot.TemplateId);
-            if (template is null)
-            {
-                continue;
-            }
-
-            var headerParams = Services.Campaigns.CampaignParamResolver.ResolveAll(bot.HeaderParamsJson, contact);
-            var bodyParams = Services.Campaigns.CampaignParamResolver.ResolveAll(bot.BodyParamsJson, contact);
-
-            var result = await _whatsAppService.SendTemplateMessageAsync(contact.Phone, new TemplateSendRequest
-            {
-                TemplateName = template.TemplateName,
-                Language = template.Language,
-                HeaderFormat = template.HeaderFormat,
-                HeaderText = headerParams.Count > 0 ? headerParams[0] : null,
-                HeaderMediaUrl = bot.FileName,
-                BodyParams = bodyParams,
-            });
-
-            if (result.Success)
-            {
-                var rendered = TemplateMessageRenderer.ForChatMessage(template, new TemplateSendRequest
-                {
-                    TemplateName = template.TemplateName,
-                    Language = template.Language,
-                    HeaderFormat = template.HeaderFormat,
-                    HeaderText = headerParams.Count > 0 ? headerParams[0] : null,
-                    HeaderMediaUrl = bot.FileName,
-                    BodyParams = bodyParams,
-                });
-                await StoreBotReplyAsync(chat, rendered.DisplayText, result.Data, rendered.MediaMessageType ?? "text", rendered.MediaUrl, template.TemplateName);
-                bot.SendingCount++;
-            }
-            else
-            {
-                _logger.LogWarning("Template bot {BotId} failed to send: {Error}", bot.Id, result.ErrorMessage);
-            }
-        }
-
-        await _db.SaveChangesAsync();
-    }
-
-    private async Task StoreBotReplyAsync(Chat chat, string text, string? whatsappMessageId = null, string messageType = "text", string? mediaUrl = null, string? templateName = null)
-    {
-        var reply = new ChatMessage
-        {
-            ChatId = chat.Id,
-            SenderId = chat.WaNoId ?? "bot",
-            Message = text,
-            MessageType = messageType,
-            Url = mediaUrl,
-            WhatsappMessageId = whatsappMessageId,
-            Status = MessageDeliveryStatus.Sent,
-            SentAt = DateTime.UtcNow,
-            TemplateName = templateName,
-            TimeSent = DateTime.UtcNow,
-            IsRead = true,
-        };
-        _db.ChatMessages.Add(reply);
-
-        chat.LastMessage = text;
-        chat.LastMessageTime = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
-
-        await BroadcastMessageAsync(chat, reply);
-    }
-
     private async Task BroadcastMessageAsync(Chat chat, ChatMessage message)
     {
         var dto = new ChatMessageDto(
@@ -750,6 +646,4 @@ public class WhatsAppWebhookController : Controller
         };
     }
 
-    private static string ComposeText(string? header, string body, string? footer) =>
-        string.Join("\n\n", new[] { header, body, footer }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }

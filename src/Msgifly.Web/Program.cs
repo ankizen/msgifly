@@ -9,7 +9,6 @@ using Msgifly.Web.Hubs;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Services.Automations;
-using Msgifly.Web.Services.Bots;
 using Msgifly.Web.Services.LeadAds;
 using Msgifly.Web.Services.Settings;
 using Msgifly.Web.Services.WhatsApp;
@@ -76,7 +75,6 @@ builder.Services.AddHttpClient("AutomationWebhook", client =>
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 builder.Services.AddScoped<EmbeddedSignupService>();
 builder.Services.AddScoped<MetaLeadAdsService>();
-builder.Services.AddScoped<BotMatchingService>();
 builder.Services.AddScoped<AutomationEngine>();
 builder.Services.AddScoped<LeadAdsSyncJob>();
 builder.Services.AddSignalR();

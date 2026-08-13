@@ -33,8 +33,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignDetail> CampaignDetails => Set<CampaignDetail>();
     public DbSet<WhatsappTemplate> WhatsappTemplates => Set<WhatsappTemplate>();
-    public DbSet<MessageBot> MessageBots => Set<MessageBot>();
-    public DbSet<TemplateBot> TemplateBots => Set<TemplateBot>();
     public DbSet<CannedReply> CannedReplies => Set<CannedReply>();
     public DbSet<AiPrompt> AiPrompts => Set<AiPrompt>();
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
@@ -69,8 +67,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<Chat>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<Campaign>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<WhatsappTemplate>().HasQueryFilter(t => t.WorkspaceId == _workspaceAccessor.WorkspaceId);
-        builder.Entity<MessageBot>().HasQueryFilter(b => b.WorkspaceId == _workspaceAccessor.WorkspaceId);
-        builder.Entity<TemplateBot>().HasQueryFilter(b => b.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<CannedReply>().HasQueryFilter(r => r.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<Automation>().HasQueryFilter(a => a.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ApiKey>().HasQueryFilter(k => k.WorkspaceId == _workspaceAccessor.WorkspaceId);
@@ -179,16 +175,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             e.HasIndex(d => d.WhatsappMessageId);
         });
 
-        builder.Entity<MessageBot>(e =>
-        {
-            e.HasIndex(b => new { b.RelType, b.IsActive });
-            e.HasIndex(b => b.WorkspaceId);
-        });
-        builder.Entity<TemplateBot>(e =>
-        {
-            e.HasIndex(b => new { b.RelType, b.IsActive });
-            e.HasIndex(b => b.WorkspaceId);
-        });
 
         builder.Entity<Source>(e => e.HasIndex(s => s.WorkspaceId));
         builder.Entity<CannedReply>(e => e.HasIndex(r => r.WorkspaceId));
