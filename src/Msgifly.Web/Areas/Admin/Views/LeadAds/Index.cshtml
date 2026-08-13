@@ -132,7 +132,9 @@
                     @foreach (var import in recentImports)
                     {
                         <tr>
-                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@(import.ContactName ?? "(skipped — no phone number)")</td>
+                            <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">
+                                @(import.ContactName ?? (import.WasSkipped ? "(skipped — no phone number)" : "(contact deleted since)"))
+                            </td>
                             <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@import.ImportedAt</td>
                         </tr>
                     }

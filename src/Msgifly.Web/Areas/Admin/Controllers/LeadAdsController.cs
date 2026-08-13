@@ -55,16 +55,31 @@ public class LeadAdsController : Controller
     public async Task<IActionResult> Index()
     {
         var workspace = await CurrentWorkspaceAsync();
-        var importedCount = await _db.LeadAdsImports.CountAsync();
+
+        // LeadAdsImports is an append-only dedup ledger (see its own doc comment) — it's never
+        // pruned when a Contact is later deleted, so counting it directly showed a stale "N
+        // imported" even after every one of those contacts was deleted. Count only imports whose
+        // Contact still exists, so this reflects what's actually in the CRM right now.
+        var importedCount = await _db.LeadAdsImports
+            .Where(l => l.ContactId != null && _db.Contacts.Any(c => c.Id == l.ContactId))
+            .CountAsync();
+
         var recentImports = await _db.LeadAdsImports
             .OrderByDescending(l => l.ImportedAt)
             .Take(10)
-            .Select(l => new { l.MetaLeadId, l.ImportedAt, ContactName = _db.Contacts.Where(c => c.Id == l.ContactId).Select(c => c.FirstName + " " + c.LastName).FirstOrDefault() })
+            .Select(l => new
+            {
+                l.MetaLeadId,
+                l.ImportedAt,
+                ContactName = _db.Contacts.Where(c => c.Id == l.ContactId).Select(c => c.FirstName + " " + c.LastName).FirstOrDefault(),
+                WasSkipped = l.ContactId == null,
+            })
             .ToListAsync();
 
         var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
         var forms = await _db.LeadAdsForms.OrderByDescending(f => f.FormCreatedTime ?? f.CreatedAt).ToListAsync();
         var formImportCounts = await _db.LeadAdsImports
+            .Where(l => l.ContactId != null && _db.Contacts.Any(c => c.Id == l.ContactId))
             .GroupBy(l => l.FormId)
             .Select(g => new { FormId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.FormId, g => g.Count);
