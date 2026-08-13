@@ -806,10 +806,10 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult.Ok();
     }
 
-    public async Task<WhatsAppResult> UpdateBusinessProfilePictureAsync(string phoneNumberId, string mediaId)
+    public async Task<WhatsAppResult> UpdateBusinessProfilePictureAsync(string phoneNumberId, string profilePictureHandle)
     {
         var settings = await GetSettingsAsync();
-        var payload = new { messaging_product = "whatsapp", profile_picture_handle = mediaId };
+        var payload = new { messaging_product = "whatsapp", profile_picture_handle = profilePictureHandle };
 
         var client = CreateClient(settings);
         var response = await client.PostAsJsonAsync($"{phoneNumberId}/whatsapp_business_profile", payload);
@@ -819,6 +819,65 @@ public class WhatsAppService : IWhatsAppService
         }
 
         return WhatsAppResult.Ok();
+    }
+
+    /// <summary>
+    /// A whatsapp_business_profile photo needs a handle from Meta's separate Resumable Upload API
+    /// — NOT the same "media id" UploadMediaAsync returns from the WhatsApp-specific /media
+    /// endpoint (that id is only valid for message attachments; passing it as
+    /// profile_picture_handle fails with a generic "Parameter value is not valid"). This does the
+    /// two-step dance: describe the file against the Meta App itself to get an upload session,
+    /// then push the bytes to that session (a *different* auth scheme — "OAuth", not "Bearer" —
+    /// is part of Meta's documented contract for this one call) to get back the {h} handle.
+    /// </summary>
+    public async Task<WhatsAppResult<string>> UploadProfilePictureHandleAsync(Stream fileStream, string fileName, long fileLength, string mimeType)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.FacebookAppId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<string>.Fail("Connect a WhatsApp Business Account first.");
+        }
+
+        var client = CreateClient(settings);
+
+        var sessionResponse = await client.PostAsJsonAsync($"{settings.FacebookAppId}/uploads", new
+        {
+            file_length = fileLength,
+            file_name = fileName,
+            file_type = mimeType,
+        });
+        if (!sessionResponse.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(sessionResponse));
+        }
+
+        var sessionBody = await sessionResponse.Content.ReadFromJsonAsync<JsonObject>();
+        var sessionId = sessionBody?["id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            return WhatsAppResult<string>.Fail("Meta didn't return an upload session id.");
+        }
+
+        // Built as an absolute URL string (not combined via Uri against BaseAddress) because
+        // sessionId itself contains a colon (e.g. "upload:AbC..."), which .NET's relative-URI
+        // resolution can misparse as a scheme separator.
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, $"https://graph.facebook.com/{settings.ApiVersion}/{sessionId}");
+        uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("OAuth", settings.AccessToken);
+        uploadRequest.Headers.Add("file_offset", "0");
+        uploadRequest.Content = new StreamContent(fileStream);
+        uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+        var uploadResponse = await client.SendAsync(uploadRequest);
+        if (!uploadResponse.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(uploadResponse));
+        }
+
+        var uploadBody = await uploadResponse.Content.ReadFromJsonAsync<JsonObject>();
+        var handle = uploadBody?["h"]?.GetValue<string>();
+        return string.IsNullOrEmpty(handle)
+            ? WhatsAppResult<string>.Fail("Upload succeeded but no file handle was returned.")
+            : WhatsAppResult<string>.Ok(handle);
     }
 
     /// <summary>Shared POST-to-/messages helper — every outbound message type shares the same envelope and same "pull the wamid out of messages[0].id" response shape.</summary>

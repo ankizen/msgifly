@@ -153,7 +153,7 @@ public class WabaController : Controller
         }
 
         await using var stream = file.OpenReadStream();
-        var uploadResult = await _whatsAppService.UploadMediaAsync(workspace.DefaultPhoneNumberId, stream, file.FileName, file.ContentType);
+        var uploadResult = await _whatsAppService.UploadProfilePictureHandleAsync(stream, file.FileName, file.Length, file.ContentType);
         if (!uploadResult.Success)
         {
             this.Notify($"Upload failed: {uploadResult.ErrorMessage}", "danger");

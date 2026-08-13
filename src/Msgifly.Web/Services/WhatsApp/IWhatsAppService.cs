@@ -82,6 +82,9 @@ public interface IWhatsAppService
 
     Task<WhatsAppResult> UpdateBusinessProfileAsync(string phoneNumberId, BusinessProfileUpdateRequest request);
 
-    /// <summary>Uploads a new profile photo — takes a media_id from UploadMediaAsync.</summary>
-    Task<WhatsAppResult> UpdateBusinessProfilePictureAsync(string phoneNumberId, string mediaId);
+    /// <summary>Uploads a new profile photo — takes the {h} handle from UploadProfilePictureHandleAsync (NOT a media_id from UploadMediaAsync; those are different Meta upload mechanisms).</summary>
+    Task<WhatsAppResult> UpdateBusinessProfilePictureAsync(string phoneNumberId, string profilePictureHandle);
+
+    /// <summary>Runs Meta's two-step Resumable Upload API against the current Meta App to get a photo handle for UpdateBusinessProfilePictureAsync.</summary>
+    Task<WhatsAppResult<string>> UploadProfilePictureHandleAsync(Stream fileStream, string fileName, long fileLength, string mimeType);
 }
