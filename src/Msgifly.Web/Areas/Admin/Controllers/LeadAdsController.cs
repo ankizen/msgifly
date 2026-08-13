@@ -188,6 +188,29 @@ public class LeadAdsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>Full re-sync of one form on demand — unlike the routine per-minute poll, this
+    /// brings back leads whose Contact was since deleted from the CRM (see
+    /// LeadAdsSyncJob.ManualSyncFormAsync's own doc comment for why that's safe to do only here,
+    /// not on the automatic paths). Runs as a background job since "all leads" on a form with a
+    /// lot of history can take a while.</summary>
+    [HttpPost]
+    [Authorize(Policy = "connect_account.connect")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SyncForm(string formId, bool allLeads, DateTime? fromDate)
+    {
+        var form = await _db.LeadAdsForms.FirstOrDefaultAsync(f => f.FormId == formId);
+        if (form is null)
+        {
+            return NotFound();
+        }
+
+        DateTime? sinceUtc = allLeads || fromDate is null ? null : DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Utc);
+        _backgroundJobClient.Enqueue<LeadAdsSyncJob>(job => job.ManualSyncFormAsync(_workspaceAccessor.WorkspaceId!.Value, formId, sinceUtc));
+
+        this.Notify($"Syncing \"{form.FormName}\"{(allLeads ? " — full history" : $" from {sinceUtc:dd MMM yyyy}")}. This can take a minute for a form with a lot of leads — refresh shortly.");
+        return RedirectToAction(nameof(Index));
+    }
+
     [HttpPost]
     [Authorize(Policy = "connect_account.connect")]
     [ValidateAntiForgeryToken]

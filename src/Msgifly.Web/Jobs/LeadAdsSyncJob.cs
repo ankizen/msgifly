@@ -160,6 +160,46 @@ public class LeadAdsSyncJob
         await ImportAndTrackLeadAsync(workspace, leadResult.Data!, form);
     }
 
+    /// <summary>
+    /// Entry point for the "Sync this form" manual action (LeadAdsController.SyncForm) — runs in
+    /// the background via Hangfire since a full-history pull can take a while. Unlike the
+    /// automatic poll and the webhook path above, this deliberately skips the
+    /// LeadAdsImports-ledger existence check — it relies only on ImportLeadAsContactAsync's own
+    /// phone-number dedup. That's what lets a lead whose Contact was since deleted come back on
+    /// an explicit, user-triggered re-sync, while the automatic paths stay conservative and never
+    /// silently resurrect a deleted contact on their own.
+    /// </summary>
+    public async Task ManualSyncFormAsync(int workspaceId, string formId, DateTime? sinceUtc)
+    {
+        var workspace = await _db.Workspaces.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.Id == workspaceId);
+        if (workspace is null || string.IsNullOrEmpty(workspace.FacebookPageAccessToken))
+        {
+            _logger.LogWarning("Manual Lead Ads sync requested for workspace {WorkspaceId} but it has no Page connected.", workspaceId);
+            return;
+        }
+
+        _workspaceAccessor.WorkspaceId = workspaceId;
+
+        var form = await _db.LeadAdsForms.FirstOrDefaultAsync(f => f.FormId == formId);
+        if (form is null)
+        {
+            _logger.LogWarning("Manual Lead Ads sync requested for unknown form {FormId}", formId);
+            return;
+        }
+
+        var leadsResult = await _leadAdsService.GetAllLeadsAsync(formId, workspace.FacebookPageAccessToken, sinceUtc);
+        if (!leadsResult.Success)
+        {
+            _logger.LogWarning("Manual sync couldn't fetch leads for form {FormId}: {Error}", formId, leadsResult.ErrorMessage);
+            return;
+        }
+
+        foreach (var lead in leadsResult.Data!)
+        {
+            await ImportAndTrackLeadAsync(workspace, lead, form);
+        }
+    }
+
     private async Task ImportAndTrackLeadAsync(Workspace workspace, LeadInfo lead, LeadAdsForm form)
     {
         var contact = await ImportLeadAsContactAsync(workspace, lead, form);

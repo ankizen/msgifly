@@ -178,6 +178,67 @@ public class MetaLeadAdsService
         return LeadAdsResult<List<LeadInfo>>.Ok(leads);
     }
 
+    /// <summary>Full pagination via Meta's own paging.next cursor, not capped at a fixed page size
+    /// like GetRecentLeadsAsync — what the "Sync this form" manual action uses when the admin asks
+    /// for full history instead of just what's arrived since the last poll. Leads come back
+    /// newest-first, so once sinceUtc is set and a page's oldest lead is older than it, paging
+    /// stops early rather than walking the rest of the form's history pointlessly. Safety-capped
+    /// at MaxPages regardless — a single business's Lead Ads form is nowhere near that scale.</summary>
+    private const int MaxPages = 200;
+
+    public async Task<LeadAdsResult<List<LeadInfo>>> GetAllLeadsAsync(string formId, string pageAccessToken, DateTime? sinceUtc = null)
+    {
+        var leads = new List<LeadInfo>();
+        try
+        {
+            var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
+            var client = _httpClientFactory.CreateClient("GraphApi");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pageAccessToken);
+
+            string? nextUrl = $"https://graph.facebook.com/{metaApp.ApiVersion}/{formId}/leads?fields=id,created_time,field_data&limit=100";
+            var pagesFetched = 0;
+            var reachedOlderThanSince = false;
+
+            while (!string.IsNullOrEmpty(nextUrl) && pagesFetched < MaxPages && !reachedOlderThanSince)
+            {
+                var response = await client.GetAsync(nextUrl);
+                var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+                if (!response.IsSuccessStatusCode)
+                {
+                    var message = body?["error"]?["message"]?.GetValue<string>() ?? $"Graph API returned {(int)response.StatusCode}.";
+                    return leads.Count > 0 ? LeadAdsResult<List<LeadInfo>>.Ok(leads) : LeadAdsResult<List<LeadInfo>>.Fail(message);
+                }
+
+                foreach (var item in body?["data"]?.AsArray() ?? [])
+                {
+                    if (item is null)
+                    {
+                        continue;
+                    }
+
+                    var lead = ParseLead(item);
+                    if (sinceUtc is not null && lead.CreatedTime < sinceUtc)
+                    {
+                        reachedOlderThanSince = true;
+                        break;
+                    }
+
+                    leads.Add(lead);
+                }
+
+                nextUrl = body?["paging"]?["next"]?.GetValue<string>();
+                pagesFetched++;
+            }
+
+            return LeadAdsResult<List<LeadInfo>>.Ok(leads);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch all leads for form {FormId}", formId);
+            return leads.Count > 0 ? LeadAdsResult<List<LeadInfo>>.Ok(leads) : LeadAdsResult<List<LeadInfo>>.Fail("Could not reach the Graph API.");
+        }
+    }
+
     /// <summary>Fetches exactly one lead by id — what the leadgen webhook path uses, since Meta's
     /// push notification only carries the leadgen_id itself, not the answers (same "notify then
     /// fetch" shape as the WhatsApp status webhooks already handle).</summary>
