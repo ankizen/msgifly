@@ -51,6 +51,11 @@ public class SendTemplateStepConfig
 {
     public string TemplateName { get; set; } = string.Empty;
     public string Language { get; set; } = "en_US";
+
+    /// <summary>Only used when the template's own header is TEXT with a {{1}} placeholder — same
+    /// {{message.text}}/{{vars.x}} interpolation as BodyParams, resolved right before sending.</summary>
+    public string? HeaderParam { get; set; }
+
     public List<string> BodyParams { get; set; } = [];
 }
 

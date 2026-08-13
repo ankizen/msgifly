@@ -131,6 +131,7 @@
                         leadformid: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.LeadFormId ?? "")),
                     },
                     leadForms: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewData["LeadAdsForms"])),
+                    templateOptions: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewData["TemplateOptions"], new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
                     steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
                 };
                 this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial);

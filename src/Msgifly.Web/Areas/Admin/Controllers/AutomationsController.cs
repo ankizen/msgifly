@@ -54,6 +54,7 @@ public class AutomationsController : Controller
     public async Task<IActionResult> Save(int? id, string? triggerType, string? leadFormId)
     {
         await PopulateLeadAdsFormsAsync();
+        await PopulateTemplateOptionsAsync();
 
         if (id is null)
         {
@@ -89,6 +90,7 @@ public class AutomationsController : Controller
     {
         ViewData["Title"] = model.Id is null ? "New Automation" : "Edit Automation";
         await PopulateLeadAdsFormsAsync();
+        await PopulateTemplateOptionsAsync();
 
         List<AutomationStepNode>? tree;
         try
@@ -217,6 +219,17 @@ public class AutomationsController : Controller
         ViewData["LeadAdsForms"] = await _db.LeadAdsForms
             .OrderByDescending(f => f.FormCreatedTime ?? f.CreatedAt)
             .Select(f => new { id = f.FormId, name = f.FormName })
+            .ToListAsync();
+    }
+
+    /// <summary>Feeds the SendTemplate step's template picker/live-preview/variable-count logic —
+    /// only approved templates, since Meta rejects a send against anything else.</summary>
+    private async Task PopulateTemplateOptionsAsync()
+    {
+        ViewData["TemplateOptions"] = await _db.WhatsappTemplates.AsNoTracking()
+            .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
+            .OrderBy(t => t.TemplateName)
+            .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText, t.Language))
             .ToListAsync();
     }
 

@@ -41,14 +41,20 @@ const STEP_DEFS = {
     icon: '📄',
     inputs: 1,
     outputs: 1,
-    data: { templatename: '', language: 'en_US', bodyparamscsv: '' },
-    html: node(
-      'Send Template',
-      '📄',
-      `<input df-templatename placeholder="Template name" class="${FIELD_CLASS}" />
-       <input df-language placeholder="Language, e.g. en_US" class="${FIELD_CLASS}" />
-       <input df-bodyparamscsv placeholder="Body params, comma-separated" class="${FIELD_CLASS}" />`
-    ),
+    // html is built per-node by sendTemplateHtml(templateOptions) instead of a fixed string here
+    // (see addStepNode) — it needs the workspace's actual approved templates to render a picker.
+    data: {
+      templatename: '',
+      language: 'en_US',
+      headerparam: '',
+      bodyparam1: '',
+      bodyparam2: '',
+      bodyparam3: '',
+      bodyparam4: '',
+      bodyparam5: '',
+      bodyparam6: '',
+    },
+    html: null,
   },
   SendButtons: {
     label: 'Send Buttons',
@@ -158,6 +164,103 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// Matches TemplateFormViewModel.MaxBodyVars on the server — WhatsApp templates in this app never
+// have more than this many {{n}} body variables.
+const MAX_BODY_PARAMS = 6;
+
+/** @param {{templateId: string, name: string, headerFormat: string|null, headerParamsCount: number, bodyParamsCount: number, bodyText: string, language: string}[]} templateOptions */
+function sendTemplateHtml(templateOptions) {
+  const options = (templateOptions || [])
+    .map((t) => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`)
+    .join('');
+
+  const bodyParamInputs = Array.from(
+    { length: MAX_BODY_PARAMS },
+    (_, i) => `<input df-bodyparam${i + 1} placeholder="Value for {{${i + 1}}}" class="${FIELD_CLASS}" style="display:none" />`
+  ).join('');
+
+  return node(
+    'Send Template',
+    '📄',
+    `<select df-templatename class="${FIELD_CLASS}">
+       <option value="">Choose a template…</option>
+       ${options}
+     </select>
+     <input df-headerparam placeholder="Header value ({{1}})" class="${FIELD_CLASS}" style="display:none" />
+     ${bodyParamInputs}
+     <div class="df-template-preview mt-1 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-900 p-2 text-[11px] text-gray-600 dark:text-slate-300 whitespace-pre-wrap" style="display:none"></div>
+     <input type="hidden" df-language />`
+  );
+}
+
+/**
+ * Wires up the reactive bits of every SendTemplate node currently (and later) on the canvas —
+ * picking a template shows exactly as many body/header param fields as it actually needs, drives
+ * the read-only language field from it (a template's language isn't independently choosable), and
+ * keeps a live "here's roughly what gets sent" preview in sync as the admin fills in values.
+ * Event delegation on the canvas container (rather than per-node listeners) means this needs no
+ * special-casing for nodes added later via the palette or reconstructed from a saved automation —
+ * same pattern already used for the container's own dragover/drop handling below.
+ */
+function wireSendTemplateFields(editor, container, templateOptions) {
+  const byName = new Map((templateOptions || []).map((t) => [t.name, t]));
+
+  function updateCard(card) {
+    if (!card) return;
+    const select = card.querySelector('[df-templatename]');
+    if (!select) return;
+    const template = byName.get(select.value);
+
+    const headerInput = card.querySelector('[df-headerparam]');
+    if (headerInput) {
+      const showHeader = !!template && template.headerFormat === 'TEXT' && template.headerParamsCount > 0;
+      headerInput.style.display = showHeader ? '' : 'none';
+    }
+
+    for (let n = 1; n <= MAX_BODY_PARAMS; n++) {
+      const input = card.querySelector(`[df-bodyparam${n}]`);
+      if (input) input.style.display = template && n <= template.bodyParamsCount ? '' : 'none';
+    }
+
+    const languageInput = card.querySelector('[df-language]');
+    if (languageInput) languageInput.value = template?.language || 'en_US';
+
+    const preview = card.querySelector('.df-template-preview');
+    if (!preview) return;
+    if (!template) {
+      preview.style.display = 'none';
+      return;
+    }
+
+    let text = template.bodyText || '';
+    for (let n = 1; n <= template.bodyParamsCount; n++) {
+      const input = card.querySelector(`[df-bodyparam${n}]`);
+      const value = input?.value?.trim();
+      text = text.replaceAll(`{{${n}}}`, value || `{{${n}}}`);
+    }
+    preview.textContent = text || '(this template has no body text)';
+    preview.style.display = '';
+  }
+
+  container.addEventListener('input', (e) => {
+    if (e.target.matches('[df-headerparam], [df-bodyparam1], [df-bodyparam2], [df-bodyparam3], [df-bodyparam4], [df-bodyparam5], [df-bodyparam6]')) {
+      updateCard(e.target.closest('.df-node-card'));
+    }
+  });
+
+  container.addEventListener('change', (e) => {
+    if (e.target.matches('[df-templatename]')) {
+      updateCard(e.target.closest('.df-node-card'));
+    }
+  });
+
+  // Covers both a fresh palette-add and canvas reconstruction from a saved automation (where
+  // flatConfig has already pre-filled templatename by the time this fires).
+  editor.on('nodeCreated', (id) => {
+    updateCard(document.querySelector(`#node-${id} .df-node-card`));
+  });
+}
+
 /** @param {{id: string, name: string}[]} leadForms */
 const TRIGGER_HTML = (leadForms) => {
   const formOptions = (leadForms || [])
@@ -202,15 +305,19 @@ export function createAutomationCanvas(container, initial) {
   editor.zoom_min = 0.4;
   editor.start();
 
+  const leadForms = initial?.leadForms || [];
+  const templateOptions = initial?.templateOptions || [];
+
   function addStepNode(type, x, y, data) {
     const def = STEP_DEFS[type];
     if (!def) return null;
     const merged = { ...def.data, ...(data || {}) };
-    const id = editor.addNode(type, def.inputs, def.outputs, x, y, `df-step ${type}`, merged, def.html, false);
+    const html = type === 'SendTemplate' ? sendTemplateHtml(templateOptions) : def.html;
+    const id = editor.addNode(type, def.inputs, def.outputs, x, y, `df-step ${type}`, merged, html, false);
     return id;
   }
 
-  const leadForms = initial?.leadForms || [];
+  wireSendTemplateFields(editor, container, templateOptions);
 
   function addTriggerNode(x, y, triggerType, data) {
     const merged = { triggertype: triggerType || 'InboundMessage', keywords: '', matchtype: 'contains', casesensitive: 'false', replyids: '', leadformid: '', ...(data || {}) };
@@ -263,11 +370,16 @@ export function createAutomationCanvas(container, initial) {
       return flat;
     }
     if (type === 'SendTemplate') {
-      return {
+      const bodyParams = config.bodyParams || [];
+      const flat = {
         templatename: config.templateName || '',
         language: config.language || 'en_US',
-        bodyparamscsv: (config.bodyParams || []).join(', '),
+        headerparam: config.headerParam || '',
       };
+      for (let i = 0; i < MAX_BODY_PARAMS; i++) {
+        flat[`bodyparam${i + 1}`] = bodyParams[i] || '';
+      }
+      return flat;
     }
     if (type === 'SendWebhook') {
       return { url: config.url || '', bodytemplate: config.bodyTemplate || '' };
@@ -295,13 +407,24 @@ export function createAutomationCanvas(container, initial) {
     }
 
     if (type === 'SendTemplate') {
+      // Every slot up to MAX_BODY_PARAMS is always present in `data` (Drawflow binds whatever
+      // exists in the node's HTML regardless of current visibility), so this slices down to only
+      // the params the *currently selected* template actually needs — otherwise switching from a
+      // 3-variable template to a 1-variable one would still export the two stale hidden values.
+      const template = (templateOptions || []).find((t) => t.name === data.templatename);
+      const bodyCount = template?.bodyParamsCount ?? 0;
+      const bodyParams = [];
+      for (let i = 1; i <= bodyCount; i++) {
+        bodyParams.push(data[`bodyparam${i}`] || '');
+      }
+
+      const hasTextHeader = template?.headerFormat === 'TEXT' && template.headerParamsCount > 0;
+
       return {
         templateName: data.templatename || '',
         language: data.language || 'en_US',
-        bodyParams: (data.bodyparamscsv || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        headerParam: hasTextHeader ? data.headerparam || '' : null,
+        bodyParams,
       };
     }
 

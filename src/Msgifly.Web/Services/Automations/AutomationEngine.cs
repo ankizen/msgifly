@@ -258,11 +258,22 @@ public class AutomationEngine
                     throw new InvalidOperationException("send_template needs a template name.");
                 }
 
+                // Looked up locally so a media/text header actually gets sent — the step config
+                // only ever stores the template's name/params, not its shape, since that shape
+                // can change if the template is re-submitted and shouldn't need re-editing every
+                // automation that references it.
+                var template = await _db.WhatsappTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.TemplateName == cfg.TemplateName);
+                var isTextHeader = string.Equals(template?.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase);
+                var isMediaHeader = template?.HeaderFormat is "IMAGE" or "VIDEO" or "DOCUMENT";
+
                 var phone = await ResolvePhoneAsync(contactId, context);
                 var result = await _whatsAppService.SendTemplateMessageAsync(phone, new TemplateSendRequest
                 {
                     TemplateName = cfg.TemplateName,
                     Language = cfg.Language,
+                    HeaderFormat = template?.HeaderFormat,
+                    HeaderText = isTextHeader && !string.IsNullOrEmpty(cfg.HeaderParam) ? Interpolate(cfg.HeaderParam, context) : null,
+                    HeaderMediaUrl = isMediaHeader ? template!.HeaderMediaUrl : null,
                     BodyParams = [.. cfg.BodyParams.Select(p => Interpolate(p, context))],
                 });
                 if (!result.Success)
