@@ -53,7 +53,19 @@ public class CampaignFormViewModel
     public List<ContactOption> ContactOptions { get; set; } = [];
 }
 
-public record TemplateOption(string TemplateId, string Name, string? HeaderFormat, int HeaderParamsCount, int BodyParamsCount, int FooterParamsCount, string BodyText = "", string Language = "en_US");
+public record TemplateOption(
+    string TemplateId,
+    string Name,
+    string? HeaderFormat,
+    int HeaderParamsCount,
+    int BodyParamsCount,
+    int FooterParamsCount,
+    string BodyText = "",
+    string Language = "en_US",
+    string? HeaderText = null,
+    string? HeaderMediaUrl = null,
+    string? FooterText = null,
+    string? ButtonsJson = null);
 
 public record ContactOption(int Id, string Label);
 

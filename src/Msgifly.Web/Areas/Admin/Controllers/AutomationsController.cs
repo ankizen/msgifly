@@ -229,7 +229,9 @@ public class AutomationsController : Controller
         ViewData["TemplateOptions"] = await _db.WhatsappTemplates.AsNoTracking()
             .Where(t => t.Status == TemplateStatus.Approved && t.MetaTemplateId != null)
             .OrderBy(t => t.TemplateName)
-            .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText, t.Language))
+            .Select(t => new TemplateOption(
+                t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText, t.Language,
+                t.HeaderText, t.HeaderMediaUrl, t.FooterText, t.ButtonsJson))
             .ToListAsync();
     }
 

@@ -188,9 +188,65 @@ function sendTemplateHtml(templateOptions) {
      </select>
      <input df-headerparam placeholder="Header value ({{1}})" class="${FIELD_CLASS}" style="display:none" />
      ${bodyParamInputs}
-     <div class="df-template-preview mt-1 rounded-md border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-900 p-2 text-[11px] text-gray-600 dark:text-slate-300 whitespace-pre-wrap" style="display:none"></div>
+     <div class="df-template-preview mt-1 rounded-md p-2" style="background-color:#e5ddd5; display:none"></div>
      <input type="hidden" df-language />`
   );
+}
+
+/** Meta serializes template buttons differently depending on origin — PascalCase for templates
+ * this app created locally (JsonSerializer.Serialize with no options), whatever casing the Graph
+ * API itself uses for templates pulled in via template sync — so this reads both instead of
+ * assuming one. Malformed/unrecognized JSON just yields no buttons rather than throwing, since a
+ * missing button row is a much smaller problem than breaking the whole preview over it. */
+function parseTemplateButtons(buttonsJson) {
+  if (!buttonsJson) return [];
+  try {
+    const raw = JSON.parse(buttonsJson);
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((b) => ({ type: b.type || b.Type || '', text: b.text || b.Text || '' }))
+      .filter((b) => b.type || b.text);
+  } catch {
+    return [];
+  }
+}
+
+/** Builds the same header/body/footer/buttons WhatsApp-bubble mockup as the template editor's own
+ * live preview (Templates/Save.cshtml) — so a template picked here shows what will actually land
+ * in the customer's chat, not just its raw body text. */
+function renderTemplatePreviewHtml(template, headerValue, bodyValues) {
+  const parts = [];
+
+  if (template.headerFormat === 'TEXT' && template.headerText) {
+    const headerText = template.headerText.replace(/\{\{1\}\}/g, headerValue || '{{1}}');
+    parts.push(`<p class="font-semibold text-[12px] text-gray-900 mb-1">${escapeHtml(headerText)}</p>`);
+  } else if (template.headerFormat === 'IMAGE') {
+    parts.push(
+      template.headerMediaUrl
+        ? `<img src="${escapeHtml(template.headerMediaUrl)}" class="w-full max-h-28 object-cover rounded mb-1.5" />`
+        : `<div class="w-full h-20 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-[10px] mb-1.5">Image header</div>`
+    );
+  } else if (template.headerFormat === 'VIDEO') {
+    parts.push(`<div class="w-full h-20 bg-gray-800 rounded flex items-center justify-center text-white text-[10px] mb-1.5">🎥 Video header</div>`);
+  } else if (template.headerFormat === 'DOCUMENT') {
+    parts.push(`<div class="w-full py-3 bg-gray-100 rounded flex items-center justify-center text-gray-500 text-[10px] mb-1.5">📄 Document header</div>`);
+  }
+
+  let bodyText = template.bodyText || '';
+  for (let n = 1; n <= template.bodyParamsCount; n++) {
+    bodyText = bodyText.replaceAll(`{{${n}}}`, bodyValues[n - 1] || `{{${n}}}`);
+  }
+  parts.push(`<p class="text-[12px] text-gray-900 whitespace-pre-wrap">${escapeHtml(bodyText || '(this template has no body text)')}</p>`);
+
+  if (template.footerText) {
+    parts.push(`<p class="text-[10px] text-gray-500 mt-1">${escapeHtml(template.footerText)}</p>`);
+  }
+
+  const buttonsHtml = parseTemplateButtons(template.buttonsJson)
+    .map((b) => `<div class="border-t border-gray-100 px-2 py-1.5 text-center text-[11px] text-blue-600">${escapeHtml(b.text || b.type)}</div>`)
+    .join('');
+
+  return `<div class="bg-white rounded-md shadow-sm p-2">${parts.join('')}</div>${buttonsHtml}`;
 }
 
 /**
@@ -229,16 +285,17 @@ function wireSendTemplateFields(editor, container, templateOptions) {
     if (!preview) return;
     if (!template) {
       preview.style.display = 'none';
+      preview.innerHTML = '';
       return;
     }
 
-    let text = template.bodyText || '';
+    const bodyValues = [];
     for (let n = 1; n <= template.bodyParamsCount; n++) {
-      const input = card.querySelector(`[df-bodyparam${n}]`);
-      const value = input?.value?.trim();
-      text = text.replaceAll(`{{${n}}}`, value || `{{${n}}}`);
+      bodyValues.push(card.querySelector(`[df-bodyparam${n}]`)?.value?.trim() || '');
     }
-    preview.textContent = text || '(this template has no body text)';
+    const headerValue = card.querySelector('[df-headerparam]')?.value?.trim() || '';
+
+    preview.innerHTML = renderTemplatePreviewHtml(template, headerValue, bodyValues);
     preview.style.display = '';
   }
 
