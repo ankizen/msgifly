@@ -128,27 +128,77 @@ public class MetaLeadAdsService
                 continue;
             }
 
-            var lead = new LeadInfo
-            {
-                Id = item["id"]?.GetValue<string>() ?? string.Empty,
-                CreatedTime = ParseMetaTimestamp(item["created_time"]) ?? DateTime.UtcNow,
-            };
-
-            foreach (var field in item["field_data"]?.AsArray() ?? [])
-            {
-                var name = field?["name"]?.GetValue<string>();
-                if (string.IsNullOrEmpty(name))
-                {
-                    continue;
-                }
-
-                lead.Fields[name] = field!["values"]?.AsArray().Select(v => v?.GetValue<string>() ?? string.Empty).ToList() ?? [];
-            }
-
-            leads.Add(lead);
+            leads.Add(ParseLead(item));
         }
 
         return LeadAdsResult<List<LeadInfo>>.Ok(leads);
+    }
+
+    /// <summary>Fetches exactly one lead by id — what the leadgen webhook path uses, since Meta's
+    /// push notification only carries the leadgen_id itself, not the answers (same "notify then
+    /// fetch" shape as the WhatsApp status webhooks already handle).</summary>
+    public async Task<LeadAdsResult<LeadInfo>> GetLeadByIdAsync(string leadgenId, string pageAccessToken)
+    {
+        var response = await GetAsync(pageAccessToken, $"{leadgenId}?fields=id,created_time,field_data");
+        if (!response.Success)
+        {
+            return LeadAdsResult<LeadInfo>.Fail(response.ErrorMessage!);
+        }
+
+        return LeadAdsResult<LeadInfo>.Ok(ParseLead(response.Data!));
+    }
+
+    /// <summary>Turns on realtime leadgen push notifications for this specific Page — a one-time
+    /// call made right after connecting it (mirrors WhatsAppService.SubscribeWebhookAsync for the
+    /// WABA side). Requires the Meta App's own Webhooks product to already have the "page" object
+    /// + "leadgen" field enabled in the App Dashboard against the same callback URL used for
+    /// WhatsApp — that part can't be driven from our side via API, only this per-Page opt-in can.</summary>
+    public async Task<LeadAdsResult> SubscribePageWebhookAsync(string pageId, string pageAccessToken)
+    {
+        try
+        {
+            var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
+            var client = _httpClientFactory.CreateClient("GraphApi");
+            client.BaseAddress = new Uri($"https://graph.facebook.com/{metaApp.ApiVersion}/");
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", pageAccessToken);
+
+            var response = await client.PostAsync($"{pageId}/subscribed_apps?subscribed_fields=leadgen", content: null);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+                var message = body?["error"]?["message"]?.GetValue<string>() ?? $"Graph API returned {(int)response.StatusCode}.";
+                return LeadAdsResult.Fail(message);
+            }
+
+            return LeadAdsResult.Ok();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Failed to subscribe Page {PageId} to the leadgen webhook", pageId);
+            return LeadAdsResult.Fail("Could not reach the Graph API.");
+        }
+    }
+
+    private static LeadInfo ParseLead(JsonNode item)
+    {
+        var lead = new LeadInfo
+        {
+            Id = item["id"]?.GetValue<string>() ?? string.Empty,
+            CreatedTime = ParseMetaTimestamp(item["created_time"]) ?? DateTime.UtcNow,
+        };
+
+        foreach (var field in item["field_data"]?.AsArray() ?? [])
+        {
+            var name = field?["name"]?.GetValue<string>();
+            if (string.IsNullOrEmpty(name))
+            {
+                continue;
+            }
+
+            lead.Fields[name] = field!["values"]?.AsArray().Select(v => v?.GetValue<string>() ?? string.Empty).ToList() ?? [];
+        }
+
+        return lead;
     }
 
     private async Task<LeadAdsResult<JsonObject>> GetAsync(string accessToken, string path)

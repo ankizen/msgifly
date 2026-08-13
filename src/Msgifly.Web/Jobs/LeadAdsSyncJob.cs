@@ -13,11 +13,11 @@ namespace Msgifly.Web.Jobs;
 /// <summary>
 /// Runs periodically (registered as a Hangfire recurring job in Program.cs) — pulls new leads
 /// from every workspace's connected Facebook Page's Lead Ads forms and imports them as Contacts.
-/// Polling rather than a realtime leadgen webhook deliberately: it needs no second webhook
-/// subscription per Page (Meta's Page-level Webhooks product is a separate setup step from the
-/// WhatsApp webhook already configured), and for this use case — get leads off Instant Forms
-/// into WhatsApp outreach without a manual CSV export — a few minutes of latency is a non-issue
-/// next to how much it already improves on "manual" (see AutomationEngine's own
+/// The primary path is now realtime: WhatsAppWebhookController receives Meta's leadgen webhook
+/// the moment someone submits a form and calls ImportSingleLeadAsync directly. This poll stays in
+/// place as a safety net (a missed/delayed webhook delivery, or a lead that arrived before the
+/// form's local schema row existed yet) — same dedup-by-MetaLeadId either path uses, so whichever
+/// gets to a given lead first is a no-op for the other (see AutomationEngine's own
 /// NewContactCreated trigger for what happens once a lead lands: same trigger the WhatsApp
 /// webhook fires for a brand-new inbound contact).
 /// </summary>
@@ -81,6 +81,16 @@ public class LeadAdsSyncJob
 
     private async Task SyncWorkspaceAsync(Workspace workspace)
     {
+        // Cheap and idempotent — also self-heals workspaces connected before realtime sync
+        // existed (or where the subscription silently lapsed) without needing them to
+        // disconnect/reconnect the Page. Failures are expected until the Meta App Dashboard's
+        // own "page"/"leadgen" webhook field is enabled, so this stays log-only, not fatal.
+        var subscribeResult = await _leadAdsService.SubscribePageWebhookAsync(workspace.FacebookPageId!, workspace.FacebookPageAccessToken!);
+        if (!subscribeResult.Success)
+        {
+            _logger.LogDebug("Realtime lead webhook subscription not active for workspace {WorkspaceId}: {Error}", workspace.Id, subscribeResult.ErrorMessage);
+        }
+
         var forms = await DiscoverFormsAsync(workspace);
         if (forms is null)
         {
@@ -104,30 +114,73 @@ public class LeadAdsSyncJob
             {
                 if (await _db.LeadAdsImports.AnyAsync(l => l.MetaLeadId == lead.Id))
                 {
-                    continue; // already imported on a previous run
+                    continue; // already imported on a previous run (or by the realtime webhook already)
                 }
 
-                var contact = await ImportLeadAsContactAsync(workspace, lead, localForm);
-                _db.LeadAdsImports.Add(new LeadAdsImport
-                {
-                    WorkspaceId = workspace.Id,
-                    MetaLeadId = lead.Id,
-                    FormId = form.Id,
-                    ContactId = contact?.Id,
-                });
-                await _db.SaveChangesAsync();
-
-                if (contact is not null)
-                {
-                    // Fire both: NewContactCreated for anyone whose automations already treat
-                    // every fresh contact the same regardless of source, and the more specific
-                    // FacebookLeadReceived for "follow up instantly on ad leads" automations —
-                    // carrying the form id so an automation scoped to one specific form (not
-                    // every form on the Page) only fires for leads that actually came from it.
-                    await _automationEngine.RunForTriggerAsync(AutomationTriggerType.NewContactCreated, contact.Id, new AutomationContext());
-                    await _automationEngine.RunForTriggerAsync(AutomationTriggerType.FacebookLeadReceived, contact.Id, new AutomationContext { LeadFormId = form.Id });
-                }
+                await ImportAndTrackLeadAsync(workspace, lead, localForm);
             }
+        }
+    }
+
+    /// <summary>
+    /// Entry point for the realtime leadgen webhook (see WhatsAppWebhookController) — Meta's push
+    /// notification only carries the leadgen_id, not the answers, so this fetches the one lead and
+    /// runs it through the same import path the polling job uses. This is what makes a lead show up
+    /// within seconds instead of waiting on the next scheduled poll; the poll stays in place as a
+    /// safety net for any webhook delivery that's missed or arrives before a form's local schema
+    /// row exists yet.
+    /// </summary>
+    public async Task ImportSingleLeadAsync(Workspace workspace, string formId, string leadgenId)
+    {
+        if (string.IsNullOrEmpty(workspace.FacebookPageAccessToken))
+        {
+            _logger.LogWarning("Leadgen webhook for workspace {WorkspaceId} — no Page access token on file, ignoring.", workspace.Id);
+            return;
+        }
+
+        if (await _db.LeadAdsImports.AnyAsync(l => l.MetaLeadId == leadgenId))
+        {
+            return; // already imported (duplicate webhook delivery, or the poller already got it)
+        }
+
+        var form = await _db.LeadAdsForms.FirstOrDefaultAsync(f => f.FormId == formId && f.IsEnabled);
+        if (form is null)
+        {
+            _logger.LogInformation("Leadgen webhook for form {FormId} — form unknown locally or sync not enabled for it, ignoring.", formId);
+            return;
+        }
+
+        var leadResult = await _leadAdsService.GetLeadByIdAsync(leadgenId, workspace.FacebookPageAccessToken!);
+        if (!leadResult.Success)
+        {
+            _logger.LogWarning("Couldn't fetch lead {LeadId} from the leadgen webhook: {Error}", leadgenId, leadResult.ErrorMessage);
+            return;
+        }
+
+        await ImportAndTrackLeadAsync(workspace, leadResult.Data!, form);
+    }
+
+    private async Task ImportAndTrackLeadAsync(Workspace workspace, LeadInfo lead, LeadAdsForm form)
+    {
+        var contact = await ImportLeadAsContactAsync(workspace, lead, form);
+        _db.LeadAdsImports.Add(new LeadAdsImport
+        {
+            WorkspaceId = workspace.Id,
+            MetaLeadId = lead.Id,
+            FormId = form.FormId,
+            ContactId = contact?.Id,
+        });
+        await _db.SaveChangesAsync();
+
+        if (contact is not null)
+        {
+            // Fire both: NewContactCreated for anyone whose automations already treat every fresh
+            // contact the same regardless of source, and the more specific FacebookLeadReceived
+            // for "follow up instantly on ad leads" automations — carrying the form id so an
+            // automation scoped to one specific form (not every form on the Page) only fires for
+            // leads that actually came from it.
+            await _automationEngine.RunForTriggerAsync(AutomationTriggerType.NewContactCreated, contact.Id, new AutomationContext());
+            await _automationEngine.RunForTriggerAsync(AutomationTriggerType.FacebookLeadReceived, contact.Id, new AutomationContext { LeadFormId = form.FormId });
         }
     }
 

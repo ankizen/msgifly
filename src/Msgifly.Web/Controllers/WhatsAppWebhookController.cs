@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Data;
 using Msgifly.Web.Hubs;
+using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
@@ -34,6 +35,10 @@ namespace Msgifly.Web.Controllers;
 /// payload belongs to (via entry[].id, the WABA id) and sets ICurrentWorkspaceAccessor itself.
 /// Everything downstream (Contacts, Chat, bots, automations) then sees the right tenant's data
 /// through the normal EF Core query filters, same as any cookie-scoped Admin request.
+///
+/// This same URL also receives Facebook Page events (top-level "object": "page" instead of
+/// "whatsapp_business_account") — currently just realtime Lead Ads (leadgen) submissions, resolved
+/// to a Workspace via FacebookPageId instead of BusinessAccountId. See ProcessPageEntriesAsync.
 /// </summary>
 [AllowAnonymous]
 [Route("whatsapp/webhook")]
@@ -47,6 +52,7 @@ public class WhatsAppWebhookController : Controller
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly IWebHostEnvironment _environment;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
+    private readonly LeadAdsSyncJob _leadAdsSyncJob;
     private readonly ILogger<WhatsAppWebhookController> _logger;
 
     public WhatsAppWebhookController(
@@ -58,6 +64,7 @@ public class WhatsAppWebhookController : Controller
         IHubContext<ChatHub> hubContext,
         IWebHostEnvironment environment,
         ICurrentWorkspaceAccessor workspaceAccessor,
+        LeadAdsSyncJob leadAdsSyncJob,
         ILogger<WhatsAppWebhookController> logger)
     {
         _settingsService = settingsService;
@@ -68,6 +75,7 @@ public class WhatsAppWebhookController : Controller
         _hubContext = hubContext;
         _environment = environment;
         _workspaceAccessor = workspaceAccessor;
+        _leadAdsSyncJob = leadAdsSyncJob;
         _logger = logger;
     }
 
@@ -99,11 +107,23 @@ public class WhatsAppWebhookController : Controller
 
         try
         {
+            // One App-level callback URL receives every subscribed object type — WhatsApp
+            // (whatsapp_business_account) and, now, Facebook Page events (page, for realtime Lead
+            // Ads submissions) both land here, distinguished only by this top-level field.
+            var root = JsonNode.Parse(payload);
+            var objectType = root?["object"]?.GetValue<string>();
+            var entries = root?["entry"]?.AsArray() ?? [];
+
+            if (objectType == "page")
+            {
+                await ProcessPageEntriesAsync(entries);
+                return Ok();
+            }
+
             // Meta batches every change since the last delivery into one call — a single POST can
             // legitimately carry more than one entry (WABA) and more than one change per entry
             // (e.g. a message plus a template status update together). Only ever looking at
             // entry[0].changes[0] silently dropped everything else in that case.
-            var entries = JsonNode.Parse(payload)?["entry"]?.AsArray() ?? [];
             foreach (var entry in entries)
             {
                 if (entry is null)
@@ -165,6 +185,61 @@ public class WhatsAppWebhookController : Controller
         }
 
         return Ok();
+    }
+
+    /// <summary>
+    /// Facebook Page events (currently just leadgen — a lead submitted an Instant Form). Requires
+    /// the workspace owner to add the "page" object + "leadgen" field to this same callback URL
+    /// under Meta App Dashboard -> Webhooks (a one-time step we can't drive via API, same
+    /// limitation as ProcessTemplateStatusUpdateAsync's message_template_status_update field) —
+    /// the per-Page opt-in itself (subscribed_apps?subscribed_fields=leadgen) IS done via API, by
+    /// MetaLeadAdsService.SubscribePageWebhookAsync right after LeadAdsController connects a Page.
+    /// </summary>
+    private async Task ProcessPageEntriesAsync(JsonArray entries)
+    {
+        foreach (var entry in entries)
+        {
+            if (entry is null)
+            {
+                continue;
+            }
+
+            var pageId = entry["id"]?.GetValue<string>();
+            var workspace = string.IsNullOrEmpty(pageId)
+                ? null
+                : await _db.Workspaces.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.FacebookPageId == pageId);
+            if (workspace is null)
+            {
+                _logger.LogWarning("Facebook Page webhook payload for unknown Page {PageId} — no matching Workspace, ignoring.", pageId);
+                continue;
+            }
+
+            _workspaceAccessor.WorkspaceId = workspace.Id;
+
+            foreach (var change in entry["changes"]?.AsArray() ?? [])
+            {
+                var field = change?["field"]?.GetValue<string>();
+                var value = change?["value"];
+                if (value is null)
+                {
+                    continue;
+                }
+
+                if (field == "leadgen")
+                {
+                    var leadgenId = value["leadgen_id"]?.GetValue<string>();
+                    var formId = value["form_id"]?.GetValue<string>();
+                    if (!string.IsNullOrEmpty(leadgenId) && !string.IsNullOrEmpty(formId))
+                    {
+                        await _leadAdsSyncJob.ImportSingleLeadAsync(workspace, formId, leadgenId);
+                    }
+                }
+                else
+                {
+                    _logger.LogDebug("Unhandled Facebook Page webhook field {Field}", field ?? "(none)");
+                }
+            }
+        }
     }
 
     private async Task ProcessIncomingMessagesAsync(JsonNode value, JsonArray messages, Workspace workspace)

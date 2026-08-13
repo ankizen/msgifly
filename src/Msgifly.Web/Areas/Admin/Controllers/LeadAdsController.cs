@@ -129,7 +129,17 @@ public class LeadAdsController : Controller
         var formNote = forms is { Count: > 0 }
             ? $" Found {forms.Count} form(s) below — turn on the ones you want synced."
             : " No Instant Forms found on this Page yet.";
-        this.Notify($"Connected \"{pageName}\".{formNote}");
+
+        // Best-effort: makes new leads arrive within seconds instead of waiting on the next
+        // scheduled poll. Needs the Meta App's own Webhooks product to also have "page"/"leadgen"
+        // enabled against the same callback URL used for WhatsApp — a one-time Dashboard step we
+        // can't drive via API, so a failure here isn't fatal, it just falls back to polling-only.
+        var subscribeResult = await _leadAdsService.SubscribePageWebhookAsync(pageId, pageAccessToken);
+        var webhookNote = subscribeResult.Success
+            ? " Realtime lead sync is on."
+            : " Realtime lead sync couldn't be enabled (leads will still sync every minute) — check that this Page is added under the Meta App's Webhooks product.";
+
+        this.Notify($"Connected \"{pageName}\".{formNote}{webhookNote}");
         return RedirectToAction(nameof(Index));
     }
 
