@@ -99,35 +99,60 @@ public class WhatsAppWebhookController : Controller
 
         try
         {
-            var entry = JsonNode.Parse(payload)?["entry"]?.AsArray().FirstOrDefault();
-            var value = entry?["changes"]?.AsArray().FirstOrDefault()?["value"];
-            if (value is null)
+            // Meta batches every change since the last delivery into one call — a single POST can
+            // legitimately carry more than one entry (WABA) and more than one change per entry
+            // (e.g. a message plus a template status update together). Only ever looking at
+            // entry[0].changes[0] silently dropped everything else in that case.
+            var entries = JsonNode.Parse(payload)?["entry"]?.AsArray() ?? [];
+            foreach (var entry in entries)
             {
-                return Ok();
-            }
+                if (entry is null)
+                {
+                    continue;
+                }
 
-            var businessAccountId = entry?["id"]?.GetValue<string>();
-            var workspace = string.IsNullOrEmpty(businessAccountId)
-                ? null
-                : await _db.Workspaces.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.BusinessAccountId == businessAccountId);
-            if (workspace is null)
-            {
-                _logger.LogWarning("WhatsApp webhook payload for unknown WABA {WabaId} — no matching Workspace, ignoring.", businessAccountId);
-                return Ok();
-            }
+                var businessAccountId = entry["id"]?.GetValue<string>();
+                var workspace = string.IsNullOrEmpty(businessAccountId)
+                    ? null
+                    : await _db.Workspaces.IgnoreQueryFilters().FirstOrDefaultAsync(w => w.BusinessAccountId == businessAccountId);
+                if (workspace is null)
+                {
+                    _logger.LogWarning("WhatsApp webhook payload for unknown WABA {WabaId} — no matching Workspace, ignoring.", businessAccountId);
+                    continue;
+                }
 
-            _workspaceAccessor.WorkspaceId = workspace.Id;
+                _workspaceAccessor.WorkspaceId = workspace.Id;
 
-            var messages = value["messages"]?.AsArray();
-            var statuses = value["statuses"]?.AsArray();
+                foreach (var change in entry["changes"]?.AsArray() ?? [])
+                {
+                    var field = change?["field"]?.GetValue<string>();
+                    var value = change?["value"];
+                    if (value is null)
+                    {
+                        continue;
+                    }
 
-            if (messages is { Count: > 0 })
-            {
-                await ProcessIncomingMessagesAsync(value, messages, workspace);
-            }
-            else if (statuses is { Count: > 0 })
-            {
-                await ProcessStatusUpdatesAsync(statuses);
+                    switch (field)
+                    {
+                        case "messages":
+                            var messages = value["messages"]?.AsArray();
+                            var statuses = value["statuses"]?.AsArray();
+                            if (messages is { Count: > 0 })
+                            {
+                                await ProcessIncomingMessagesAsync(value, messages, workspace);
+                            }
+                            else if (statuses is { Count: > 0 })
+                            {
+                                await ProcessStatusUpdatesAsync(statuses);
+                            }
+
+                            break;
+
+                        default:
+                            _logger.LogDebug("Unhandled WhatsApp webhook field {Field}", field ?? "(none)");
+                            break;
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -406,7 +431,7 @@ public class WhatsAppWebhookController : Controller
                     HeaderMediaUrl = bot.FileName,
                     BodyParams = bodyParams,
                 });
-                await StoreBotReplyAsync(chat, rendered.DisplayText, result.Data, rendered.MediaMessageType ?? "text", rendered.MediaUrl);
+                await StoreBotReplyAsync(chat, rendered.DisplayText, result.Data, rendered.MediaMessageType ?? "text", rendered.MediaUrl, template.TemplateName);
                 bot.SendingCount++;
             }
             else
@@ -418,7 +443,7 @@ public class WhatsAppWebhookController : Controller
         await _db.SaveChangesAsync();
     }
 
-    private async Task StoreBotReplyAsync(Chat chat, string text, string? whatsappMessageId = null, string messageType = "text", string? mediaUrl = null)
+    private async Task StoreBotReplyAsync(Chat chat, string text, string? whatsappMessageId = null, string messageType = "text", string? mediaUrl = null, string? templateName = null)
     {
         var reply = new ChatMessage
         {
@@ -429,6 +454,8 @@ public class WhatsAppWebhookController : Controller
             Url = mediaUrl,
             WhatsappMessageId = whatsappMessageId,
             Status = MessageDeliveryStatus.Sent,
+            SentAt = DateTime.UtcNow,
+            TemplateName = templateName,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
         };
@@ -481,13 +508,30 @@ public class WhatsAppWebhookController : Controller
                 continue;
             }
 
-            var errorDetail = status!["errors"]?.AsArray().FirstOrDefault()?["title"]?.GetValue<string>();
+            var timestamp = DateTime.UtcNow;
+            var errorNode = status!["errors"]?.AsArray().FirstOrDefault();
+            var errorCode = errorNode?["code"]?.GetValue<int?>();
+            var errorTitle = errorNode?["title"]?.GetValue<string>();
+            var errorDetail = errorCode is not null && errorTitle is not null ? $"{errorCode}: {errorTitle}" : errorTitle;
 
             var chatMessage = await _db.ChatMessages.FirstOrDefaultAsync(m => m.WhatsappMessageId == wamid);
             if (chatMessage is not null)
             {
                 chatMessage.Status = deliveryStatus.Value;
-                chatMessage.UpdatedAt = DateTime.UtcNow;
+                switch (deliveryStatus.Value)
+                {
+                    case MessageDeliveryStatus.Sent: chatMessage.SentAt ??= timestamp; break;
+                    case MessageDeliveryStatus.Delivered: chatMessage.DeliveredAt ??= timestamp; break;
+                    case MessageDeliveryStatus.Read: chatMessage.ReadAt ??= timestamp; break;
+                    case MessageDeliveryStatus.Failed: chatMessage.FailedAt ??= timestamp; break;
+                }
+
+                if (errorDetail is not null)
+                {
+                    chatMessage.StatusDetail = errorDetail;
+                }
+
+                chatMessage.UpdatedAt = timestamp;
                 await _db.SaveChangesAsync();
                 await _hubContext.Clients.All.SendAsync("MessageStatusUpdated", chatMessage.ChatId, chatMessage.Id, chatMessage.Status.ToString());
             }
@@ -496,8 +540,16 @@ public class WhatsAppWebhookController : Controller
             if (campaignDetail is not null)
             {
                 campaignDetail.DeliveryStatus = deliveryStatus.Value;
+                switch (deliveryStatus.Value)
+                {
+                    case MessageDeliveryStatus.Sent: campaignDetail.SentAt ??= timestamp; break;
+                    case MessageDeliveryStatus.Delivered: campaignDetail.DeliveredAt ??= timestamp; break;
+                    case MessageDeliveryStatus.Read: campaignDetail.ReadAt ??= timestamp; break;
+                    case MessageDeliveryStatus.Failed: campaignDetail.FailedAt ??= timestamp; break;
+                }
+
                 campaignDetail.ResponseMessage = errorDetail ?? campaignDetail.ResponseMessage;
-                campaignDetail.UpdatedAt = DateTime.UtcNow;
+                campaignDetail.UpdatedAt = timestamp;
                 await _db.SaveChangesAsync();
             }
         }

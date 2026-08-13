@@ -24,6 +24,21 @@ public class CampaignDetail
 
     public MessageDeliveryStatus? DeliveryStatus { get; set; }
 
+    // Per-stage delivery timestamps — DeliveryStatus alone only reflects the *latest* stage
+    // reached, so these are what actually let a report show sent→delivered→read timing/funnel.
+    public DateTime? SentAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? ReadAt { get; set; }
+    public DateTime? FailedAt { get; set; }
+
+    /// <summary>True if this recipient tapped the template's quick-reply button.</summary>
+    public bool Clicked { get; set; }
+    public string? ClickedButtonText { get; set; }
+
+    /// <summary>Set when the recipient sends any inbound message (button tap or free text) that
+    /// replies to this specific send — the "engaged" signal a follow-up re-send segments on.</summary>
+    public DateTime? RepliedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

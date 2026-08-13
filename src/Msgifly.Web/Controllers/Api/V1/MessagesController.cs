@@ -74,6 +74,7 @@ public class MessagesController : ControllerBase
         string storedMessage;
         string storedType = type;
         string? storedUrl = null;
+        string? storedTemplateName = null;
 
         switch (type)
         {
@@ -105,6 +106,7 @@ public class MessagesController : ControllerBase
                 };
 
                 sendResult = await _whatsAppService.SendTemplateMessageAsync(request.To, templateSendRequest);
+                storedTemplateName = request.Template.Name;
 
                 // Falls back to a plain label if the template isn't in our local cache (e.g. sent
                 // by name only, never synced) — still sends fine via Meta, just less to show here.
@@ -172,6 +174,8 @@ public class MessagesController : ControllerBase
             Url = storedUrl,
             WhatsappMessageId = sendResult.Data,
             Status = MessageDeliveryStatus.Sent,
+            SentAt = DateTime.UtcNow,
+            TemplateName = storedTemplateName,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
         };

@@ -1,10 +1,13 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Hangfire;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Msgifly.Web.Data;
+using Msgifly.Web.Hubs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
 
@@ -30,6 +33,7 @@ public class AutomationEngine
     private readonly IBackgroundJobClient _backgroundJobClient;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
+    private readonly IHubContext<ChatHub> _hubContext;
     private readonly ILogger<AutomationEngine> _logger;
 
     public AutomationEngine(
@@ -38,6 +42,7 @@ public class AutomationEngine
         IBackgroundJobClient backgroundJobClient,
         IHttpClientFactory httpClientFactory,
         ICurrentWorkspaceAccessor workspaceAccessor,
+        IHubContext<ChatHub> hubContext,
         ILogger<AutomationEngine> logger)
     {
         _db = db;
@@ -45,6 +50,7 @@ public class AutomationEngine
         _backgroundJobClient = backgroundJobClient;
         _httpClientFactory = httpClientFactory;
         _workspaceAccessor = workspaceAccessor;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
@@ -267,7 +273,7 @@ public class AutomationEngine
                 var isMediaHeader = template?.HeaderFormat is "IMAGE" or "VIDEO" or "DOCUMENT";
 
                 var phone = await ResolvePhoneAsync(contactId, context);
-                var result = await _whatsAppService.SendTemplateMessageAsync(phone, new TemplateSendRequest
+                var sendRequest = new TemplateSendRequest
                 {
                     TemplateName = cfg.TemplateName,
                     Language = cfg.Language,
@@ -275,10 +281,37 @@ public class AutomationEngine
                     HeaderText = isTextHeader && !string.IsNullOrEmpty(cfg.HeaderParam) ? Interpolate(cfg.HeaderParam, context) : null,
                     HeaderMediaUrl = isMediaHeader ? template!.HeaderMediaUrl : null,
                     BodyParams = [.. cfg.BodyParams.Select(p => Interpolate(p, context))],
-                });
+                };
+                var result = await _whatsAppService.SendTemplateMessageAsync(phone, sendRequest);
                 if (!result.Success)
                 {
                     throw new InvalidOperationException(result.ErrorMessage);
+                }
+
+                // Previously this step sent the template but never recorded it anywhere — it
+                // didn't show up in the Chat inbox like every other outbound path does, and
+                // (more importantly for reporting) there was no row to ever attribute to this
+                // template at all. Skipped only if the template got deleted locally between when
+                // the automation was configured and when it actually ran — the send itself still
+                // succeeded, there's just nothing local to attach the record to.
+                if (template is not null)
+                {
+                    var chat = await ResolveOrCreateChatAsync(phone, contactId);
+                    var rendered = TemplateMessageRenderer.ForChatMessage(template, sendRequest);
+                    await LogAndBroadcastOutboundMessageAsync(chat, new ChatMessage
+                    {
+                        ChatId = chat.Id,
+                        SenderId = chat.WaNoId ?? "automation",
+                        Message = rendered.DisplayText,
+                        MessageType = rendered.MediaMessageType ?? "text",
+                        Url = rendered.MediaUrl,
+                        WhatsappMessageId = result.Data,
+                        Status = MessageDeliveryStatus.Sent,
+                        SentAt = DateTime.UtcNow,
+                        TemplateName = cfg.TemplateName,
+                        TimeSent = DateTime.UtcNow,
+                        IsRead = true,
+                    });
                 }
 
                 return $"template sent ({result.Data})";
@@ -534,6 +567,40 @@ public class AutomationEngine
         }
 
         throw new InvalidOperationException("Cannot resolve a phone number to send to — no contact or chat in context.");
+    }
+
+    private async Task<Models.Entities.Chat> ResolveOrCreateChatAsync(string phone, int? contactId)
+    {
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == phone);
+        if (chat is not null)
+        {
+            return chat;
+        }
+
+        var contactName = contactId is not null
+            ? await _db.Contacts.Where(c => c.Id == contactId).Select(c => c.FirstName + " " + c.LastName).FirstOrDefaultAsync()
+            : null;
+
+        chat = new Models.Entities.Chat
+        {
+            WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
+            ReceiverId = phone,
+            Name = string.IsNullOrWhiteSpace(contactName) ? phone : contactName,
+        };
+        _db.Chats.Add(chat);
+        await _db.SaveChangesAsync();
+        return chat;
+    }
+
+    private async Task LogAndBroadcastOutboundMessageAsync(Models.Entities.Chat chat, ChatMessage message)
+    {
+        _db.ChatMessages.Add(message);
+        chat.LastMessage = message.Message;
+        chat.LastMessageTime = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var dto = new ChatMessageDto(message.Id, message.SenderId, message.Message, message.MessageType, message.TimeSent, true, message.Status.ToString(), message.Url);
+        await _hubContext.Clients.All.SendAsync("ReceiveMessage", chat.Id, dto);
     }
 
     private static string Interpolate(string text, AutomationContext context) =>

@@ -153,6 +153,8 @@ public class ContactsController : Controller
             WhatsappMessageId = result.Data,
             StaffId = int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var uid) ? uid : null,
             Status = MessageDeliveryStatus.Sent,
+            SentAt = DateTime.UtcNow,
+            TemplateName = template.TemplateName,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
         });

@@ -97,12 +97,17 @@ public class CampaignMessageJob
             detail.DeliveryStatus = MessageDeliveryStatus.Sent;
             detail.WhatsappMessageId = result.Data;
             detail.ResponseMessage = null;
+            // Stamped here rather than waiting on Meta's async "sent" status callback — that
+            // webhook usually follows within seconds but isn't guaranteed to, and "sent" is
+            // already a fact at this point (Meta accepted the send request).
+            detail.SentAt ??= DateTime.UtcNow;
         }
         else
         {
             detail.Status = CampaignDetailStatus.Failed;
             detail.DeliveryStatus = MessageDeliveryStatus.Failed;
             detail.ResponseMessage = result.ErrorMessage;
+            detail.FailedAt ??= DateTime.UtcNow;
         }
 
         await _db.SaveChangesAsync();
