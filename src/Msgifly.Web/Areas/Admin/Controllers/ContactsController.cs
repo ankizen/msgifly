@@ -23,7 +23,7 @@ namespace Msgifly.Web.Areas.Admin.Controllers;
 [Authorize]
 public class ContactsController : Controller
 {
-    private const int PageSize = 20;
+    private const int PageSize = 25;
     private readonly ApplicationDbContext _db;
     private readonly AutomationEngine _automationEngine;
     private readonly IWhatsAppService _whatsAppService;
@@ -37,9 +37,18 @@ public class ContactsController : Controller
         _workspaceAccessor = workspaceAccessor;
     }
 
+    private static readonly int[] AllowedPageSizes = [25, 50, 100];
+
     [Authorize(Policy = "contact.view")]
-    public async Task<IActionResult> Index(string? search, int? statusId, int? sourceId, string? leadFormId, int page = 1)
+    public async Task<IActionResult> Index(string? search, int? statusId, int? sourceId, string? leadFormId, string? pageSize, int page = 1)
     {
+        // "all" bypasses paging entirely (int.MaxValue as the Take() count) rather than picking
+        // an arbitrary large-but-finite cap — a personal CRM's contact list is never going to be
+        // large enough for that to matter, and this way nothing is ever silently truncated.
+        var effectivePageSize = pageSize == "all"
+            ? int.MaxValue
+            : int.TryParse(pageSize, out var parsed) && AllowedPageSizes.Contains(parsed) ? parsed : PageSize;
+
         var query = _db.Contacts.AsNoTracking()
             .Include(c => c.Status)
             .Include(c => c.Source)
@@ -72,6 +81,7 @@ public class ContactsController : Controller
         ViewData["StatusId"] = statusId;
         ViewData["SourceId"] = sourceId;
         ViewData["LeadFormId"] = leadFormId;
+        ViewData["PageSize"] = pageSize == "all" ? "all" : effectivePageSize.ToString();
         ViewData["StatusOptions"] = await BuildOptionsAsync(_db.Statuses, s => s.Id, s => s.Name);
         ViewData["SourceOptions"] = await BuildOptionsAsync(_db.Sources, s => s.Id, s => s.Name);
         ViewData["LeadAdsFormOptions"] = await _db.LeadAdsForms.AsNoTracking()
@@ -84,7 +94,7 @@ public class ContactsController : Controller
             .Select(t => new TemplateOption(t.MetaTemplateId!, t.TemplateName, t.HeaderFormat, t.HeaderParamsCount, t.BodyParamsCount, t.FooterParamsCount, t.BodyText))
             .ToListAsync();
 
-        return View(await PagedList<Contact>.CreateAsync(query, page, PageSize));
+        return View(await PagedList<Contact>.CreateAsync(query, page, effectivePageSize));
     }
 
     /// <summary>
@@ -345,6 +355,36 @@ public class ContactsController : Controller
         _db.Contacts.Remove(contact);
         await _db.SaveChangesAsync();
         this.Notify("Contact deleted.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Ids travel as a comma-separated query string (?ids=1,2,3) rather than form fields
+    /// so the existing shared _ConfirmDialog component — a bare form posting to one URL, no other
+    /// inputs — works for bulk delete without needing its own special case.</summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkDelete(string ids)
+    {
+        var contactIds = (ids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : (int?)null)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .ToList();
+
+        if (contactIds.Count == 0)
+        {
+            this.Notify("No contacts selected.", "warning");
+            return RedirectToAction(nameof(Index));
+        }
+
+        // The workspace query filter already confines this to the current tenant's own contacts —
+        // an id for another workspace simply matches nothing rather than needing an explicit check.
+        var contacts = await _db.Contacts.Where(c => contactIds.Contains(c.Id)).ToListAsync();
+        _db.Contacts.RemoveRange(contacts);
+        await _db.SaveChangesAsync();
+
+        this.Notify($"{contacts.Count} contact(s) deleted.");
         return RedirectToAction(nameof(Index));
     }
 
