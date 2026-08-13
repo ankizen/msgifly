@@ -196,20 +196,46 @@ public class LeadAdsSyncJob
 
         foreach (var lead in leadsResult.Data!)
         {
-            await ImportAndTrackLeadAsync(workspace, lead, form);
+            try
+            {
+                await ImportAndTrackLeadAsync(workspace, lead, form);
+            }
+            catch (Exception ex)
+            {
+                // One bad lead must never abort the rest of the batch — that's exactly what
+                // happened before the upsert fix in ImportAndTrackLeadAsync (a duplicate-key
+                // exception on one lead silently dropped every lead after it in the loop).
+                _logger.LogError(ex, "Manual sync failed to import lead {LeadId} for form {FormId} — continuing with the rest.", lead.Id, formId);
+            }
         }
     }
 
     private async Task ImportAndTrackLeadAsync(Workspace workspace, LeadInfo lead, LeadAdsForm form)
     {
         var contact = await ImportLeadAsContactAsync(workspace, lead, form);
-        _db.LeadAdsImports.Add(new LeadAdsImport
+
+        // Upsert, not blind-insert: LeadAdsImports has a unique index on (WorkspaceId,
+        // MetaLeadId), so re-processing a lead that's already in the ledger (which
+        // ManualSyncFormAsync deliberately does, to bring back leads whose Contact was
+        // deleted) would otherwise throw a duplicate-key DbUpdateException and abort the
+        // whole batch partway through — exactly what happened before this fix.
+        var existingImport = await _db.LeadAdsImports.FirstOrDefaultAsync(l => l.WorkspaceId == workspace.Id && l.MetaLeadId == lead.Id);
+        if (existingImport is not null)
         {
-            WorkspaceId = workspace.Id,
-            MetaLeadId = lead.Id,
-            FormId = form.FormId,
-            ContactId = contact?.Id,
-        });
+            existingImport.ContactId = contact?.Id;
+            existingImport.ImportedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            _db.LeadAdsImports.Add(new LeadAdsImport
+            {
+                WorkspaceId = workspace.Id,
+                MetaLeadId = lead.Id,
+                FormId = form.FormId,
+                ContactId = contact?.Id,
+            });
+        }
+
         await _db.SaveChangesAsync();
 
         if (contact is not null)
