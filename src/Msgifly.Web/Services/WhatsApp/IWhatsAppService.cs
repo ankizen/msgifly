@@ -114,4 +114,9 @@ public interface IWhatsAppService
 
     /// <summary>Sends a session-initiated "flow" interactive message that opens the given published flow. flowToken should be unique per send (used to correlate the eventual nfm_reply).</summary>
     Task<WhatsAppResult<string>> SendFlowMessageAsync(string toPhoneNumber, string metaFlowId, string flowToken, string bodyText, string ctaText, string firstScreenId, string? headerText = null, string? footerText = null);
+
+    // ---- Billing / spend (pricing_analytics — the live replacement for deprecated conversation_analytics) ----
+
+    /// <summary>Per-message cost/volume for the current WABA over [startUtc, endUtc), broken down by the given dimensions (e.g. ["PRICING_CATEGORY"]). Meta caps the lookback window at 1 year.</summary>
+    Task<WhatsAppResult<List<PricingAnalyticsDataPoint>>> GetPricingAnalyticsAsync(DateTime startUtc, DateTime endUtc, string granularity, List<string> dimensions);
 }

@@ -1269,6 +1269,53 @@ public class WhatsAppService : IWhatsAppService
         });
     }
 
+    public async Task<WhatsAppResult<List<PricingAnalyticsDataPoint>>> GetPricingAnalyticsAsync(DateTime startUtc, DateTime endUtc, string granularity, List<string> dimensions)
+    {
+        var settings = await GetSettingsAsync();
+        if (string.IsNullOrWhiteSpace(settings.BusinessAccountId) || string.IsNullOrWhiteSpace(settings.AccessToken))
+        {
+            return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Fail("WhatsApp Business Account is not configured yet.");
+        }
+
+        var startUnix = new DateTimeOffset(DateTime.SpecifyKind(startUtc, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        var endUnix = new DateTimeOffset(DateTime.SpecifyKind(endUtc, DateTimeKind.Utc)).ToUnixTimeSeconds();
+        var dimensionsLiteral = string.Join(",", dimensions.Select(d => $"\"{d}\""));
+        var fieldsExpression = $"pricing_analytics.start({startUnix}).end({endUnix}).granularity({granularity}).dimensions([{dimensionsLiteral}])";
+
+        var response = await GetAsync(settings, $"{settings.BusinessAccountId}?fields={Uri.EscapeDataString(fieldsExpression)}");
+        if (!response.Success)
+        {
+            return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Fail(response.ErrorMessage!);
+        }
+
+        var dataPoints = new List<PricingAnalyticsDataPoint>();
+        var pointsArray = response.Data!["pricing_analytics"]?["data_points"]?.AsArray();
+        if (pointsArray is not null)
+        {
+            foreach (var node in pointsArray)
+            {
+                if (node is null)
+                {
+                    continue;
+                }
+
+                var start = node["start"]?.GetValue<long>();
+                var end = node["end"]?.GetValue<long>();
+                dataPoints.Add(new PricingAnalyticsDataPoint
+                {
+                    PeriodStart = start is null ? DateTime.MinValue : DateTimeOffset.FromUnixTimeSeconds(start.Value).UtcDateTime,
+                    PeriodEnd = end is null ? DateTime.MinValue : DateTimeOffset.FromUnixTimeSeconds(end.Value).UtcDateTime,
+                    Volume = node["volume"]?.GetValue<int>() ?? 0,
+                    Cost = node["cost"]?.GetValue<decimal>() ?? 0m,
+                    PricingCategory = node["pricing_category"]?.GetValue<string>(),
+                    PricingType = node["pricing_type"]?.GetValue<string>(),
+                });
+            }
+        }
+
+        return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Ok(dataPoints);
+    }
+
     private HttpClient CreateClient(ResolvedWhatsAppSettings settings)
     {
         var client = _httpClientFactory.CreateClient("GraphApi");

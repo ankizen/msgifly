@@ -162,6 +162,17 @@ public class TemplateSampleValues
     public List<string> Body { get; set; } = [];
 }
 
+/// <summary>One row from GET /{WABA_ID}?fields=pricing_analytics...— per-message cost/volume, optionally broken down by PricingCategory/PricingType/Country when those dimensions are requested. The live replacement for the deprecated conversation_analytics field (Meta moved to per-message pricing 2025-07-01).</summary>
+public class PricingAnalyticsDataPoint
+{
+    public DateTime PeriodStart { get; set; }
+    public DateTime PeriodEnd { get; set; }
+    public int Volume { get; set; }
+    public decimal Cost { get; set; }
+    public string? PricingCategory { get; set; }
+    public string? PricingType { get; set; }
+}
+
 /// <summary>One Flow as listed by GET /{WABA_ID}/flows — used by SyncFlowsAsync to upsert local rows.</summary>
 public class FlowSummary
 {

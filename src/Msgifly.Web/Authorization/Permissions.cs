@@ -14,6 +14,7 @@ public static class Permissions
         "connect_account.view", "connect_account.connect", "connect_account.disconnect",
         "template.view", "template.load_template",
         "flow.view", "flow.create", "flow.edit", "flow.delete",
+        "billing.view",
         "campaigns.view", "campaigns.create", "campaigns.edit", "campaigns.delete", "campaigns.show_campaign",
         "chat.view", "chat.read_only",
         "activity_log.view", "activity_log.delete",

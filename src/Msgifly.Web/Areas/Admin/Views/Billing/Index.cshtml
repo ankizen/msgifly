@@ -1,0 +1,93 @@
+@model Msgifly.Web.Models.ViewModels.BillingViewModel
+@{
+    ViewData["Title"] = "Billing";
+    var maxDailyCost = Model.Trend.Count > 0 ? Model.Trend.Max(t => t.Cost) : 0m;
+    var maxCategoryCost = Model.ByCategory.Count > 0 ? Model.ByCategory.Max(c => c.Cost) : 0m;
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Billing &amp; Spend</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Per-message WhatsApp Cloud API costs, from Meta's own pricing_analytics — up to a 1 year lookback.</p>
+</div>
+
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3">
+    <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">From</label>
+        <input type="date" name="from" value="@Model.FromDate.ToString("yyyy-MM-dd")"
+               class="mt-1 block rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+    </div>
+    <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">To</label>
+        <input type="date" name="to" value="@Model.ToDate.ToString("yyyy-MM-dd")"
+               class="mt-1 block rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+    </div>
+    <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Apply</button>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="mb-6 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        @Model.ErrorMessage
+    </div>
+}
+else
+{
+    <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+            <p class="text-xs text-gray-500 dark:text-slate-400">Total spend</p>
+            <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.TotalCost.ToString("N2")</p>
+        </div>
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+            <p class="text-xs text-gray-500 dark:text-slate-400">Messages billed</p>
+            <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.TotalVolume</p>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 mb-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Spend by category</h2>
+        @if (Model.ByCategory.Count == 0)
+        {
+            <p class="text-sm text-gray-500 dark:text-slate-400">No billed messages in this date range.</p>
+        }
+        else
+        {
+            <div class="space-y-2">
+                @foreach (var row in Model.ByCategory)
+                {
+                    var pct = maxCategoryCost > 0 ? (int)Math.Round((double)(row.Cost / maxCategoryCost) * 100) : 0;
+                    <div class="flex items-center gap-3">
+                        <span class="w-40 text-xs text-gray-500 dark:text-slate-400 flex-shrink-0 truncate" title="@row.Category">@row.Category</span>
+                        <div class="flex-1 h-5 rounded-full bg-gray-100 dark:bg-slate-900 overflow-hidden">
+                            <div class="h-full bg-emerald-500 rounded-full" style="width: @(pct)%"></div>
+                        </div>
+                        <span class="w-32 text-xs text-gray-700 dark:text-slate-300 text-right flex-shrink-0">@row.Cost.ToString("N2") &middot; @row.Volume msgs</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-4">Daily trend</h2>
+        @if (Model.Trend.Count == 0)
+        {
+            <p class="text-sm text-gray-500 dark:text-slate-400">No billed messages in this date range.</p>
+        }
+        else
+        {
+            <div class="space-y-1.5">
+                @foreach (var row in Model.Trend)
+                {
+                    var pct = maxDailyCost > 0 ? (int)Math.Round((double)(row.Cost / maxDailyCost) * 100) : 0;
+                    <div class="flex items-center gap-3">
+                        <span class="w-24 text-xs text-gray-500 dark:text-slate-400 flex-shrink-0">@row.Date.ToString("dd MMM")</span>
+                        <div class="flex-1 h-3 rounded-full bg-gray-100 dark:bg-slate-900 overflow-hidden">
+                            <div class="h-full bg-blue-500 rounded-full" style="width: @(pct)%"></div>
+                        </div>
+                        <span class="w-20 text-xs text-gray-700 dark:text-slate-300 text-right flex-shrink-0">@row.Cost.ToString("N2")</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
