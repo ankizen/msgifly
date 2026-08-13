@@ -73,7 +73,7 @@ public class MetaLeadAdsService
                 Id = item["id"]?.GetValue<string>() ?? string.Empty,
                 Name = item["name"]?.GetValue<string>() ?? string.Empty,
                 Status = item["status"]?.GetValue<string>() ?? string.Empty,
-                CreatedTime = item["created_time"]?.GetValue<DateTime>(),
+                CreatedTime = ParseMetaTimestamp(item["created_time"]),
             });
         }
 
@@ -131,7 +131,7 @@ public class MetaLeadAdsService
             var lead = new LeadInfo
             {
                 Id = item["id"]?.GetValue<string>() ?? string.Empty,
-                CreatedTime = item["created_time"]?.GetValue<DateTime>() ?? DateTime.UtcNow,
+                CreatedTime = ParseMetaTimestamp(item["created_time"]) ?? DateTime.UtcNow,
             };
 
             foreach (var field in item["field_data"]?.AsArray() ?? [])
@@ -175,5 +175,16 @@ public class MetaLeadAdsService
             _logger.LogWarning(ex, "Lead Ads Graph API request failed for {Path}", path);
             return LeadAdsResult<JsonObject>.Fail("Could not reach the Graph API.");
         }
+    }
+
+    /// <summary>Meta returns timestamps as ISO 8601 strings (e.g. "2026-08-01T10:00:00+0000") —
+    /// JsonNode.GetValue&lt;DateTime&gt;() only works for numeric/native-DateTime nodes and throws
+    /// on a string node, so this always reads it as a string first and parses that.</summary>
+    private static DateTime? ParseMetaTimestamp(JsonNode? node)
+    {
+        var raw = node?.GetValue<string>();
+        return DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : null;
     }
 }
