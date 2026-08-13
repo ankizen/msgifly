@@ -1,0 +1,66 @@
+@model Msgifly.Web.Models.ViewModels.GroupMembersViewModel
+@{
+    ViewData["Title"] = $"Members — {Model.GroupName}";
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.GroupName</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">@Model.Members.Count member(s).</p>
+    </div>
+    <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Back to Groups</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Add contacts</h2>
+        <form asp-action="AddMembers" asp-route-id="@Model.GroupId" method="post" class="space-y-3">
+            <select name="contactIds" multiple class="tom-select block w-full">
+                @foreach (var c in Model.ContactOptions)
+                {
+                    <option value="@c.Id">@c.Label</option>
+                }
+            </select>
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Add selected</button>
+        </form>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Upload CSV</h2>
+        <p class="text-xs text-gray-400 dark:text-slate-500 mb-3">A "phone" column, matched against existing contacts. Numbers that don't match an existing contact are reported, not created.</p>
+        <form asp-action="UploadCsv" asp-route-id="@Model.GroupId" method="post" enctype="multipart/form-data" class="space-y-3">
+            <input type="file" name="file" accept=".csv" required
+                   class="block w-full text-sm text-gray-700 dark:text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-gray-100 dark:file:bg-slate-700 file:text-sm file:font-medium hover:file:bg-gray-200 dark:hover:file:bg-slate-600" />
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Upload</button>
+        </form>
+    </div>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Contact</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Members.Any())
+            {
+                <tr><td colspan="2" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No members yet.</td></tr>
+            }
+            @foreach (var member in Model.Members)
+            {
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@member.Label</td>
+                    <td class="px-4 py-3 text-sm text-right">
+                        <form asp-action="RemoveMember" asp-route-id="@Model.GroupId" method="post" class="inline">
+                            <input type="hidden" name="contactId" value="@member.Id" />
+                            <button type="submit" class="text-red-600 hover:text-red-500">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

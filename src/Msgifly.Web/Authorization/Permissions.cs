@@ -15,6 +15,7 @@ public static class Permissions
         "template.view", "template.load_template",
         "flow.view", "flow.create", "flow.edit", "flow.delete",
         "billing.view",
+        "group.view", "group.create", "group.edit", "group.delete",
         "campaigns.view", "campaigns.create", "campaigns.edit", "campaigns.delete", "campaigns.show_campaign",
         "chat.view", "chat.read_only",
         "activity_log.view", "activity_log.delete",

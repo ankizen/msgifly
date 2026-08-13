@@ -1,0 +1,41 @@
+@model Msgifly.Web.Models.ViewModels.GroupCsvUploadResult
+@{
+    ViewData["Title"] = "CSV Upload Result";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">CSV upload — @Model.GroupName</h1>
+</div>
+
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Added</p>
+        <p class="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">@Model.Matched</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Already in group</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.AlreadyMember</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">No matching contact</p>
+        <p class="text-2xl font-semibold text-red-600 dark:text-red-400">@Model.Unmatched.Count</p>
+    </div>
+</div>
+
+@if (Model.Unmatched.Count > 0)
+{
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 mb-6">
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Numbers with no matching contact</h2>
+        <p class="text-xs text-gray-400 dark:text-slate-500 mb-3">These weren't added — import them as contacts first (Contacts &rarr; Import CSV), then re-upload.</p>
+        <div class="flex flex-wrap gap-2">
+            @foreach (var phone in Model.Unmatched)
+            {
+                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">@phone</span>
+            }
+        </div>
+    </div>
+}
+
+<a asp-action="Members" asp-route-id="@Model.GroupId" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+    Back to members
+</a>

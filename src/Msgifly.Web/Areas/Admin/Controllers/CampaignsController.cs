@@ -9,6 +9,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Campaigns;
+using Msgifly.Web.Services.Groups;
 using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
@@ -19,11 +20,13 @@ public class CampaignsController : Controller
 {
     private const int PageSize = 20;
     private readonly ApplicationDbContext _db;
+    private readonly ContactGroupResolver _groupResolver;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public CampaignsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
+    public CampaignsController(ApplicationDbContext db, ContactGroupResolver groupResolver, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
+        _groupResolver = groupResolver;
         _workspaceAccessor = workspaceAccessor;
     }
 
@@ -88,6 +91,7 @@ public class CampaignsController : Controller
                 SendNow = campaign.SendNow,
                 ScheduledSendTime = campaign.ScheduledSendTime,
                 SelectAll = campaign.SelectAll,
+                RecipientMode = campaign.SelectAll ? "All" : "Manual",
                 HeaderMediaUrl = campaign.FileName,
             };
 
@@ -104,9 +108,29 @@ public class CampaignsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(CampaignFormViewModel model)
     {
+        model.SelectAll = model.RecipientMode == "All";
+
+        if (model.RecipientMode == "Group")
+        {
+            var group = model.GroupId is null ? null : await _db.ContactGroups.FirstOrDefaultAsync(g => g.Id == model.GroupId);
+            if (group is null)
+            {
+                ModelState.AddModelError(nameof(model.GroupId), "Choose a group.");
+            }
+            else
+            {
+                // Resolved server-side from the group's CURRENT members/filter, never trusting
+                // whatever the client posted — a group's membership can change between page load
+                // and submit, and only the live result should ever become the recipient list.
+                model.SelectedContactIds = await _groupResolver.ResolveContactIdsAsync(group);
+            }
+        }
+
         if (!model.SelectAll && model.SelectedContactIds.Count == 0)
         {
-            ModelState.AddModelError(nameof(model.SelectedContactIds), "Pick at least one contact, or choose \"All matching contacts\".");
+            ModelState.AddModelError(nameof(model.SelectedContactIds), model.RecipientMode == "Group"
+                ? "That group has no matching contacts right now."
+                : "Pick at least one contact, or choose \"All matching contacts\".");
         }
 
         if (!model.SendNow && model.ScheduledSendTime is null)
@@ -270,6 +294,7 @@ public class CampaignsController : Controller
             Name = $"{campaign.Name} — follow-up ({segmentLabel})",
             RelType = campaign.RelType,
             SelectAll = false,
+            RecipientMode = "Manual",
             SelectedContactIds = contactIds,
         };
 
@@ -435,6 +460,10 @@ public class CampaignsController : Controller
 
         model.ContactOptions = await _db.Contacts.AsNoTracking().OrderBy(c => c.FirstName)
             .Select(c => new ContactOption(c.Id, c.FirstName + " " + c.LastName + " (" + c.Type + ") - " + c.Phone))
+            .ToListAsync();
+
+        model.GroupOptions = await _db.ContactGroups.AsNoTracking().OrderBy(g => g.Name)
+            .Select(g => new GroupOption(g.Id, g.Name, g.Type.ToString()))
             .ToListAsync();
     }
 }

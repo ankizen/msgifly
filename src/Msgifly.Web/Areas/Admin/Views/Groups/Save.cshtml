@@ -1,0 +1,120 @@
+@model Msgifly.Web.Models.ViewModels.GroupFormViewModel
+@{
+    var isEdit = Model.Id.HasValue;
+    ViewData["Title"] = isEdit ? "Edit Group" : "New Group";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
+        @if (isEdit)
+        {
+            <text>Type can't change after creation — delete and recreate if you need the other kind.</text>
+        }
+        else
+        {
+            <text>Dynamic groups re-evaluate their filter every time they're used. Static groups are a fixed list you build by hand or CSV upload.</text>
+        }
+    </p>
+</div>
+
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="mb-4 rounded-md bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-700 dark:text-red-300">
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+
+<form asp-action="@(isEdit ? "Edit" : "Create")" asp-route-id="@Model.Id" method="post" class="max-w-2xl space-y-6"
+      x-data="{ type: '@Model.Type' }">
+    <input type="hidden" asp-for="Id" />
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4">
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" placeholder="VIP customers" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <span asp-validation-for="Name" class="mt-1 block text-sm text-red-600"></span>
+        </div>
+
+        @if (isEdit)
+        {
+            <div>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300">Type</span>
+                <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">@(Model.Type == Msgifly.Web.Models.Enums.ContactGroupType.Dynamic ? "Dynamic (live filter)" : "Static (fixed list)")</p>
+            </div>
+        }
+        else
+        {
+            <div>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300">Type</span>
+                <div class="mt-2 flex gap-4">
+                    <label class="inline-flex items-center gap-2">
+                        <input type="radio" name="Type" value="Dynamic" x-model="type" checked class="text-emerald-600 focus:ring-emerald-500" />
+                        <span class="text-sm text-gray-700 dark:text-slate-300">Dynamic — saved filter</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2">
+                        <input type="radio" name="Type" value="Static" x-model="type" class="text-emerald-600 focus:ring-emerald-500" />
+                        <span class="text-sm text-gray-700 dark:text-slate-300">Static — fixed list</span>
+                    </label>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-4" x-show="type === 'Dynamic'" x-cloak>
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Filter</h2>
+        <p class="text-xs text-gray-400 dark:text-slate-500">Leave a filter empty to match any value for that field. Only enabled contacts are ever included.</p>
+
+        <div>
+            <label asp-for="FilterRelType" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Recipient type</label>
+            <select asp-for="FilterRelType" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                <option value="">Any</option>
+                <option value="Lead">Lead</option>
+                <option value="Customer">Customer</option>
+            </select>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Statuses</label>
+                <select name="FilterStatusIds" multiple class="tom-select mt-1 block w-full">
+                    @foreach (var opt in Model.StatusOptions)
+                    {
+                        <option value="@opt.Value" selected="@(Model.FilterStatusIds.Contains(int.Parse(opt.Value!)))">@opt.Text</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Sources</label>
+                <select name="FilterSourceIds" multiple class="tom-select mt-1 block w-full">
+                    @foreach (var opt in Model.SourceOptions)
+                    {
+                        <option value="@opt.Value" selected="@(Model.FilterSourceIds.Contains(int.Parse(opt.Value!)))">@opt.Text</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6" x-show="type === 'Static'" x-cloak>
+        <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-1">Members</h2>
+        <p class="text-sm text-gray-500 dark:text-slate-400">
+            @if (isEdit)
+            {
+                <a asp-action="Members" asp-route-id="@Model.Id" class="text-emerald-600 hover:text-emerald-500">Manage members</a>
+                <text> — add contacts by hand or upload a CSV of phone numbers.</text>
+            }
+            else
+            {
+                <text>Save the group first, then add contacts by hand or upload a CSV of phone numbers.</text>
+            }
+        </p>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+            @(isEdit ? "Save changes" : "Create group")
+        </button>
+        <a asp-action="Index" class="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</a>
+    </div>
+</form>

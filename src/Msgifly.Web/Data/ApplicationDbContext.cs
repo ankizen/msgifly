@@ -47,6 +47,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<LeadAdsImport> LeadAdsImports => Set<LeadAdsImport>();
     public DbSet<LeadAdsForm> LeadAdsForms => Set<LeadAdsForm>();
     public DbSet<Flow> Flows => Set<Flow>();
+    public DbSet<ContactGroup> ContactGroups => Set<ContactGroup>();
+    public DbSet<ContactGroupMember> ContactGroupMembers => Set<ContactGroupMember>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -74,6 +76,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<LeadAdsImport>().HasQueryFilter(l => l.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<LeadAdsForm>().HasQueryFilter(f => f.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<Flow>().HasQueryFilter(f => f.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<ContactGroup>().HasQueryFilter(g => g.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<ContactGroupMember>().HasQueryFilter(m => m.Group.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ContactNote>().HasQueryFilter(n => n.Contact.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ChatMessage>().HasQueryFilter(m => m.Chat.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<CampaignDetail>().HasQueryFilter(d => d.Campaign.WorkspaceId == _workspaceAccessor.WorkspaceId);
@@ -241,6 +245,23 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         {
             e.HasIndex(f => f.MetaFlowId).IsUnique().HasFilter("[MetaFlowId] IS NOT NULL");
             e.HasIndex(f => f.WorkspaceId);
+        });
+
+        builder.Entity<ContactGroup>(e => e.HasIndex(g => g.WorkspaceId));
+
+        builder.Entity<ContactGroupMember>(e =>
+        {
+            e.HasIndex(m => new { m.GroupId, m.ContactId }).IsUnique();
+
+            e.HasOne(m => m.Group)
+                .WithMany(g => g.Members)
+                .HasForeignKey(m => m.GroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(m => m.Contact)
+                .WithMany()
+                .HasForeignKey(m => m.ContactId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

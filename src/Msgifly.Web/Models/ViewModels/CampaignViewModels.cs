@@ -35,6 +35,12 @@ public class CampaignFormViewModel
     public int? FilterSourceId { get; set; }
     public List<int> SelectedContactIds { get; set; } = [];
 
+    /// <summary>All | Group | Manual — drives which Recipients sub-section the Save view shows and how the controller resolves SelectedContactIds. Not persisted; Campaign only ever remembers the resulting SelectAll/SelectedContactIds.</summary>
+    public string RecipientMode { get; set; } = "All";
+
+    /// <summary>Only meaningful when RecipientMode == "Group" — resolved into SelectedContactIds server-side at save time so a group's CURRENT members are used, not a stale snapshot.</summary>
+    public int? GroupId { get; set; }
+
     public string? HeaderMediaUrl { get; set; }
 
     public const int MaxBodyParams = 6;
@@ -51,6 +57,7 @@ public class CampaignFormViewModel
     public List<SelectListItem> StatusOptions { get; set; } = [];
     public List<SelectListItem> SourceOptions { get; set; } = [];
     public List<ContactOption> ContactOptions { get; set; } = [];
+    public List<GroupOption> GroupOptions { get; set; } = [];
 }
 
 public record TemplateOption(

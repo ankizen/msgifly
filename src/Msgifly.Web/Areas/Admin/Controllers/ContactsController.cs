@@ -98,6 +98,11 @@ public class ContactsController : Controller
             .OrderBy(f => f.Name)
             .Select(f => new FlowOption(f.MetaFlowId!, f.Name))
             .ToListAsync();
+        ViewData["GroupOptions"] = await _db.ContactGroups.AsNoTracking()
+            .Where(g => g.Type == ContactGroupType.Static)
+            .OrderBy(g => g.Name)
+            .Select(g => new GroupOption(g.Id, g.Name))
+            .ToListAsync();
 
         return View(await PagedList<Contact>.CreateAsync(query, page, effectivePageSize));
     }
