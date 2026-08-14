@@ -195,12 +195,18 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<WhatsappTemplate>.Fail("WhatsApp Business Account is not configured yet.");
         }
 
+        var componentsResult = await BuildTemplateComponentsAsync(settings, request);
+        if (!componentsResult.Success)
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail(componentsResult.ErrorMessage!);
+        }
+
         var metaPayload = new
         {
             name = request.Name,
             category = request.Category.ToUpperInvariant(),
             language = request.Language,
-            components = BuildTemplateComponents(request),
+            components = componentsResult.Data,
         };
 
         var client = CreateClient(settings);
@@ -249,10 +255,16 @@ public class WhatsAppService : IWhatsAppService
         var validation = TemplateValidator.Validate(request);
 
         var settings = await GetSettingsAsync();
+        var componentsResult = await BuildTemplateComponentsAsync(settings, request);
+        if (!componentsResult.Success)
+        {
+            return WhatsAppResult<WhatsappTemplate>.Fail(componentsResult.ErrorMessage!);
+        }
+
         var editPayload = new
         {
             category = request.Category.ToUpperInvariant(),
-            components = BuildTemplateComponents(request),
+            components = componentsResult.Data,
         };
 
         var client = CreateClient(settings);
@@ -308,8 +320,13 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult.Ok();
     }
 
-    /// <summary>Translates our local request shape into Meta's `components` array (HEADER -> BODY -> FOOTER -> BUTTONS order), including the `example` blocks Meta requires alongside any {{N}} variable.</summary>
-    private static List<object> BuildTemplateComponents(TemplateCreateRequest request)
+    /// <summary>Translates our local request shape into Meta's `components` array (HEADER -> BODY -> FOOTER -> BUTTONS order), including the `example` blocks Meta requires alongside any {{N}} variable.
+    /// A media (image/video/document) header can't reference a plain external URL directly, unlike a
+    /// live message send — template creation specifically requires a `header_handle` obtained from
+    /// Meta's separate Resumable Upload API (App-scoped, not WABA-scoped), so this downloads the
+    /// media from the given URL and re-uploads it to Meta first. Async (and no longer static)
+    /// because of that upload round-trip.</summary>
+    private async Task<WhatsAppResult<List<object>>> BuildTemplateComponentsAsync(ResolvedWhatsAppSettings settings, TemplateCreateRequest request)
     {
         var components = new List<object>();
 
@@ -327,12 +344,23 @@ public class WhatsAppService : IWhatsAppService
             }
             else
             {
+                if (string.IsNullOrWhiteSpace(request.HeaderMediaUrl))
+                {
+                    return WhatsAppResult<List<object>>.Fail("A header media URL is required for image/video/document headers.");
+                }
+
+                var handleResult = await UploadTemplateHeaderHandleAsync(settings, request.HeaderMediaUrl);
+                if (!handleResult.Success)
+                {
+                    return WhatsAppResult<List<object>>.Fail($"Couldn't upload header media to Meta: {handleResult.ErrorMessage}");
+                }
+
                 var format = request.HeaderType.ToUpperInvariant();
                 components.Add(new
                 {
                     type = "HEADER",
                     format,
-                    example = new { header_url = new[] { request.HeaderMediaUrl } },
+                    example = new { header_handle = new[] { handleResult.Data } },
                 });
             }
         }
@@ -366,7 +394,82 @@ public class WhatsAppService : IWhatsAppService
             });
         }
 
-        return components;
+        return WhatsAppResult<List<object>>.Ok(components);
+    }
+
+    /// <summary>
+    /// Meta's Resumable Upload API — the only way to get a `header_handle` for a template's media
+    /// header example. Two calls: start a session scoped to the Facebook App (not the WABA or a
+    /// phone number, unlike every other upload in this file), then POST the raw bytes to that
+    /// session. The byte-upload step specifically requires the literal "OAuth" auth scheme, not
+    /// "Bearer" — confirmed against Meta's own docs, not a typo.
+    /// </summary>
+    private async Task<WhatsAppResult<string>> UploadTemplateHeaderHandleAsync(ResolvedWhatsAppSettings settings, string mediaUrl)
+    {
+        if (string.IsNullOrWhiteSpace(settings.FacebookAppId))
+        {
+            return WhatsAppResult<string>.Fail("Facebook App ID is not configured (Setup → Msgifly Settings).");
+        }
+
+        byte[] bytes;
+        string mimeType;
+        try
+        {
+            var downloadClient = _httpClientFactory.CreateClient("GraphApi");
+            var downloadResponse = await downloadClient.GetAsync(mediaUrl);
+            if (!downloadResponse.IsSuccessStatusCode)
+            {
+                return WhatsAppResult<string>.Fail($"Couldn't download the header media from {mediaUrl} (HTTP {(int)downloadResponse.StatusCode}).");
+            }
+
+            bytes = await downloadResponse.Content.ReadAsByteArrayAsync();
+            mimeType = downloadResponse.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+        }
+        catch (HttpRequestException ex)
+        {
+            return WhatsAppResult<string>.Fail($"Couldn't reach the header media URL: {ex.Message}");
+        }
+
+        var client = CreateClient(settings);
+        var fileName = Path.GetFileName(new Uri(mediaUrl).LocalPath);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            fileName = "header-media";
+        }
+
+        var startQuery = $"file_name={Uri.EscapeDataString(fileName)}&file_length={bytes.Length}&file_type={Uri.EscapeDataString(mimeType)}";
+        var startResponse = await client.PostAsync($"{settings.FacebookAppId}/uploads?{startQuery}", content: null);
+        if (!startResponse.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(startResponse));
+        }
+
+        var startBody = await startResponse.Content.ReadFromJsonAsync<JsonObject>();
+        var sessionId = startBody?["id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(sessionId))
+        {
+            return WhatsAppResult<string>.Fail("Meta didn't return an upload session id.");
+        }
+
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, sessionId)
+        {
+            Content = new ByteArrayContent(bytes),
+        };
+        uploadRequest.Headers.Authorization = new AuthenticationHeaderValue("OAuth", settings.AccessToken);
+        uploadRequest.Headers.Add("file_offset", "0");
+        uploadRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(mimeType);
+
+        var uploadResponse = await client.SendAsync(uploadRequest);
+        if (!uploadResponse.IsSuccessStatusCode)
+        {
+            return WhatsAppResult<string>.Fail(await ExtractErrorAsync(uploadResponse));
+        }
+
+        var uploadBody = await uploadResponse.Content.ReadFromJsonAsync<JsonObject>();
+        var handle = uploadBody?["h"]?.GetValue<string>();
+        return string.IsNullOrEmpty(handle)
+            ? WhatsAppResult<string>.Fail("Upload succeeded but Meta returned no handle.")
+            : WhatsAppResult<string>.Ok(handle);
     }
 
     private static WhatsappTemplate MapRequestToEntity(TemplateCreateRequest request, TemplateValidator.ValidationResult validation, WhatsappTemplate entity)
