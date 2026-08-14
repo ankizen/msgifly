@@ -14,6 +14,7 @@ using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
+using Msgifly.Web.Services.Groups;
 using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
 
@@ -28,19 +29,26 @@ public class ContactsController : Controller
     private readonly AutomationEngine _automationEngine;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
+    private readonly ContactGroupResolver _groupResolver;
 
-    public ContactsController(ApplicationDbContext db, AutomationEngine automationEngine, IWhatsAppService whatsAppService, ICurrentWorkspaceAccessor workspaceAccessor)
+    public ContactsController(
+        ApplicationDbContext db,
+        AutomationEngine automationEngine,
+        IWhatsAppService whatsAppService,
+        ICurrentWorkspaceAccessor workspaceAccessor,
+        ContactGroupResolver groupResolver)
     {
         _db = db;
         _automationEngine = automationEngine;
         _whatsAppService = whatsAppService;
         _workspaceAccessor = workspaceAccessor;
+        _groupResolver = groupResolver;
     }
 
     private static readonly int[] AllowedPageSizes = [25, 50, 100];
 
     [Authorize(Policy = "contact.view")]
-    public async Task<IActionResult> Index(string? search, int? statusId, int? sourceId, string? leadFormId, string? pageSize, int page = 1)
+    public async Task<IActionResult> Index(string? search, int? statusId, int? sourceId, string? leadFormId, int? groupId, string? pageSize, int page = 1)
     {
         // "all" bypasses paging entirely (int.MaxValue as the Take() count) rather than picking
         // an arbitrary large-but-finite cap — a personal CRM's contact list is never going to be
@@ -77,10 +85,18 @@ public class ContactsController : Controller
             query = query.Where(c => c.LeadAdsFormId == leadFormId);
         }
 
+        if (groupId is not null)
+        {
+            var group = await _db.ContactGroups.AsNoTracking().FirstOrDefaultAsync(g => g.Id == groupId);
+            var memberIds = group is null ? new List<int>() : await _groupResolver.ResolveContactIdsAsync(group);
+            query = query.Where(c => memberIds.Contains(c.Id));
+        }
+
         ViewData["Search"] = search;
         ViewData["StatusId"] = statusId;
         ViewData["SourceId"] = sourceId;
         ViewData["LeadFormId"] = leadFormId;
+        ViewData["GroupId"] = groupId;
         ViewData["PageSize"] = pageSize == "all" ? "all" : effectivePageSize.ToString();
         ViewData["StatusOptions"] = await BuildOptionsAsync(_db.Statuses, s => s.Id, s => s.Name);
         ViewData["SourceOptions"] = await BuildOptionsAsync(_db.Sources, s => s.Id, s => s.Name);
@@ -102,6 +118,13 @@ public class ContactsController : Controller
             .Where(g => g.Type == ContactGroupType.Static)
             .OrderBy(g => g.Name)
             .Select(g => new GroupOption(g.Id, g.Name))
+            .ToListAsync();
+        // Separate from GroupOptions above: the "Add to group" modal can only target a Static
+        // group (you can't manually add a member to a Dynamic one), but filtering the list BY
+        // group membership is a read, so Dynamic groups belong here too.
+        ViewData["GroupFilterOptions"] = await _db.ContactGroups.AsNoTracking()
+            .OrderBy(g => g.Name)
+            .Select(g => new GroupOption(g.Id, g.Name, g.Type == ContactGroupType.Dynamic ? "Dynamic" : "Static"))
             .ToListAsync();
 
         return View(await PagedList<Contact>.CreateAsync(query, page, effectivePageSize));
@@ -143,11 +166,86 @@ public class ContactsController : Controller
             BodyParams = (bodyParams ?? []).Take(template.BodyParamsCount).ToList(),
         };
 
+        var (success, error) = await SendTemplateToContactAsync(contact, template, request);
+        if (!success)
+        {
+            this.Notify($"Couldn't send: {error}", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        this.Notify($"Template sent to {contact.FullName}.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// The "Send Template" bulk action on the Contacts list — same send as the single-contact
+    /// action above, just looped over a hand-picked selection instead of one row. Deliberately
+    /// sequential and synchronous (no background job): this is for "blast this to the dozen people
+    /// I just selected right now," not mass sending — that's what Campaigns is already for.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkSendTemplate(string ids, string templateId, string? headerParam, List<string>? bodyParams)
+    {
+        var contactIds = ParseIds(ids);
+        if (contactIds.Count == 0)
+        {
+            this.Notify("No contacts selected.", "warning");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var template = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.MetaTemplateId == templateId && t.Status == TemplateStatus.Approved);
+        if (template is null)
+        {
+            this.Notify("Choose an approved template.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var contacts = await _db.Contacts.Where(c => contactIds.Contains(c.Id)).ToListAsync();
+        var sentCount = 0;
+        var failures = new List<string>();
+
+        foreach (var contact in contacts)
+        {
+            var request = new TemplateSendRequest
+            {
+                TemplateName = template.TemplateName,
+                Language = template.Language,
+                HeaderFormat = template.HeaderFormat,
+                HeaderText = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) ? headerParam : null,
+                HeaderMediaUrl = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) ? null : headerParam,
+                BodyParams = (bodyParams ?? []).Take(template.BodyParamsCount).ToList(),
+            };
+
+            var (success, error) = await SendTemplateToContactAsync(contact, template, request);
+            if (success)
+            {
+                sentCount++;
+            }
+            else
+            {
+                failures.Add($"{contact.FullName} ({error})");
+            }
+        }
+
+        var message = failures.Count == 0
+            ? $"Template sent to all {sentCount} contact(s)."
+            : $"Sent to {sentCount} of {contacts.Count}. Failed: {string.Join("; ", failures.Take(5))}{(failures.Count > 5 ? $" and {failures.Count - 5} more" : "")}.";
+        this.Notify(message, failures.Count == 0 ? "success" : "warning");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Sends an already-resolved template to one contact and records it as an outbound
+    /// ChatMessage, finding-or-creating the Chat exactly like the public API's MessagesController
+    /// does — shared by the single-contact and bulk Send Template actions above so there's one
+    /// place that does the actual send-and-record, not two copies drifting apart.</summary>
+    private async Task<(bool Success, string? Error)> SendTemplateToContactAsync(Contact contact, WhatsappTemplate template, TemplateSendRequest request)
+    {
         var result = await _whatsAppService.SendTemplateMessageAsync(contact.Phone, request);
         if (!result.Success)
         {
-            this.Notify($"Couldn't send: {result.ErrorMessage}", "danger");
-            return RedirectToAction(nameof(Index));
+            return (false, result.ErrorMessage);
         }
 
         var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == contact.Phone);
@@ -180,8 +278,7 @@ public class ContactsController : Controller
         });
         await _db.SaveChangesAsync();
 
-        this.Notify($"Template sent to {contact.FullName}.");
-        return RedirectToAction(nameof(Index));
+        return (true, null);
     }
 
     /// <summary>
@@ -280,6 +377,17 @@ public class ContactsController : Controller
 
     private static string Truncate(string text, int maxLength) =>
         text.Length > maxLength ? text[..maxLength] + "…" : text;
+
+    /// <summary>Ids travel as a comma-separated query string (?ids=1,2,3) rather than form fields
+    /// so the existing shared _ConfirmDialog component — a bare form posting to one URL, no other
+    /// inputs — works for bulk delete without needing its own special case. Reused by every bulk
+    /// action that takes a hand-picked contact-id selection.</summary>
+    private static List<int> ParseIds(string ids) =>
+        (ids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => int.TryParse(s, out var id) ? id : (int?)null)
+            .Where(id => id is not null)
+            .Select(id => id!.Value)
+            .ToList();
 
     [Authorize(Policy = "contact.create,contact.edit")]
     public async Task<IActionResult> Save(int? id)
@@ -462,19 +570,12 @@ public class ContactsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    /// <summary>Ids travel as a comma-separated query string (?ids=1,2,3) rather than form fields
-    /// so the existing shared _ConfirmDialog component — a bare form posting to one URL, no other
-    /// inputs — works for bulk delete without needing its own special case.</summary>
     [HttpPost]
     [Authorize(Policy = "contact.delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> BulkDelete(string ids)
     {
-        var contactIds = (ids ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => int.TryParse(s, out var id) ? id : (int?)null)
-            .Where(id => id is not null)
-            .Select(id => id!.Value)
-            .ToList();
+        var contactIds = ParseIds(ids);
 
         if (contactIds.Count == 0)
         {
