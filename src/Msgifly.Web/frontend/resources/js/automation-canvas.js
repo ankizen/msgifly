@@ -23,6 +23,24 @@ function node(title, icon, bodyHtml) {
   return `<div class="df-node-card"><div class="df-node-title">${icon} ${title}</div><div class="df-node-body">${bodyHtml}</div></div>`;
 }
 
+// Matches AutomationEngine.Interpolate's {{contact.*}} handling — surfaced as clickable chips
+// (not just documentation) so filling in "Thank you for submitting, {name}" doesn't require a
+// non-technical admin to remember or type the {{...}} syntax themselves.
+const PERSONALIZATION_TOKENS = [
+  { token: '{{contact.firstName}}', label: 'First name' },
+  { token: '{{contact.fullName}}', label: 'Full name' },
+  { token: '{{contact.phone}}', label: 'Phone' },
+];
+
+// escapeHtml is defined further below in this file — safe to call here since function
+// declarations (unlike const arrow functions) are hoisted for the whole module.
+function personalizationChipsHtml() {
+  const chips = PERSONALIZATION_TOKENS.map(
+    (t) => `<button type="button" class="df-chip" data-token="${escapeHtml(t.token)}">+ ${t.label}</button>`
+  ).join('');
+  return `<div class="df-chip-row">${chips}</div>`;
+}
+
 const STEP_DEFS = {
   SendMessage: {
     label: 'Send Message',
@@ -33,7 +51,7 @@ const STEP_DEFS = {
     html: node(
       'Send Message',
       '💬',
-      `<textarea df-text rows="3" placeholder="Hi {{message.text}}..." class="${FIELD_CLASS}"></textarea>`
+      `<textarea df-text rows="3" placeholder="Hi {{contact.firstName}}, thanks for..." class="${FIELD_CLASS}"></textarea>${personalizationChipsHtml()}`
     ),
   },
   SendTemplate: {
@@ -188,6 +206,7 @@ function sendTemplateHtml(templateOptions) {
      </select>
      <input df-headerparam placeholder="Header value ({{1}})" class="${FIELD_CLASS}" style="display:none" />
      ${bodyParamInputs}
+     ${personalizationChipsHtml()}
      <div class="df-template-preview mt-1 rounded-md p-2" style="background-color:#e5ddd5; display:none"></div>
      <input type="hidden" df-language />`
   );
@@ -318,6 +337,51 @@ function wireSendTemplateFields(editor, container, templateOptions) {
   });
 }
 
+/**
+ * Clicking a "+ First name" chip inserts {{contact.firstName}} into whichever text field the
+ * admin last focused within that same node card (falling back to the card's first text field if
+ * none was focused yet) — at the cursor position, not just appended, so it can be dropped mid-
+ * sentence ("Thank you {{contact.firstName}} for submitting").
+ */
+function wirePersonalizationChips(container) {
+  container.addEventListener(
+    'focusin',
+    (e) => {
+      if (e.target.matches('textarea, input[type="text"], input:not([type])')) {
+        const card = e.target.closest('.df-node-card');
+        if (card) card._lastFocusedField = e.target;
+      }
+    },
+    true
+  );
+
+  container.addEventListener('click', (e) => {
+    const chip = e.target.closest('.df-chip');
+    if (!chip) return;
+
+    const card = chip.closest('.df-node-card');
+    // Fall back to the first VISIBLE text field, not just the first in DOM order — a SendTemplate
+    // card's header/body param inputs are individually hidden until a template with that many
+    // variables is picked (see wireSendTemplateFields), so a naive first-match could silently
+    // target a display:none field the admin can't even see the token land in.
+    const visibleFields = Array.from(card?.querySelectorAll('textarea, input[type="text"], input:not([type])') || [])
+      .filter((el) => el.offsetParent !== null);
+    const field = card?._lastFocusedField && card.contains(card._lastFocusedField) && card._lastFocusedField.offsetParent !== null
+      ? card._lastFocusedField
+      : visibleFields[0];
+    if (!field) return;
+
+    const token = chip.dataset.token;
+    const start = field.selectionStart ?? field.value.length;
+    const end = field.selectionEnd ?? field.value.length;
+    field.value = field.value.slice(0, start) + token + field.value.slice(end);
+    field.focus();
+    const cursor = start + token.length;
+    field.setSelectionRange(cursor, cursor);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 /** @param {{id: string, name: string}[]} leadForms */
 const TRIGGER_HTML = (leadForms) => {
   const formOptions = (leadForms || [])
@@ -355,7 +419,34 @@ const TRIGGER_HTML = (leadForms) => {
   </div>`;
 };
 
-export function createAutomationCanvas(container, initial) {
+// WhatsApp only allows a *template* message to someone with no open 24-hour session — exactly
+// the state of a brand-new Lead Ads contact or any other freshly-created contact who hasn't
+// messaged in. SendButtons/SendMessage sent as the very first step off one of these triggers
+// will be silently rejected by Meta's own API; this just warns in the builder before that
+// happens, rather than leaving it to be discovered later in the run Logs.
+const NO_SESSION_TRIGGERS = new Set(['FacebookLeadReceived', 'NewContactCreated']);
+const SESSION_RESTRICTED_STEPS = new Set(['SendButtons', 'SendMessage']);
+
+function computeSessionWindowWarning(editor) {
+  const exported = editor.export();
+  const nodesById = exported.drawflow.Home.data;
+  const triggerEntry = Object.values(nodesById).find((n) => n.name === 'Trigger');
+  if (!triggerEntry) return null;
+
+  const triggerType = triggerEntry.data?.triggertype;
+  if (!NO_SESSION_TRIGGERS.has(triggerType)) return null;
+
+  const firstConn = triggerEntry.outputs?.output_1?.connections?.[0];
+  if (!firstConn) return null;
+  const firstStep = nodesById[firstConn.node];
+  if (!firstStep || !SESSION_RESTRICTED_STEPS.has(firstStep.name)) return null;
+
+  const triggerLabel = triggerType === 'FacebookLeadReceived' ? 'a new Facebook lead' : 'a new contact';
+  const stepLabel = firstStep.name === 'SendButtons' ? '"Send Buttons"' : '"Send Message"';
+  return `${stepLabel} can't reach ${triggerLabel} as the first step — WhatsApp only allows a Template message to someone who hasn't messaged you yet. Use "Send Template" first instead.`;
+}
+
+export function createAutomationCanvas(container, initial, onGraphChange) {
   const editor = new Drawflow(container);
   editor.reroute = true;
   editor.zoom_max = 1.4;
@@ -375,6 +466,7 @@ export function createAutomationCanvas(container, initial) {
   }
 
   wireSendTemplateFields(editor, container, templateOptions);
+  wirePersonalizationChips(container);
 
   function addTriggerNode(x, y, triggerType, data) {
     const merged = { triggertype: triggerType || 'InboundMessage', keywords: '', matchtype: 'contains', casesensitive: 'false', replyids: '', leadformid: '', ...(data || {}) };
@@ -389,6 +481,22 @@ export function createAutomationCanvas(container, initial) {
     triggerNodeId = addTriggerNode(50, 200, initial.triggerType, initial.triggerFields);
     layoutChain(initial.steps, 420, 200, triggerNodeId, 'output_1');
   }
+
+  // ---- Session-window risk warning: recompute on anything that could change the answer ----
+  function notifyGraphChanged() {
+    if (typeof onGraphChange === 'function') {
+      onGraphChange({ sessionWindowWarning: computeSessionWindowWarning(editor) });
+    }
+  }
+
+  editor.on('connectionCreated', notifyGraphChanged);
+  editor.on('connectionRemoved', notifyGraphChanged);
+  editor.on('nodeCreated', notifyGraphChanged);
+  editor.on('nodeRemoved', notifyGraphChanged);
+  container.addEventListener('change', (e) => {
+    if (e.target.matches('[df-triggertype]')) notifyGraphChanged();
+  });
+  notifyGraphChanged();
 
   // A canvas Condition node only ever has two outputs (Yes/No) — there's no third "runs
   // regardless" edge, matching standard flowchart notation. So a chain stops being laid out

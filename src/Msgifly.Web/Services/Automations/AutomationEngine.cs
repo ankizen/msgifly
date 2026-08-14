@@ -235,13 +235,19 @@ public class AutomationEngine
 
     private async Task<string> RunStepAsync(AutomationStep step, Automation automation, int? contactId, AutomationContext context)
     {
+        // Loaded once per step (not per Interpolate call) so {{contact.firstName}} etc. can
+        // personalize a message/template/webhook body without a fresh query per placeholder.
+        var interpContact = contactId is not null
+            ? await _db.Contacts.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contactId)
+            : null;
+
         switch (step.StepType)
         {
             case AutomationStepType.SendMessage:
             {
                 var cfg = Deserialize<SendMessageStepConfig>(step.StepConfigJson) ?? throw new InvalidOperationException("Missing SendMessage config.");
                 var phone = await ResolvePhoneAsync(contactId, context);
-                var text = Interpolate(cfg.Text, context);
+                var text = Interpolate(cfg.Text, context, interpContact);
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     throw new InvalidOperationException("send_message has empty text.");
@@ -278,9 +284,9 @@ public class AutomationEngine
                     TemplateName = cfg.TemplateName,
                     Language = cfg.Language,
                     HeaderFormat = template?.HeaderFormat,
-                    HeaderText = isTextHeader && !string.IsNullOrEmpty(cfg.HeaderParam) ? Interpolate(cfg.HeaderParam, context) : null,
+                    HeaderText = isTextHeader && !string.IsNullOrEmpty(cfg.HeaderParam) ? Interpolate(cfg.HeaderParam, context, interpContact) : null,
                     HeaderMediaUrl = isMediaHeader ? template!.HeaderMediaUrl : null,
-                    BodyParams = [.. cfg.BodyParams.Select(p => Interpolate(p, context))],
+                    BodyParams = [.. cfg.BodyParams.Select(p => Interpolate(p, context, interpContact))],
                 };
                 var result = await _whatsAppService.SendTemplateMessageAsync(phone, sendRequest);
                 if (!result.Success)
@@ -322,7 +328,7 @@ public class AutomationEngine
                 var cfg = Deserialize<SendButtonsStepConfig>(step.StepConfigJson) ?? throw new InvalidOperationException("Missing SendButtons config.");
                 var phone = await ResolvePhoneAsync(contactId, context);
                 var buttons = cfg.Buttons.Select(b => new InteractiveButton(b.Id, b.Title)).ToList();
-                var result = await _whatsAppService.SendInteractiveButtonsMessageAsync(phone, Interpolate(cfg.BodyText, context), buttons);
+                var result = await _whatsAppService.SendInteractiveButtonsMessageAsync(phone, Interpolate(cfg.BodyText, context, interpContact), buttons);
                 if (!result.Success)
                 {
                     throw new InvalidOperationException(result.ErrorMessage);
@@ -345,7 +351,7 @@ public class AutomationEngine
                     throw new InvalidOperationException("Contact not found.");
                 }
 
-                var value = Interpolate(cfg.Value, context);
+                var value = Interpolate(cfg.Value, context, contact);
                 var applied = ApplyContactField(contact, cfg.Field, value);
                 if (!applied)
                 {
@@ -372,7 +378,7 @@ public class AutomationEngine
 
                 var body = string.IsNullOrEmpty(cfg.BodyTemplate)
                     ? JsonSerializer.Serialize(context, JsonOptions)
-                    : Interpolate(cfg.BodyTemplate, context);
+                    : Interpolate(cfg.BodyTemplate, context, interpContact);
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, cfg.Url)
                 {
@@ -603,7 +609,7 @@ public class AutomationEngine
         await _hubContext.Clients.All.SendAsync("ReceiveMessage", chat.Id, dto);
     }
 
-    private static string Interpolate(string text, AutomationContext context) =>
+    private static string Interpolate(string text, AutomationContext context, Models.Entities.Contact? contact = null) =>
         Regex.Replace(text, @"\{\{\s*([\w.]+)\s*\}\}", match =>
         {
             var key = match.Groups[1].Value;
@@ -616,6 +622,19 @@ public class AutomationEngine
             if (parts.Length == 2 && parts[0] == "vars" && context.Vars.TryGetValue(parts[1], out var v))
             {
                 return v;
+            }
+
+            if (parts.Length == 2 && parts[0] == "contact")
+            {
+                return parts[1] switch
+                {
+                    "firstName" => contact?.FirstName ?? string.Empty,
+                    "lastName" => contact?.LastName ?? string.Empty,
+                    "fullName" => contact is null ? string.Empty : $"{contact.FirstName} {contact.LastName}".Trim(),
+                    "phone" => contact?.Phone ?? string.Empty,
+                    "email" => contact?.Email ?? string.Empty,
+                    _ => string.Empty,
+                };
             }
 
             return string.Empty;

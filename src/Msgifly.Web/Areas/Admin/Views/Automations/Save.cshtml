@@ -36,6 +36,12 @@
     </div>
 
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden" x-data="automationCanvasController()">
+        <template x-if="sessionWindowWarning">
+            <div class="p-3 border-b border-gray-200 dark:border-slate-700 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <span class="flex-shrink-0">⚠️</span>
+                <span x-text="sessionWindowWarning"></span>
+            </div>
+        </template>
         <div class="flex flex-wrap items-center gap-2 p-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
             <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mr-1">Add step:</span>
             <template x-for="[type, def] in Object.entries(stepDefs)" :key="type">
@@ -107,6 +113,15 @@
 
     .df-condition-legend { position: absolute; top: 10px; right: -54px; display: flex; flex-direction: column; gap: 12px; font-size: 10px; font-weight: 600; white-space: nowrap; pointer-events: none; }
 
+    .df-chip-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+    .df-chip {
+        font-size: 10px; line-height: 1.4; padding: 2px 7px; border-radius: 9999px;
+        background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; cursor: pointer;
+    }
+    .df-chip:hover { background: #d1fae5; }
+    html.dark .df-chip { background: #064e3b; color: #6ee7b7; border-color: #065f46; }
+    html.dark .df-chip:hover { background: #065f46; }
+
     .drawflow .connection .main-path { stroke: #94a3b8; stroke-width: 2px; }
     .drawflow .connection .main-path:hover { stroke: #047857; }
     #automationCanvas { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 18px 18px; }
@@ -120,6 +135,7 @@
         return {
             canvas: null,
             stepDefs: window.AUTOMATION_STEP_DEFS || {},
+            sessionWindowWarning: null,
             init() {
                 const initial = {
                     triggerType: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TriggerType)),
@@ -134,7 +150,9 @@
                     templateOptions: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewData["TemplateOptions"], new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
                     steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
                 };
-                this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial);
+                this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial, (state) => {
+                    this.sessionWindowWarning = state.sessionWindowWarning;
+                });
 
                 document.getElementById('automationForm').addEventListener('submit', () => {
                     const data = this.canvas.exportForSubmit();
