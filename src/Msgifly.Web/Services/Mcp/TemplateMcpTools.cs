@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Msgifly.Web.Data;
 using Msgifly.Web.Services.ApiKeys;
@@ -11,15 +12,19 @@ namespace Msgifly.Web.Services.Mcp;
 [McpServerToolType]
 public class TemplateMcpTools
 {
+    private const long MaxHeaderImageBytes = 16 * 1024 * 1024; // matches Meta's own header-media cap, same as TemplatesController.UploadHeaderMedia
+
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IWebHostEnvironment _environment;
 
-    public TemplateMcpTools(ApplicationDbContext db, IWhatsAppService whatsAppService, IHttpContextAccessor httpContextAccessor)
+    public TemplateMcpTools(ApplicationDbContext db, IWhatsAppService whatsAppService, IHttpContextAccessor httpContextAccessor, IWebHostEnvironment environment)
     {
         _db = db;
         _whatsAppService = whatsAppService;
         _httpContextAccessor = httpContextAccessor;
+        _environment = environment;
     }
 
     [McpServerTool(Name = "list_templates")]
@@ -76,7 +81,7 @@ public class TemplateMcpTools
         [Description("Body text, may contain {{1}}, {{2}}, ... placeholders")] string bodyText,
         [Description("One example value per {{n}} placeholder in bodyText, in order. Required if bodyText has any placeholders.")] List<string>? bodySampleValues = null,
         [Description("text | image | video | document, or omit for no header")] string? headerType = null,
-        [Description("Header text (for headerType=text; may contain one {{1}}) or a publicly reachable sample media URL (for image/video/document headers)")] string? headerContent = null,
+        [Description("Header text (for headerType=text; may contain one {{1}}) or a publicly reachable sample media URL (for image/video/document headers) — for an image you have as raw bytes rather than an existing URL, call upload_template_header_image first and pass its returned url here")] string? headerContent = null,
         [Description("Footer text, shown small under the body — no placeholders allowed")] string? footerText = null,
         [Description("""
             Optional buttons as a JSON array, e.g.
@@ -142,5 +147,79 @@ public class TemplateMcpTools
         {
             return new { success = false, error = ex.Message };
         }
+    }
+
+    [McpServerTool(Name = "upload_template_header_image")]
+    [Description("""
+        Uploads image bytes to this server's own storage and returns a public URL — use that url
+        as headerContent when calling create_template with headerType=image, so the header image
+        is hosted here rather than depending on some third-party site staying up. Same storage
+        location and 16 MB limit as the dashboard's own Templates image-upload field.
+        """)]
+    public async Task<object> UploadTemplateHeaderImageAsync(
+        [Description("Base64-encoded image bytes — no 'data:image/...;base64,' prefix, just the encoded bytes")] string imageBase64,
+        [Description("Original filename, used only to pick the file extension (e.g. photo.png). Defaults to .png if omitted or extensionless.")] string? fileName = null)
+    {
+        _httpContextAccessor.RequireScope(ApiScopes.TemplatesWrite);
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(imageBase64);
+        }
+        catch (FormatException ex)
+        {
+            throw new McpException($"imageBase64 is not valid base64: {ex.Message}");
+        }
+
+        if (bytes.Length == 0)
+        {
+            throw new McpException("Image data is empty.");
+        }
+
+        if (bytes.Length > MaxHeaderImageBytes)
+        {
+            throw new McpException($"Image is {bytes.Length / 1024 / 1024} MB — larger than WhatsApp's 16 MB header-media limit.");
+        }
+
+        var uploadsDir = Path.Combine(_environment.WebRootPath, "uploads", "templates");
+        Directory.CreateDirectory(uploadsDir);
+        var extension = string.IsNullOrWhiteSpace(fileName) ? ".png" : Path.GetExtension(fileName);
+        if (string.IsNullOrEmpty(extension))
+        {
+            extension = ".png";
+        }
+
+        var storedFileName = $"{Guid.NewGuid():N}{extension}";
+        await File.WriteAllBytesAsync(Path.Combine(uploadsDir, storedFileName), bytes);
+
+        var request = _httpContextAccessor.HttpContext!.Request;
+        var publicUrl = $"{request.Scheme}://{request.Host}/uploads/templates/{storedFileName}";
+
+        return new { success = true, url = publicUrl, sizeBytes = bytes.Length };
+    }
+
+    [McpServerTool(Name = "delete_template")]
+    [Description("""
+        Permanently deletes a template — both the local record and, if it was already submitted,
+        on Meta itself. This can't be undone.
+
+        Meta only allows EDITING a template that's Approved, Rejected, or Paused — never Pending.
+        There's no edit tool here, so to change a Pending template's content (e.g. to add a header
+        image after the fact), delete it and call create_template again with the same name instead
+        of waiting for a review verdict first.
+        """)]
+    public async Task<object> DeleteTemplateAsync(
+        [Description("Local template id, from list_templates")] int templateId)
+    {
+        _httpContextAccessor.RequireScope(ApiScopes.TemplatesWrite);
+
+        var result = await _whatsAppService.DeleteTemplateAsync(templateId);
+        if (!result.Success)
+        {
+            return new { success = false, error = result.ErrorMessage };
+        }
+
+        return new { success = true };
     }
 }
