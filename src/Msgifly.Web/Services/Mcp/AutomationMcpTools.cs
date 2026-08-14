@@ -59,6 +59,16 @@ public class AutomationMcpTools
         a SendTemplate step must already be status 'Approved' (check with list_templates first) —
         Meta will reject a send against anything else.
 
+        IMPORTANT: every SendTemplate step's bodyParams array length must exactly match that
+        template's bodyParamsCount (from list_templates) — a {{1}} placeholder in the body needs
+        exactly one entry in bodyParams, even if it's just "{{contact.firstName}}". This is
+        validated at creation time and will reject the whole call with a clear message if it
+        doesn't match, rather than letting a mismatched automation go live and fail silently on
+        every real send with Meta's cryptic "(#132000) Number of parameters does not match".
+        Likewise, headerParam is required whenever the template's header is TEXT with a
+        placeholder (headerParamsCount > 0) — image/video/document headers never need headerParam,
+        they're resolved automatically from the template's own stored media.
+
         IMPORTANT session-window rule: SendMessage and SendButtons only work within 24 hours of the
         customer's last inbound message. For a trigger that starts with no open conversation
         (FacebookLeadReceived, NewContactCreated), the FIRST step must be SendTemplate, never
@@ -73,6 +83,7 @@ public class AutomationMcpTools
         Per-StepType config shape:
           SendMessage:        { "text": "..." }
           SendTemplate:       { "templateName": "...", "language": "en_US", "headerParam": "...", "bodyParams": ["..."] }
+                                 bodyParams must have exactly bodyParamsCount entries — see above.
           SendButtons:        { "bodyText": "...", "buttons": [{ "id": "yes", "title": "Yes" }] }  (max 3 buttons)
           Wait:                { "amount": 1, "unit": "minutes" }   (unit: minutes | hours | days)
           Condition:           { "subject": "MessageContent", "operand": "", "value": "price" }
@@ -88,13 +99,15 @@ public class AutomationMcpTools
         Text fields in SendMessage/SendTemplate/SendButtons may use {{contact.firstName}},
         {{contact.lastName}}, {{contact.fullName}}, {{contact.phone}} for personalization.
 
-        Example stepsJsonTree for "send a template, then branch on whether they clicked it":
+        Example stepsJsonTree for "send a template with one {{1}} body variable, then branch on
+        whether they clicked it" (both salonsteps_lead_welcome and salonsteps_lead_nudge have
+        bodyParamsCount: 1 in this example, hence one entry each in bodyParams):
           [
-            { "type": "SendTemplate", "config": { "templateName": "salonsteps_lead_welcome", "language": "en_US" } },
+            { "type": "SendTemplate", "config": { "templateName": "salonsteps_lead_welcome", "language": "en_US", "bodyParams": ["{{contact.firstName}}"] } },
             { "type": "Wait", "config": { "amount": 1, "unit": "hours" } },
             { "type": "Condition", "config": { "subject": "TemplateClicked" },
-              "yes": [ { "type": "SendTemplate", "config": { "templateName": "salonsteps_lead_clicked_followup", "language": "en_US" } } ],
-              "no":  [ { "type": "SendTemplate", "config": { "templateName": "salonsteps_lead_nudge", "language": "en_US" } } ] }
+              "yes": [ { "type": "SendTemplate", "config": { "templateName": "salonsteps_lead_clicked_followup", "language": "en_US", "bodyParams": ["{{contact.firstName}}"] } } ],
+              "no":  [ { "type": "SendTemplate", "config": { "templateName": "salonsteps_lead_nudge", "language": "en_US", "bodyParams": ["{{contact.firstName}}"] } } ] }
           ]
         """)]
     public async Task<object> CreateAutomationAsync(
@@ -134,6 +147,7 @@ public class AutomationMcpTools
         try
         {
             AutomationTreeBuilder.ValidateTree(tree, depth: 0);
+            await AutomationTreeBuilder.ValidateTemplateParamsAsync(tree, _db);
         }
         catch (ArgumentException ex)
         {

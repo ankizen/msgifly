@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
@@ -72,6 +74,56 @@ public static class AutomationTreeBuilder
                 if (node.Yes is not null) ValidateTree(node.Yes, depth + 1);
                 if (node.No is not null) ValidateTree(node.No, depth + 1);
             }
+        }
+    }
+
+    /// <summary>Catches the exact mismatch that otherwise only surfaces as Meta's cryptic
+    /// "(#132000) Number of parameters does not match" at send time — a SendTemplate step whose
+    /// bodyParams/headerParam count doesn't match what the referenced template actually declares.
+    /// Call after <see cref="ValidateTree"/> succeeds, from both the canvas save path and MCP's
+    /// create_automation, so this can't reach a live automation either way.</summary>
+    public static async Task ValidateTemplateParamsAsync(List<AutomationStepNode> nodes, ApplicationDbContext db)
+    {
+        foreach (var node in nodes)
+        {
+            if (Enum.TryParse<AutomationStepType>(node.Type, ignoreCase: true, out var stepType) && stepType == AutomationStepType.SendTemplate)
+            {
+                SendTemplateStepConfig? cfg;
+                try
+                {
+                    cfg = node.Config.Deserialize<SendTemplateStepConfig>(JsonOptions);
+                }
+                catch (JsonException)
+                {
+                    throw new ArgumentException("A SendTemplate step has malformed config.");
+                }
+
+                if (!string.IsNullOrWhiteSpace(cfg?.TemplateName))
+                {
+                    var template = await db.WhatsappTemplates.AsNoTracking()
+                        .FirstOrDefaultAsync(t => t.TemplateName == cfg.TemplateName);
+                    if (template is null)
+                    {
+                        throw new ArgumentException($"SendTemplate step references '{cfg.TemplateName}', which doesn't exist. Sync or create it first.");
+                    }
+
+                    var providedBodyParams = cfg.BodyParams?.Count ?? 0;
+                    if (providedBodyParams != template.BodyParamsCount)
+                    {
+                        throw new ArgumentException(
+                            $"SendTemplate step for '{cfg.TemplateName}' provides {providedBodyParams} body parameter(s), but the template needs {template.BodyParamsCount}. Meta will reject the send with a param-count mismatch.");
+                    }
+
+                    var hasHeaderParam = !string.IsNullOrWhiteSpace(cfg.HeaderParam);
+                    if (string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase) && template.HeaderParamsCount > 0 && !hasHeaderParam)
+                    {
+                        throw new ArgumentException($"SendTemplate step for '{cfg.TemplateName}' needs a header parameter (its TEXT header has a placeholder) but none was provided.");
+                    }
+                }
+            }
+
+            if (node.Yes is not null) await ValidateTemplateParamsAsync(node.Yes, db);
+            if (node.No is not null) await ValidateTemplateParamsAsync(node.No, db);
         }
     }
 

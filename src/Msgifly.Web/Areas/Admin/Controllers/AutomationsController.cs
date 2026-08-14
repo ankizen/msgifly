@@ -126,6 +126,7 @@ public class AutomationsController : Controller
         try
         {
             AutomationTreeBuilder.ValidateTree(tree, depth: 0);
+            await AutomationTreeBuilder.ValidateTemplateParamsAsync(tree, _db);
         }
         catch (ArgumentException ex)
         {
