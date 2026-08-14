@@ -3,6 +3,8 @@
     ViewData["Title"] = "Automations";
 }
 
+<div x-data="{ testOpen: false, testId: null, testName: '', testPhone: '', testFirstName: '' }">
+
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Automations</h1>
@@ -51,6 +53,10 @@
                         </form>
                     </td>
                     <td class="px-4 py-3 text-right text-sm space-x-3 whitespace-nowrap">
+                        <button type="button" class="text-emerald-600 hover:text-emerald-500"
+                                x-on:click="testId = @automation.Id; testName = @System.Text.Json.JsonSerializer.Serialize(automation.Name); testPhone = ''; testFirstName = ''; testOpen = true">
+                            Test
+                        </button>
                         <a asp-action="Save" asp-route-id="@automation.Id" class="text-emerald-600 hover:text-emerald-500">Edit</a>
                         <form asp-action="Delete" asp-route-id="@automation.Id" method="post" class="inline"
                               onsubmit="return confirm('Delete &quot;@automation.Name&quot;? This also removes its run history.');">
@@ -64,3 +70,47 @@
 </div>
 
 <partial name="_Pagination" model="Model" />
+
+@* ---------- Test automation modal ---------- *@
+<div x-show="testOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+    <div class="fixed inset-0 bg-black/40" x-on:click="testOpen = false"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6" x-on:click.stop>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Test automation</h2>
+            <p class="text-sm text-gray-500 dark:text-slate-400 mb-4" x-text="testName"></p>
+
+            <div class="mb-4 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
+                This runs the automation for real right now — it sends real WhatsApp messages to
+                the number below, whether or not the automation is currently Active.
+            </div>
+
+            <form asp-action="Test" method="post" class="space-y-4">
+                <input type="hidden" name="id" x-bind:value="testId" />
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Phone number</label>
+                    <input name="phone" x-model="testPhone" placeholder="e.g. 971501234567, with country code"
+                           class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">First name <span class="text-gray-400 font-normal">(optional, for {{contact.firstName}})</span></label>
+                    <input name="firstName" x-model="testFirstName" placeholder="Test"
+                           class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                </div>
+
+                <p class="text-xs text-gray-400 dark:text-slate-500">
+                    If this phone number doesn't match an existing contact, a new one is created for it.
+                    You'll land on this automation's run log right after, to see exactly what happened.
+                </p>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="submit" :disabled="!testPhone" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Run test</button>
+                    <button type="button" x-on:click="testOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+</div>

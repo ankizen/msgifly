@@ -121,13 +121,38 @@ public class AutomationEngine
         }
     }
 
-    private async Task ExecuteAutomationAsync(Automation automation, AutomationTriggerType triggerType, int? contactId, AutomationContext context)
+    private async Task ExecuteAutomationAsync(Automation automation, AutomationTriggerType triggerType, int? contactId, AutomationContext context) =>
+        await RunAndLogAsync(automation, triggerType.ToString(), contactId, context, countExecution: true);
+
+    /// <summary>
+    /// Runs one specific automation immediately against a contact, entirely bypassing
+    /// RunForTriggerAsync's trigger-type candidate search — the "Test automation" action
+    /// (AutomationsController.Test), so an admin can verify a whole step tree end-to-end (sends,
+    /// waits, branches) without waiting for a real trigger event, and without risking accidentally
+    /// also firing some other unrelated automation that happens to share a trigger type. Doesn't
+    /// require IsActive — testing a still-inactive automation before switching it on is exactly
+    /// the point — and doesn't count toward ExecutionCount/LastExecutedAt, so the Automations
+    /// list's "how many times has this fired for real" stat stays meaningful.
+    /// </summary>
+    public async Task<(AutomationLogStatus Status, string? ErrorMessage)> RunAutomationForTestAsync(int automationId, int contactId)
+    {
+        var automation = await _db.Automations.FirstOrDefaultAsync(a => a.Id == automationId);
+        if (automation is null)
+        {
+            return (AutomationLogStatus.Failed, "Automation not found.");
+        }
+
+        return await RunAndLogAsync(automation, "Test", contactId, new AutomationContext(), countExecution: false);
+    }
+
+    private async Task<(AutomationLogStatus Status, string? ErrorMessage)> RunAndLogAsync(
+        Automation automation, string triggerEventLabel, int? contactId, AutomationContext context, bool countExecution)
     {
         var log = new AutomationLog
         {
             AutomationId = automation.Id,
             ContactId = contactId,
-            TriggerEvent = triggerType.ToString(),
+            TriggerEvent = triggerEventLabel,
             StepsExecutedJson = "[]",
             // Seeded pessimistically — only flipped to Success once execution actually reaches
             // the end. A crash mid-run then correctly reads as Failed rather than a silent,
@@ -140,9 +165,14 @@ public class AutomationEngine
         var (status, errorMessage) = await ExecuteStepsFromAsync(automation, contactId, context, null, null, 0, log.Id);
         await FinalizeLogAsync(log.Id, status, errorMessage);
 
-        automation.ExecutionCount++;
-        automation.LastExecutedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+        if (countExecution)
+        {
+            automation.ExecutionCount++;
+            automation.LastExecutedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+        }
+
+        return (status, errorMessage);
     }
 
     /// <summary>Walks sibling steps in one scope (root, or a Condition's Yes/No branch) starting at startPosition. Returns the terminal status once the scope (or the whole tree, for the root scope) finishes, fails, or suspends on a Wait.</summary>

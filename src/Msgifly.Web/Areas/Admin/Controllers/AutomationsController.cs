@@ -8,6 +8,7 @@ using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
+using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Workspaces;
 
@@ -22,11 +23,13 @@ public class AutomationsController : Controller
 
     private readonly ApplicationDbContext _db;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
+    private readonly AutomationEngine _automationEngine;
 
-    public AutomationsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
+    public AutomationsController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, AutomationEngine automationEngine)
     {
         _db = db;
         _workspaceAccessor = workspaceAccessor;
+        _automationEngine = automationEngine;
     }
 
     [Authorize(Policy = "automation.view")]
@@ -188,6 +191,66 @@ public class AutomationsController : Controller
 
         this.Notify(automation.IsActive ? "Automation activated." : "Automation paused.");
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// Runs this automation right now against a real phone number — sends real WhatsApp messages,
+    /// not a simulation — so an admin can verify a whole step tree (sends, waits, branches) works
+    /// before trusting it with real leads, without waiting for a genuine trigger event. Works
+    /// whether or not the automation is currently Active. Redirects to Logs so the result (and
+    /// each step it actually took) is immediately visible.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "automation.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Test(int id, string phone, string? firstName)
+    {
+        var automation = await _db.Automations.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+        if (automation is null)
+        {
+            return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(phone))
+        {
+            this.Notify("Enter a phone number to test with.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var rawPhone = phone.Trim();
+        var normalized = PhoneNumberNormalizer.Normalize(rawPhone);
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == rawPhone || c.Phone == normalized || c.Phone == "+" + normalized);
+        if (contact is null)
+        {
+            var defaultStatusId = await _db.Statuses.Where(s => s.IsDefault).Select(s => (int?)s.Id).FirstOrDefaultAsync()
+                ?? await _db.Statuses.Select(s => (int?)s.Id).FirstOrDefaultAsync();
+            var defaultSourceId = await _db.Sources.Select(s => (int?)s.Id).FirstOrDefaultAsync();
+            if (defaultStatusId is null || defaultSourceId is null)
+            {
+                this.Notify("Create at least one Status and Source before testing an automation.", "danger");
+                return RedirectToAction(nameof(Index));
+            }
+
+            contact = new Contact
+            {
+                WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
+                FirstName = string.IsNullOrWhiteSpace(firstName) ? "Test" : firstName.Trim(),
+                LastName = string.Empty,
+                Phone = normalized,
+                Type = ContactType.Lead,
+                StatusId = defaultStatusId.Value,
+                SourceId = defaultSourceId.Value,
+            };
+            _db.Contacts.Add(contact);
+            await _db.SaveChangesAsync();
+        }
+
+        var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(id, contact.Id);
+        this.Notify(
+            status == AutomationLogStatus.Success ? $"Test run to {phone} completed — see the log below." : $"Test run to {phone} didn't finish cleanly: {errorMessage}",
+            status == AutomationLogStatus.Success ? "success" : "danger");
+
+        return RedirectToAction(nameof(Logs), new { id });
     }
 
     [HttpPost]

@@ -19,6 +19,16 @@ import 'drawflow/dist/drawflow.min.css';
 const FIELD_CLASS =
   'mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500';
 
+// How far apart a Condition's Yes/No branches start vertically — shared by layoutChain() (initial
+// load) and tidyUp() so they can't drift apart. A SendTemplate card's real height varies a lot
+// (a plain text template vs. one with a header image, footer, and 3 buttons can easily differ by
+// 300+px), and the header image's actual box height isn't reliably known until it finishes
+// loading (only `max-height` is set on it, so an unloaded <img> collapses smaller) — measuring
+// live DOM heights at layout time would just trade one inaccuracy for another. A generous static
+// gap, sized for the realistic worst case, is simpler and more predictable; "Tidy up" is the
+// escape hatch for anything unusually tall that still doesn't fit.
+const CONDITION_BRANCH_OFFSETS = { yes: -100, no: 450 };
+
 function node(title, icon, bodyHtml) {
   return `<div class="df-node-card">
     <div class="df-node-title">
@@ -773,8 +783,8 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
       const id = addStepNode(step.type, x, curY, flatConfig(step.type, step.config));
       editor.addConnection(prevId, id, prevOutput, 'input_1');
       if (step.type === 'Condition') {
-        if (step.yes?.length) layoutChain(step.yes, x + 380, curY - 60, id, 'output_1');
-        if (step.no?.length) layoutChain(step.no, x + 380, curY + 220, id, 'output_2');
+        if (step.yes?.length) layoutChain(step.yes, x + 380, curY + CONDITION_BRANCH_OFFSETS.yes, id, 'output_1');
+        if (step.no?.length) layoutChain(step.no, x + 380, curY + CONDITION_BRANCH_OFFSETS.no, id, 'output_2');
         return;
       }
 
@@ -934,8 +944,8 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
       positions[id] = { x, y };
       const targetNode = nodesById[id];
       if (targetNode.name === 'Condition') {
-        placeFrom(id, 'output_1', x + 380, y - 60);
-        placeFrom(id, 'output_2', x + 380, y + 220);
+        placeFrom(id, 'output_1', x + 380, y + CONDITION_BRANCH_OFFSETS.yes);
+        placeFrom(id, 'output_2', x + 380, y + CONDITION_BRANCH_OFFSETS.no);
         return;
       }
       placeFrom(id, 'output_1', x + 380, y);

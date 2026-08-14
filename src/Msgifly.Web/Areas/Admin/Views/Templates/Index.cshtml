@@ -3,6 +3,8 @@
     ViewData["Title"] = "Templates";
 }
 
+<div x-data="{ previewOpen: false, previewTemplate: null }">
+
 <div class="flex items-center justify-between mb-6">
     <div>
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">WhatsApp Templates</h1>
@@ -66,6 +68,19 @@
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400 max-w-xs truncate" title="@template.BodyText">@template.BodyText</td>
                     <td class="px-4 py-3 text-sm text-right whitespace-nowrap">
+                        <button type="button" class="text-gray-500 hover:text-emerald-500 mr-3"
+                                x-on:click="previewTemplate = @System.Text.Json.JsonSerializer.Serialize(new
+                                {
+                                    name = template.TemplateName,
+                                    headerFormat = template.HeaderFormat,
+                                    headerText = template.HeaderText,
+                                    headerMediaUrl = template.HeaderMediaUrl,
+                                    bodyText = template.BodyText,
+                                    footerText = template.FooterText,
+                                    buttonsJson = template.ButtonsJson,
+                                }, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web)); previewOpen = true">
+                            Preview
+                        </button>
                         <a asp-action="Report" asp-route-id="@template.Id" class="text-gray-500 hover:text-emerald-500 mr-3">Report</a>
                         @if (editable)
                         {
@@ -83,3 +98,79 @@
 </div>
 
 <partial name="_Pagination" model="Model" />
+
+@* ---------- Template preview modal ---------- *@
+<div x-show="previewOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+    <div class="fixed inset-0 bg-black/40" x-on:click="previewOpen = false"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-sm w-full p-6" x-on:click.stop>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1" x-text="previewTemplate?.name"></h2>
+            <p class="text-xs text-gray-400 dark:text-slate-500 mb-4">Preview only — {{n}} placeholders are shown literally, not filled in.</p>
+
+            <div class="rounded-md p-3" style="background-color:#e5ddd5" x-html="previewTemplate ? renderTemplatePreview(previewTemplate) : ''"></div>
+
+            <div class="flex items-center gap-3 pt-4">
+                <button type="button" x-on:click="previewOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+
+@section Scripts {
+<script>
+    /** Same WhatsApp-bubble mockup style as the automation canvas's Send Template preview and
+     * Templates/Save.cshtml's own live preview — small and self-contained here rather than shared
+     * across bundles, since automation-canvas.js is a separate Vite entry only loaded on the
+     * Automations page. */
+    function escapeHtmlForPreview(str) {
+        const div = document.createElement('div');
+        div.textContent = str ?? '';
+        return div.innerHTML;
+    }
+
+    function parseTemplateButtonsForPreview(buttonsJson) {
+        if (!buttonsJson) return [];
+        try {
+            const raw = JSON.parse(buttonsJson);
+            if (!Array.isArray(raw)) return [];
+            return raw
+                .map((b) => ({ type: b.type || b.Type || '', text: b.text || b.Text || '' }))
+                .filter((b) => b.type || b.text);
+        } catch {
+            return [];
+        }
+    }
+
+    function renderTemplatePreview(template) {
+        const parts = [];
+
+        if (template.headerFormat === 'TEXT' && template.headerText) {
+            parts.push(`<p class="font-semibold text-[12px] text-gray-900 mb-1">${escapeHtmlForPreview(template.headerText)}</p>`);
+        } else if (template.headerFormat === 'IMAGE') {
+            parts.push(
+                template.headerMediaUrl
+                    ? `<img src="${escapeHtmlForPreview(template.headerMediaUrl)}" class="w-full max-h-28 object-cover rounded mb-1.5" />`
+                    : `<div class="w-full h-20 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-[10px] mb-1.5">Image header</div>`
+            );
+        } else if (template.headerFormat === 'VIDEO') {
+            parts.push(`<div class="w-full h-20 bg-gray-800 rounded flex items-center justify-center text-white text-[10px] mb-1.5">🎥 Video header</div>`);
+        } else if (template.headerFormat === 'DOCUMENT') {
+            parts.push(`<div class="w-full py-3 bg-gray-100 rounded flex items-center justify-center text-gray-500 text-[10px] mb-1.5">📄 Document header</div>`);
+        }
+
+        parts.push(`<p class="text-[12px] text-gray-900 whitespace-pre-wrap">${escapeHtmlForPreview(template.bodyText || '(this template has no body text)')}</p>`);
+
+        if (template.footerText) {
+            parts.push(`<p class="text-[10px] text-gray-500 mt-1">${escapeHtmlForPreview(template.footerText)}</p>`);
+        }
+
+        const buttonsHtml = parseTemplateButtonsForPreview(template.buttonsJson)
+            .map((b) => `<div class="border-t border-gray-100 px-2 py-1.5 text-center text-[11px] text-blue-600">${escapeHtmlForPreview(b.text || b.type)}</div>`)
+            .join('');
+
+        return `<div class="bg-white rounded-md shadow-sm p-2">${parts.join('')}</div>${buttonsHtml}`;
+    }
+</script>
+}
