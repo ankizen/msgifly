@@ -81,6 +81,18 @@ builder.Services.AddScoped<ContactGroupResolver>();
 builder.Services.AddScoped<LeadAdsSyncJob>();
 builder.Services.AddSignalR();
 
+// MCP tools need this to read the calling API key's scopes off the request's ClaimsPrincipal —
+// not registered anywhere else in this app, which has authenticated cookie/API-key access via
+// the MVC/API controller pipeline instead.
+builder.Services.AddHttpContextAccessor();
+
+// Exposes create_template/create_automation/send_template_message etc. (Services/Mcp/*) as MCP
+// tools over Streamable HTTP at /mcp — auth is the same "ApiKey" scheme /api/v1/* already uses,
+// wired via RequireAuthorization below, not anything MCP-specific.
+builder.Services.AddMcpServer()
+    .WithHttpTransport(options => options.Stateless = true)
+    .WithToolsFromAssembly();
+
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
@@ -152,6 +164,10 @@ RecurringJob.AddOrUpdate<LeadAdsSyncJob>(
     Cron.Minutely());
 
 app.MapHub<ChatHub>("/hubs/chat");
+
+// Same API-key scheme as /api/v1/* — no browser cookie here, so this is the only scheme allowed;
+// each tool method then checks its own specific scope (see Services/Mcp/McpScopeGuard.cs).
+app.MapMcp("/mcp").RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = "ApiKey" });
 
 app.MapControllerRoute(
     name: "areas",

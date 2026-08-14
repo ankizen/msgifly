@@ -122,7 +122,7 @@ public class AutomationsController : Controller
 
         try
         {
-            ValidateTree(tree, depth: 0);
+            AutomationTreeBuilder.ValidateTree(tree, depth: 0);
         }
         catch (ArgumentException ex)
         {
@@ -130,7 +130,8 @@ public class AutomationsController : Controller
             return View("Save", model);
         }
 
-        var triggerConfigJson = BuildTriggerConfigJson(triggerType, model);
+        var triggerConfigJson = AutomationTreeBuilder.BuildTriggerConfigJson(
+            triggerType, model.KeywordsCsv, model.KeywordMatchType, model.KeywordCaseSensitive, model.InteractiveReplyIdsCsv, model.LeadFormId);
 
         Automation automation;
         if (model.Id is null)
@@ -162,7 +163,7 @@ public class AutomationsController : Controller
         await _db.SaveChangesAsync(); // need automation.Id for step FKs
 
         var newSteps = new List<AutomationStep>();
-        FlattenTree(tree, automation.Id, null, null, newSteps);
+        AutomationTreeBuilder.FlattenTree(tree, automation.Id, null, null, newSteps);
         _db.AutomationSteps.AddRange(newSteps);
         await _db.SaveChangesAsync();
 
@@ -235,105 +236,4 @@ public class AutomationsController : Controller
             .ToListAsync();
     }
 
-    private static string BuildTriggerConfigJson(AutomationTriggerType triggerType, AutomationFormViewModel model)
-    {
-        switch (triggerType)
-        {
-            case AutomationTriggerType.KeywordMatch:
-                var keywords = (model.KeywordsCsv ?? string.Empty)
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .ToList();
-                return JsonSerializer.Serialize(new KeywordMatchTriggerConfig
-                {
-                    Keywords = keywords,
-                    MatchType = model.KeywordMatchType,
-                    CaseSensitive = model.KeywordCaseSensitive,
-                }, JsonOptions);
-
-            case AutomationTriggerType.InteractiveReply:
-                var replyIds = (model.InteractiveReplyIdsCsv ?? string.Empty)
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .ToList();
-                return JsonSerializer.Serialize(new InteractiveReplyTriggerConfig { ReplyIds = replyIds }, JsonOptions);
-
-            case AutomationTriggerType.FacebookLeadReceived:
-                return JsonSerializer.Serialize(new FacebookLeadFormTriggerConfig
-                {
-                    FormId = string.IsNullOrWhiteSpace(model.LeadFormId) ? null : model.LeadFormId.Trim(),
-                }, JsonOptions);
-
-            default:
-                return "{}";
-        }
-    }
-
-    /// <summary>Arbitrary nesting is fine — the canvas builder represents this as a graph (Condition nodes with two outputs, each potentially leading to further Conditions), which the engine's recursive step-walker already executes correctly regardless of depth.</summary>
-    private static void ValidateTree(List<AutomationStepNode> nodes, int depth)
-    {
-        foreach (var node in nodes)
-        {
-            if (!Enum.TryParse<AutomationStepType>(node.Type, ignoreCase: true, out var stepType))
-            {
-                throw new ArgumentException($"Unknown step type: {node.Type}");
-            }
-
-            if (stepType == AutomationStepType.Condition)
-            {
-                if (node.Yes is not null) ValidateTree(node.Yes, depth + 1);
-                if (node.No is not null) ValidateTree(node.No, depth + 1);
-            }
-        }
-    }
-
-    private static void FlattenTree(List<AutomationStepNode> nodes, int automationId, int? parentStepId, string? branch, List<AutomationStep> output)
-    {
-        var position = 0;
-        foreach (var node in nodes)
-        {
-            Enum.TryParse<AutomationStepType>(node.Type, ignoreCase: true, out var stepType);
-
-            var step = new AutomationStep
-            {
-                AutomationId = automationId,
-                ParentStepId = parentStepId,
-                Branch = branch,
-                StepType = stepType,
-                StepConfigJson = node.Config.ValueKind == JsonValueKind.Undefined ? "{}" : node.Config.GetRawText(),
-                Position = position++,
-            };
-            output.Add(step);
-
-            if (stepType == AutomationStepType.Condition)
-            {
-                // Children reference this step by Id, which EF only assigns after SaveChanges —
-                // AddRange + SaveChanges in the caller persists parents and children in one
-                // batch, but the self-referencing FK needs the parent's Id known first. EF Core's
-                // change tracker resolves this automatically via navigation fixup as long as
-                // ParentStep is set instead of ParentStepId directly for not-yet-saved parents.
-                if (node.Yes is not null)
-                {
-                    var yesChildren = new List<AutomationStep>();
-                    FlattenTree(node.Yes, automationId, null, "Yes", yesChildren);
-                    foreach (var child in yesChildren)
-                    {
-                        child.ParentStep = step;
-                    }
-
-                    output.AddRange(yesChildren);
-                }
-
-                if (node.No is not null)
-                {
-                    var noChildren = new List<AutomationStep>();
-                    FlattenTree(node.No, automationId, null, "No", noChildren);
-                    foreach (var child in noChildren)
-                    {
-                        child.ParentStep = step;
-                    }
-
-                    output.AddRange(noChildren);
-                }
-            }
-        }
-    }
 }
