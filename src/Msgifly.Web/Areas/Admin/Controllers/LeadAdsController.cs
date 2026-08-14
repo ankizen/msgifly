@@ -8,6 +8,7 @@ using Msgifly.Web.Extensions;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.LeadAds;
 using Msgifly.Web.Services.Settings;
@@ -165,6 +166,72 @@ public class LeadAdsController : Controller
 
         this.Notify($"Connected \"{pageName}\".{formNote}{webhookNote}");
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// The ad-spend-to-engagement funnel for one form: leads imported, and — joining
+    /// Contact.LeadAdsFormId to Chat by phone number, then to ChatMessage — how many outbound
+    /// template sends actually reached, were read by, and got clicked by those leads. Answers "is
+    /// this form's ad spend working" directly, which the plain per-form import count above doesn't.
+    /// </summary>
+    [Authorize(Policy = "connect_account.view")]
+    public async Task<IActionResult> Report(string formId)
+    {
+        var form = await _db.LeadAdsForms.AsNoTracking().FirstOrDefaultAsync(f => f.FormId == formId);
+        if (form is null)
+        {
+            return NotFound();
+        }
+
+        var leadsImported = await _db.Contacts.AsNoTracking().CountAsync(c => c.LeadAdsFormId == formId);
+
+        var phones = await _db.Contacts.AsNoTracking()
+            .Where(c => c.LeadAdsFormId == formId)
+            .Select(c => c.Phone)
+            .ToListAsync();
+
+        // Outbound template sends only (SenderId != the lead's own number) — this is what tells
+        // us whether the welcome message (and any follow-ups) actually reached these leads, not
+        // just that they were imported.
+        var counts = await _db.ChatMessages.AsNoTracking()
+            .Where(m => phones.Contains(m.Chat.ReceiverId) && m.TemplateName != null && m.SenderId != m.Chat.ReceiverId)
+            .GroupBy(m => 1)
+            .Select(g => new
+            {
+                Sent = g.Count(),
+                Delivered = g.Count(m => m.Status == MessageDeliveryStatus.Delivered || m.Status == MessageDeliveryStatus.Read),
+                Read = g.Count(m => m.Status == MessageDeliveryStatus.Read),
+                Failed = g.Count(m => m.Status == MessageDeliveryStatus.Failed),
+                Clicked = g.Count(m => m.Clicked),
+            })
+            .FirstOrDefaultAsync();
+
+        // Projected into an anonymous type first, then mapped to the record in memory — EF Core
+        // can't translate a record's positional constructor combined with multiple aggregate
+        // Count() calls directly inside one GroupBy projection (same reason TemplatesController's
+        // Report action does its own campaignCounts/chatCounts this way).
+        var byTemplateRaw = await _db.ChatMessages.AsNoTracking()
+            .Where(m => phones.Contains(m.Chat.ReceiverId) && m.TemplateName != null && m.SenderId != m.Chat.ReceiverId)
+            .GroupBy(m => m.TemplateName)
+            .Select(g => new { TemplateName = g.Key!, Sent = g.Count(), Clicked = g.Count(m => m.Clicked) })
+            .OrderByDescending(t => t.Sent)
+            .ToListAsync();
+        var byTemplate = byTemplateRaw.Select(t => new LeadAdsFormTemplateStat(t.TemplateName, t.Sent, t.Clicked)).ToList();
+
+        var model = new LeadAdsFormReportViewModel
+        {
+            FormId = form.FormId,
+            FormName = form.FormName,
+            LeadsImported = leadsImported,
+            TemplatesSent = counts?.Sent ?? 0,
+            DeliveredCount = counts?.Delivered ?? 0,
+            ReadCount = counts?.Read ?? 0,
+            ClickedCount = counts?.Clicked ?? 0,
+            FailedCount = counts?.Failed ?? 0,
+            ByTemplate = byTemplate,
+        };
+
+        return View(model);
     }
 
     [HttpPost]
