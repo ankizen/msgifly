@@ -29,6 +29,9 @@ public class ResolvedWhatsAppSettings
     public string? AccessToken { get; set; }
     public string? DefaultPhoneNumberId { get; set; }
     public string? DefaultPhoneNumber { get; set; }
+
+    public string? TrackingDomain { get; set; }
+    public bool IsTrackingDomainActive { get; set; }
 }
 
 public class PhoneNumberInfo
@@ -153,6 +156,12 @@ public class TemplateButtonRequest
 
     /// <summary>Example value — required when a URL button's url contains {{1}}, or always for COPY_CODE.</summary>
     public string? Example { get; set; }
+
+    /// <summary>URL buttons only. When true, Url is submitted to Meta rewritten to the workspace's
+    /// tracking domain (a dynamic {{1}} suffix) instead of literally — see
+    /// WhatsAppService.BuildTemplateComponentsAsync. Url itself always holds the real destination
+    /// as typed; only the Meta-facing payload changes.</summary>
+    public bool TrackClicks { get; set; }
 }
 
 /// <summary>Sample values Meta requires 1:1 with the {{N}} variables in the header/body text, used for human review.</summary>

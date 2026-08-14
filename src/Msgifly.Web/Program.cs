@@ -12,6 +12,7 @@ using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Groups;
 using Msgifly.Web.Services.LeadAds;
 using Msgifly.Web.Services.Settings;
+using Msgifly.Web.Services.Tracking;
 using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
 
@@ -86,6 +87,8 @@ builder.Services.AddScoped<MetaLeadAdsService>();
 builder.Services.AddScoped<AutomationEngine>();
 builder.Services.AddScoped<ContactGroupResolver>();
 builder.Services.AddScoped<LeadAdsSyncJob>();
+builder.Services.AddScoped<TrackingDomainVerificationService>();
+builder.Services.AddScoped<TrackingDomainVerificationJob>();
 builder.Services.AddSignalR();
 
 // MCP tools need this to read the calling API key's scopes off the request's ClaimsPrincipal —
@@ -169,6 +172,11 @@ RecurringJob.AddOrUpdate<LeadAdsSyncJob>(
     "sync-lead-ads",
     job => job.SyncAllWorkspacesAsync(),
     Cron.Minutely());
+
+RecurringJob.AddOrUpdate<TrackingDomainVerificationJob>(
+    "verify-tracking-domains",
+    job => job.VerifyAllAsync(),
+    Cron.Hourly());
 
 app.MapHub<ChatHub>("/hubs/chat");
 

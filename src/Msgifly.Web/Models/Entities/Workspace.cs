@@ -1,3 +1,5 @@
+using Msgifly.Web.Models.Enums;
+
 namespace Msgifly.Web.Models.Entities;
 
 /// <summary>
@@ -33,6 +35,14 @@ public class Workspace
     public string? FacebookPageId { get; set; }
     public string? FacebookPageName { get; set; }
     public string? FacebookPageAccessToken { get; set; }
+
+    // Per-business domain (e.g. link.salonsteps.com) that WhatsApp template URL buttons get routed
+    // through for real per-recipient click tracking — WhatsApp gives no signal at all for a tapped
+    // URL button otherwise. Kept per-workspace rather than a shared app domain so the link a lead
+    // sees carries that business's own brand, never ours.
+    public string? TrackingDomain { get; set; }
+    public TrackingDomainStatus TrackingDomainStatus { get; set; } = TrackingDomainStatus.NotConfigured;
+    public DateTime? TrackingDomainCheckedAt { get; set; }
 
     // Bot/lead behavior that used to live in the global "WhatsMarkSettings" AppSetting group —
     // moved here since a default lead status/source and stop-bot keywords are inherently

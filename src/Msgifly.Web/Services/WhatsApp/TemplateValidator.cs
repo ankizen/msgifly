@@ -23,8 +23,11 @@ public static class TemplateValidator
 
     public record ValidationResult(int BodyVarCount, int HeaderVarCount);
 
-    /// <summary>Runs every rule in order; throws on the first failure. Returns variable counts for reuse when building the Meta payload.</summary>
-    public static ValidationResult Validate(TemplateCreateRequest request)
+    /// <summary>Runs every rule in order; throws on the first failure. Returns variable counts for
+    /// reuse when building the Meta payload. trackingDomainActive gates whether any button may set
+    /// TrackClicks — a template can never look "tracking-enabled" in the UI while actually
+    /// submitting the untracked real URL, so this is a hard failure, not a silent fallback.</summary>
+    public static ValidationResult Validate(TemplateCreateRequest request, bool trackingDomainActive = false)
     {
         ValidateName(request.Name);
         if (string.IsNullOrWhiteSpace(request.Language))
@@ -40,7 +43,7 @@ public static class TemplateValidator
         var bodyVars = ValidateBody(request.BodyText);
         ValidateFooter(request.FooterText);
         var headerVarCount = ValidateHeader(request);
-        ValidateButtons(request.Buttons);
+        ValidateButtons(request.Buttons, trackingDomainActive);
         ValidateSampleValues(request, bodyVars.Count, headerVarCount);
 
         return new ValidationResult(bodyVars.Count, headerVarCount);
@@ -188,7 +191,7 @@ public static class TemplateValidator
         return counts;
     }
 
-    public static void ValidateButtons(List<TemplateButtonRequest> buttons)
+    public static void ValidateButtons(List<TemplateButtonRequest> buttons, bool trackingDomainActive = false)
     {
         if (buttons is null || buttons.Count == 0)
         {
@@ -265,7 +268,19 @@ public static class TemplateValidator
                         throw new ArgumentException($"URL button #{i + 1} can have at most one variable (Meta rule).");
                     }
 
-                    if (urlVars.Count == 1)
+                    if (b.TrackClicks)
+                    {
+                        if (urlVars.Count > 0)
+                        {
+                            throw new ArgumentException($"URL button #{i + 1} already has its own {{{{1}}}} variable — can't also enable click tracking, which needs that same slot.");
+                        }
+
+                        if (!trackingDomainActive)
+                        {
+                            throw new ArgumentException($"URL button #{i + 1} has click tracking on, but no active tracking domain is configured for this workspace yet — set one up in Workspace Settings first.");
+                        }
+                    }
+                    else if (urlVars.Count == 1)
                     {
                         if (urlVars[0] != 1)
                         {

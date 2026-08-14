@@ -42,6 +42,8 @@
          footerText: @System.Text.Json.JsonSerializer.Serialize(Model.FooterText ?? ""),
          buttonTypes: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.Type).ToList()),
          buttonTexts: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.Text ?? "").ToList()),
+         buttonTrackClicks: @System.Text.Json.JsonSerializer.Serialize(Model.Buttons.Select(b => b.TrackClicks).ToList()),
+         trackingDomainActive: @System.Text.Json.JsonSerializer.Serialize((bool)(ViewData["TrackingDomainActive"] ?? false)),
          sampleHeader: @System.Text.Json.JsonSerializer.Serialize(Model.SampleHeader.ElementAtOrDefault(0) ?? ""),
          sampleBody: @System.Text.Json.JsonSerializer.Serialize(Model.SampleBody.Select(v => v ?? "").ToList()),
      })">
@@ -197,9 +199,21 @@
                         <input name="Buttons[@i].PhoneNumber" value="@Model.Buttons[i].PhoneNumber" x-show="buttonTypes[@i] === 'PHONE_NUMBER'" x-cloak placeholder="+15551234567"
                                class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
 
-                        <input name="Buttons[@i].Example" value="@Model.Buttons[i].Example" x-show="buttonTypes[@i] === 'URL' || buttonTypes[@i] === 'COPY_CODE'" x-cloak
+                        <input name="Buttons[@i].Example" value="@Model.Buttons[i].Example" x-show="(buttonTypes[@i] === 'URL' &amp;&amp; !buttonTrackClicks[@i]) || buttonTypes[@i] === 'COPY_CODE'" x-cloak
                                :placeholder="buttonTypes[@i] === 'COPY_CODE' ? 'Example code, e.g. SAVE20' : 'Example value for {{1}} in the URL, if used'"
                                class="sm:col-span-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                    </div>
+
+                    <div x-show="buttonTypes[@i] === 'URL'" x-cloak class="mt-2 flex items-center gap-2">
+                        <input type="checkbox" name="Buttons[@i].TrackClicks" value="true" x-model="buttonTrackClicks[@i]"
+                               :disabled="!trackingDomainActive"
+                               class="rounded border-gray-300 dark:border-slate-600 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50" />
+                        <label class="text-xs text-gray-500 dark:text-slate-400">
+                            Track clicks — knows whether this specific lead tapped the link (via your tracking domain)
+                            <template x-if="!trackingDomainActive">
+                                <span class="text-amber-600 dark:text-amber-400"> — set up a tracking domain in Workspace Settings to enable this</span>
+                            </template>
+                        </label>
                     </div>
                 </div>
             }
@@ -253,6 +267,7 @@
                         <svg x-show="type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h1.5a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106a1.125 1.125 0 00-1.173.417l-.97 1.293a11.25 11.25 0 01-6.223-6.223l1.293-.97a1.125 1.125 0 00.417-1.173L8.663 3.102a1.125 1.125 0 00-1.091-.852H6.75A2.25 2.25 0 004.5 4.5v2.25z" /></svg>
                         <svg x-show="type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" /></svg>
                         <span x-text="buttonTexts[i] || (type === 'QUICK_REPLY' ? 'Quick reply' : type === 'URL' ? 'Visit link' : type === 'PHONE_NUMBER' ? 'Call' : 'Copy code')"></span>
+                        <span x-show="type === 'URL' && buttonTrackClicks[i]" x-cloak class="text-[9px] font-medium text-emerald-600 border border-emerald-300 rounded px-1">TRACKED</span>
                     </div>
                 </template>
             </div>
@@ -273,6 +288,8 @@
             footerText: initial.footerText,
             buttonTypes: initial.buttonTypes,
             buttonTexts: initial.buttonTexts,
+            buttonTrackClicks: initial.buttonTrackClicks,
+            trackingDomainActive: initial.trackingDomainActive,
             sampleHeader: initial.sampleHeader,
             sampleBody: initial.sampleBody,
             get bodyVarCount() {

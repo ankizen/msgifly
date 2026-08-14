@@ -1,0 +1,99 @@
+@model Msgifly.Web.Models.Entities.Workspace
+@using Msgifly.Web.Models.Enums
+@{
+    ViewData["Title"] = "Tracking Domain";
+    const string serverIp = "173.212.230.123";
+
+    var (badgeClass, badgeText) = Model.TrackingDomainStatus switch
+    {
+        TrackingDomainStatus.Active => ("bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300", "Active"),
+        TrackingDomainStatus.Failed => ("bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300", "Not reachable"),
+        TrackingDomainStatus.Pending => ("bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300", "Pending"),
+        _ => ("bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300", "Not configured"),
+    };
+}
+
+<div class="mb-6">
+    <a asp-action="Index" class="text-sm text-emerald-600 hover:text-emerald-500">&larr; Workspaces</a>
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white mt-2">Tracking domain — @Model.Name</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
+        WhatsApp gives no signal at all when someone taps a URL button — no webhook fires. Routing that
+        button through your own domain first is the only way to know a specific lead actually clicked,
+        and it means the link they see carries your brand, not ours.
+    </p>
+</div>
+
+<div class="max-w-2xl space-y-6">
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">Status</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium @badgeClass">@badgeText</span>
+        </div>
+
+        <form asp-action="SaveTrackingDomain" asp-route-id="@Model.Id" method="post" class="flex items-end gap-3">
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Domain</label>
+                <input name="domain" value="@Model.TrackingDomain" placeholder="link.yourbusiness.com"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
+        </form>
+
+        @if (!string.IsNullOrEmpty(Model.TrackingDomain))
+        {
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between">
+                <p class="text-xs text-gray-400 dark:text-slate-500">
+                    Last checked: @(Model.TrackingDomainCheckedAt?.ToString("dd MMM, HH:mm") ?? "never") &mdash; rechecked automatically every hour.
+                </p>
+                <form asp-action="VerifyTrackingDomain" asp-route-id="@Model.Id" method="post">
+                    <button type="submit" class="px-3 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-xs font-medium hover:bg-gray-50 dark:hover:bg-slate-700">
+                        Check now
+                    </button>
+                </form>
+            </div>
+        }
+    </div>
+
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6" x-data="{ copied: false }">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white mb-1">DNS setup</h2>
+        <p class="text-sm text-gray-500 dark:text-slate-400 mb-4">
+            At your domain's DNS provider, add one A record pointing your chosen subdomain at our server.
+            Certificate provisioning happens automatically once DNS resolves — usually a few minutes.
+        </p>
+
+        <dl class="grid grid-cols-3 gap-3 text-sm mb-4">
+            <div>
+                <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Type</dt>
+                <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 mt-1">A</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Host</dt>
+                <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 mt-1">link (or whatever you chose above)</dd>
+            </div>
+            <div>
+                <dt class="text-xs uppercase text-gray-400 dark:text-slate-500">Value</dt>
+                <dd class="font-mono bg-gray-50 dark:bg-slate-900 rounded px-2 py-1 mt-1">@serverIp</dd>
+            </div>
+        </dl>
+
+        <div class="flex items-center gap-2">
+            <input type="text" readonly value="@serverIp"
+                   class="flex-1 font-mono text-xs rounded-md border-gray-300 dark:border-slate-600 bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-slate-100 px-3 py-2"
+                   onclick="this.select()" />
+            <button type="button"
+                    x-on:click="navigator.clipboard.writeText('@serverIp'); copied = true; setTimeout(() => copied = false, 1500)"
+                    class="px-3 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-xs font-medium hover:bg-gray-50 dark:hover:bg-slate-700 whitespace-nowrap">
+                <span x-show="!copied">Copy</span>
+                <span x-show="copied" x-cloak>Copied &check;</span>
+            </button>
+        </div>
+    </div>
+
+    @if (Model.TrackingDomainStatus == TrackingDomainStatus.Active)
+    {
+        <div class="rounded-md bg-emerald-50 dark:bg-emerald-900/20 p-4 text-sm text-emerald-800 dark:text-emerald-300">
+            Domain is live. Open a template with a URL button and check "Track clicks" to start
+            attributing real link taps to this workspace's leads.
+        </div>
+    }
+</div>

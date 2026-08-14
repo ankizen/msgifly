@@ -64,6 +64,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignDetail> CampaignDetails => Set<CampaignDetail>();
     public DbSet<WhatsappTemplate> WhatsappTemplates => Set<WhatsappTemplate>();
+    public DbSet<TemplateButtonClick> TemplateButtonClicks => Set<TemplateButtonClick>();
     public DbSet<CannedReply> CannedReplies => Set<CannedReply>();
     public DbSet<AiPrompt> AiPrompts => Set<AiPrompt>();
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
@@ -101,6 +102,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<Chat>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<Campaign>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<WhatsappTemplate>().HasQueryFilter(t => t.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<TemplateButtonClick>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<CannedReply>().HasQueryFilter(r => r.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<Automation>().HasQueryFilter(a => a.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<ApiKey>().HasQueryFilter(k => k.WorkspaceId == _workspaceAccessor.WorkspaceId);
@@ -189,6 +191,13 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         {
             e.HasIndex(t => t.MetaTemplateId).IsUnique();
             e.HasIndex(t => t.WorkspaceId);
+        });
+
+        builder.Entity<TemplateButtonClick>(e =>
+        {
+            e.HasIndex(c => c.Token).IsUnique();
+            e.HasIndex(c => c.WorkspaceId);
+            e.HasIndex(c => c.WhatsappMessageId);
         });
 
         builder.Entity<Campaign>(e =>

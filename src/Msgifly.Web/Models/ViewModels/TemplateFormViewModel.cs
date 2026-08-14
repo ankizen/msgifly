@@ -12,6 +12,10 @@ public class TemplateButtonFormRow
     public string? Url { get; set; }
     public string? PhoneNumber { get; set; }
     public string? Example { get; set; }
+
+    /// <summary>URL buttons only — routes this button through the workspace's tracking domain
+    /// instead of sending Url literally. See TemplateButtonRequest.TrackClicks.</summary>
+    public bool TrackClicks { get; set; }
 }
 
 /// <summary>
@@ -82,6 +86,7 @@ public class TemplateFormViewModel
                     Url = b.Url,
                     PhoneNumber = b.PhoneNumber,
                     Example = b.Example,
+                    TrackClicks = b.TrackClicks,
                 })],
             SampleValues = new TemplateSampleValues
             {
@@ -123,6 +128,7 @@ public class TemplateFormViewModel
                         Url = buttons[i].Url,
                         PhoneNumber = buttons[i].PhoneNumber,
                         Example = buttons[i].Example,
+                        TrackClicks = buttons[i].TrackClicks,
                     };
                 }
             }

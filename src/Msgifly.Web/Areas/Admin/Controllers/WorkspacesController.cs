@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -5,6 +6,8 @@ using Msgifly.Web.Authorization;
 using Msgifly.Web.Data;
 using Msgifly.Web.Extensions;
 using Msgifly.Web.Models.Entities;
+using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services.Tracking;
 using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
@@ -22,13 +25,17 @@ namespace Msgifly.Web.Areas.Admin.Controllers;
 [Authorize]
 public class WorkspacesController : Controller
 {
+    private static readonly Regex HostnamePattern = new(@"^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$", RegexOptions.Compiled);
+
     private readonly ApplicationDbContext _db;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
+    private readonly TrackingDomainVerificationService _trackingDomainVerificationService;
 
-    public WorkspacesController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor)
+    public WorkspacesController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, TrackingDomainVerificationService trackingDomainVerificationService)
     {
         _db = db;
         _workspaceAccessor = workspaceAccessor;
+        _trackingDomainVerificationService = trackingDomainVerificationService;
     }
 
     [Authorize(Policy = "workspace.view")]
@@ -131,6 +138,81 @@ public class WorkspacesController : Controller
 
         this.Notify("Workspace renamed.");
         return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize(Policy = "workspace.edit")]
+    public async Task<IActionResult> TrackingDomain(int id)
+    {
+        var workspace = await _db.Workspaces.FindAsync(id);
+        if (workspace is null)
+        {
+            return NotFound();
+        }
+
+        return View(workspace);
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "workspace.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveTrackingDomain(int id, string? domain)
+    {
+        var workspace = await _db.Workspaces.FindAsync(id);
+        if (workspace is null)
+        {
+            return NotFound();
+        }
+
+        var trimmed = domain?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            workspace.TrackingDomain = null;
+            workspace.TrackingDomainStatus = TrackingDomainStatus.NotConfigured;
+            workspace.TrackingDomainCheckedAt = null;
+        }
+        else
+        {
+            if (!HostnamePattern.IsMatch(trimmed))
+            {
+                this.Notify("That doesn't look like a valid domain (e.g. link.salonsteps.com).", "danger");
+                return RedirectToAction(nameof(TrackingDomain), new { id });
+            }
+
+            workspace.TrackingDomain = trimmed.ToLowerInvariant();
+            workspace.TrackingDomainStatus = TrackingDomainStatus.Pending;
+            workspace.TrackingDomainCheckedAt = null;
+        }
+
+        workspace.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        this.Notify(trimmed is null ? "Tracking domain cleared." : "Tracking domain saved — add the DNS record below, then click \"Check now\".");
+        return RedirectToAction(nameof(TrackingDomain), new { id });
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "workspace.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> VerifyTrackingDomain(int id)
+    {
+        var workspace = await _db.Workspaces.FindAsync(id);
+        if (workspace is null)
+        {
+            return NotFound();
+        }
+
+        workspace.TrackingDomainStatus = await _trackingDomainVerificationService.VerifyAsync(workspace);
+        workspace.TrackingDomainCheckedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        this.Notify(workspace.TrackingDomainStatus switch
+        {
+            TrackingDomainStatus.Active => "Domain is live — click tracking is ready to enable on templates.",
+            TrackingDomainStatus.Failed => "Domain isn't reachable — it was working before but isn't now. Check your DNS/cert.",
+            _ => "Not reachable yet — DNS and certificate provisioning can take a few minutes. Try again shortly.",
+        }, workspace.TrackingDomainStatus == TrackingDomainStatus.Active ? "success" : "danger");
+
+        return RedirectToAction(nameof(TrackingDomain), new { id });
     }
 
     private int? ScopedWorkspaceId()

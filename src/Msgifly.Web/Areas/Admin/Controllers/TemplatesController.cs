@@ -8,6 +8,7 @@ using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.WhatsApp;
+using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Areas.Admin.Controllers;
 
@@ -20,12 +21,23 @@ public class TemplatesController : Controller
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly IWebHostEnvironment _environment;
+    private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
 
-    public TemplatesController(ApplicationDbContext db, IWhatsAppService whatsAppService, IWebHostEnvironment environment)
+    public TemplatesController(ApplicationDbContext db, IWhatsAppService whatsAppService, IWebHostEnvironment environment, ICurrentWorkspaceAccessor workspaceAccessor)
     {
         _db = db;
         _whatsAppService = whatsAppService;
         _environment = environment;
+        _workspaceAccessor = workspaceAccessor;
+    }
+
+    /// <summary>Backs the "Track clicks" checkbox in Save.cshtml — only enabled once a workspace has
+    /// a verified tracking domain (see WorkspacesController.TrackingDomain).</summary>
+    private async Task PopulateTrackingDomainViewDataAsync()
+    {
+        var workspace = await _db.Workspaces.AsNoTracking().FirstOrDefaultAsync(w => w.Id == _workspaceAccessor.WorkspaceId);
+        ViewData["TrackingDomainActive"] = workspace?.TrackingDomainStatus == TrackingDomainStatus.Active;
+        ViewData["TrackingDomain"] = workspace?.TrackingDomain;
     }
 
     /// <summary>
@@ -166,9 +178,10 @@ public class TemplatesController : Controller
 
     [HttpGet]
     [Authorize(Policy = "template.load_template")]
-    public IActionResult Create()
+    public async Task<IActionResult> Create()
     {
         ViewData["Title"] = "New Template";
+        await PopulateTrackingDomainViewDataAsync();
         return View("Save", new TemplateFormViewModel());
     }
 
@@ -178,6 +191,7 @@ public class TemplatesController : Controller
     public async Task<IActionResult> Create(TemplateFormViewModel model)
     {
         ViewData["Title"] = "New Template";
+        await PopulateTrackingDomainViewDataAsync();
         if (!ModelState.IsValid)
         {
             return View("Save", model);
@@ -226,6 +240,7 @@ public class TemplatesController : Controller
         }
 
         ViewData["Title"] = "Edit Template";
+        await PopulateTrackingDomainViewDataAsync();
         return View("Save", TemplateFormViewModel.FromEntity(template));
     }
 
@@ -236,6 +251,7 @@ public class TemplatesController : Controller
     {
         ViewData["Title"] = "Edit Template";
         model.Id = id;
+        await PopulateTrackingDomainViewDataAsync();
         if (!ModelState.IsValid)
         {
             return View("Save", model);

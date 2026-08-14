@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
@@ -166,6 +167,19 @@ public class WhatsAppService : IWhatsAppService
                     // ParseTemplateNode never sets WorkspaceId — it can't change on sync, and
                     // SetValues below would otherwise stamp the existing row's real value to 0.
                     parsed.WorkspaceId = existing.WorkspaceId;
+
+                    // ParseTemplateNode's ButtonsJson is Meta's raw response — a tracked button's
+                    // url there is literally the tracking-domain link, with no TrackClicks flag and
+                    // no real destination anywhere (Meta only ever echoes back what we submitted).
+                    // Accepting it wholesale would silently disable tracking on every future send
+                    // and reintroduce the exact param-count mismatch a hard-coded {{1}} button needs
+                    // guarded against — so any row with click tracking on keeps its own ButtonsJson
+                    // through a sync instead of being overwritten by Meta's echo.
+                    if (HasTrackedButton(existing.ButtonsJson))
+                    {
+                        parsed.ButtonsJson = existing.ButtonsJson;
+                    }
+
                     _db.Entry(existing).CurrentValues.SetValues(parsed);
                     existing.UpdatedAt = DateTime.UtcNow;
                 }
@@ -185,11 +199,29 @@ public class WhatsAppService : IWhatsAppService
         return WhatsAppResult<int>.Ok(apiTemplateIds.Count);
     }
 
+    private static bool HasTrackedButton(string? buttonsJson)
+    {
+        if (string.IsNullOrEmpty(buttonsJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            var buttons = JsonSerializer.Deserialize<List<TemplateButtonRequest>>(buttonsJson);
+            return buttons?.Any(b => b.TrackClicks) == true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     public async Task<WhatsAppResult<WhatsappTemplate>> CreateTemplateAsync(TemplateCreateRequest request)
     {
-        var validation = TemplateValidator.Validate(request);
-
         var settings = await GetSettingsAsync();
+        var validation = TemplateValidator.Validate(request, settings.IsTrackingDomainActive);
+
         if (string.IsNullOrWhiteSpace(settings.BusinessAccountId) || string.IsNullOrWhiteSpace(settings.AccessToken))
         {
             return WhatsAppResult<WhatsappTemplate>.Fail("WhatsApp Business Account is not configured yet.");
@@ -252,9 +284,9 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<WhatsappTemplate>.Fail($"Templates in status {existing.Status} cannot be edited. Allowed: Approved, Rejected, Paused.");
         }
 
-        var validation = TemplateValidator.Validate(request);
-
         var settings = await GetSettingsAsync();
+        var validation = TemplateValidator.Validate(request, settings.IsTrackingDomainActive);
+
         var componentsResult = await BuildTemplateComponentsAsync(settings, request);
         if (!componentsResult.Success)
         {
@@ -386,6 +418,16 @@ public class WhatsAppService : IWhatsAppService
                 type = "BUTTONS",
                 buttons = request.Buttons.Select(object (b) => b.Type switch
                 {
+                    // TrackClicks rewrites the Meta-facing url/example to the workspace's tracking
+                    // domain — b.Url itself keeps holding the real destination as typed, both in
+                    // this request object and in what gets persisted to ButtonsJson afterward.
+                    "URL" when b.TrackClicks => new
+                    {
+                        type = "URL",
+                        text = b.Text,
+                        url = $"https://{settings.TrackingDomain}/r/{{{{1}}}}",
+                        example = new[] { $"https://{settings.TrackingDomain}/r/sample1234" },
+                    },
                     "URL" => new { type = "URL", text = b.Text, url = b.Url, example = b.Example is null ? null : new[] { b.Example } },
                     "PHONE_NUMBER" => new { type = "PHONE_NUMBER", text = b.Text, phone_number = b.PhoneNumber },
                     "COPY_CODE" => new { type = "COPY_CODE", text = b.Text, example = new[] { b.Example } },
@@ -576,6 +618,66 @@ public class WhatsAppService : IWhatsAppService
             });
         }
 
+        // Every SendTemplateMessageAsync caller already looks up the local WhatsappTemplate row for
+        // its own purposes (header format, etc.) — re-looked-up here rather than threading buttons
+        // through TemplateSendRequest, so all three call sites (manual send, automations, campaigns)
+        // get click tracking with zero changes of their own, same "each layer fetches what it needs"
+        // pattern GetSettingsAsync already follows.
+        var pendingClicks = new List<TemplateButtonClick>();
+        var template = await _db.WhatsappTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.TemplateName == request.TemplateName);
+        if (!string.IsNullOrEmpty(template?.ButtonsJson))
+        {
+            List<TemplateButtonRequest>? buttons = null;
+            try
+            {
+                buttons = JsonSerializer.Deserialize<List<TemplateButtonRequest>>(template.ButtonsJson);
+            }
+            catch (JsonException)
+            {
+                // Rows synced from Meta carry the Graph API's own button JSON shape, not ours —
+                // nothing to attach a tracking token to for those.
+            }
+
+            if (buttons is not null)
+            {
+                for (var i = 0; i < buttons.Count; i++)
+                {
+                    var button = buttons[i];
+                    if (button.Type != "URL" || !button.TrackClicks || string.IsNullOrEmpty(button.Url))
+                    {
+                        continue;
+                    }
+
+                    var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
+                    var click = new TemplateButtonClick
+                    {
+                        WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
+                        Token = token,
+                        DestinationUrl = button.Url,
+                        TemplateName = request.TemplateName,
+                        ButtonText = button.Text,
+                        ButtonIndex = i,
+                    };
+                    _db.TemplateButtonClicks.Add(click);
+                    pendingClicks.Add(click);
+
+                    components.Add(new
+                    {
+                        type = "button",
+                        sub_type = "url",
+                        index = i.ToString(),
+                        parameters = new[] { new { type = "text", text = token } },
+                    });
+                }
+
+                if (pendingClicks.Count > 0)
+                {
+                    // Saved before the send — the token must resolve the instant it could be tapped.
+                    await _db.SaveChangesAsync();
+                }
+            }
+        }
+
         var payload = new
         {
             messaging_product = "whatsapp",
@@ -589,7 +691,18 @@ public class WhatsAppService : IWhatsAppService
             },
         };
 
-        return await PostMessageAsync(payload);
+        var result = await PostMessageAsync(payload);
+        if (result.Success && pendingClicks.Count > 0)
+        {
+            foreach (var click in pendingClicks)
+            {
+                click.WhatsappMessageId = result.Data;
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
+        return result;
     }
 
     public async Task<WhatsAppResult<string>> UploadMediaAsync(string phoneNumberId, Stream fileStream, string fileName, string mimeType)
@@ -1124,6 +1237,8 @@ public class WhatsAppService : IWhatsAppService
             AccessToken = workspace?.AccessToken,
             DefaultPhoneNumberId = workspace?.DefaultPhoneNumberId,
             DefaultPhoneNumber = workspace?.DefaultPhoneNumber,
+            TrackingDomain = workspace?.TrackingDomain,
+            IsTrackingDomainActive = workspace?.TrackingDomainStatus == TrackingDomainStatus.Active,
         };
     }
 
