@@ -16,7 +16,7 @@
     </div>
 }
 
-<form asp-action="Save" asp-route-id="@Model.Id" method="post" id="automationForm" class="space-y-4">
+<form asp-action="Save" asp-route-id="@Model.Id" method="post" id="automationForm" class="space-y-4" x-data="automationCanvasController()">
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
             <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
@@ -35,24 +35,41 @@
         </label>
     </div>
 
-    <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden" x-data="automationCanvasController()">
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
         <template x-if="sessionWindowWarning">
             <div class="p-3 border-b border-gray-200 dark:border-slate-700 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
                 <span class="flex-shrink-0">⚠️</span>
                 <span x-text="sessionWindowWarning"></span>
             </div>
         </template>
-        <div class="flex flex-wrap items-center gap-2 p-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
-            <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mr-1">Add step:</span>
-            <template x-for="[type, def] in Object.entries(stepDefs)" :key="type">
-                <button type="button" draggable="true"
-                        x-on:dragstart="canvas.startDrag($event, type)"
-                        x-on:click="canvas.addStepNode(type)"
-                        class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-700 cursor-grab">
-                    <span x-text="def.icon"></span> <span x-text="def.label"></span>
-                </button>
+        <template x-if="validationIssues.length > 0">
+            <div class="p-3 border-b border-gray-200 dark:border-slate-700 bg-red-50 dark:bg-red-900/20 text-sm text-red-800 dark:text-red-300">
+                <p class="font-medium mb-1" x-text="`${validationIssues.length} step${validationIssues.length === 1 ? '' : 's'} need${validationIssues.length === 1 ? 's' : ''} attention:`"></p>
+                <ul class="space-y-0.5">
+                    <template x-for="issue in validationIssues" :key="issue.nodeId + issue.message">
+                        <li>
+                            <button type="button" class="text-left underline decoration-dotted hover:text-red-600 dark:hover:text-red-200" x-on:click="canvas.focusNode(issue.nodeId)" x-text="issue.message"></button>
+                        </li>
+                    </template>
+                </ul>
+            </div>
+        </template>
+        <div class="flex flex-wrap items-start gap-x-4 gap-y-2 p-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
+            <template x-for="cat in stepCategories" :key="cat.label">
+                <div class="flex flex-wrap items-center gap-1.5 pr-4 border-r border-gray-200 dark:border-slate-700 last:border-r-0">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mr-0.5" x-text="cat.label"></span>
+                    <template x-for="type in cat.types" :key="type">
+                        <button type="button" draggable="true"
+                                x-on:dragstart="canvas.startDrag($event, type)"
+                                x-on:click="canvas.addStepNode(type)"
+                                class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-700 cursor-grab">
+                            <span x-text="stepDefs[type]?.icon"></span> <span x-text="stepDefs[type]?.label"></span>
+                        </button>
+                    </template>
+                </div>
             </template>
             <div class="ml-auto flex items-center gap-1">
+                <button type="button" x-on:click="canvas.tidyUp()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 text-xs" title="Auto-arrange the steps top-to-bottom">Tidy up</button>
                 <button type="button" x-on:click="canvas.zoomOut()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" title="Zoom out">&minus;</button>
                 <button type="button" x-on:click="canvas.zoomReset()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 text-xs">Reset</button>
                 <button type="button" x-on:click="canvas.zoomIn()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" title="Zoom in">+</button>
@@ -61,7 +78,7 @@
 
         <div id="automationCanvas" class="relative w-full" style="height: 620px;"></div>
         <p class="px-3 py-2 text-xs text-gray-400 dark:text-slate-500 border-t border-gray-100 dark:border-slate-700">
-            Drag from an output dot to an input dot to connect steps. Double-click a connection line to add a bend point; double-click a node to delete it.
+            Drag from an output dot to an input dot to connect steps. To delete a step or a connection, click it to select it, then press Delete (or use the &times; button on a step's title bar) — you'll be asked to confirm. Double-click a connection line to add a bend point.
         </p>
     </div>
 
@@ -76,14 +93,31 @@
     <div class="flex items-center gap-3">
         <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save Automation</button>
         <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
+        <span class="text-xs text-amber-600 dark:text-amber-400" x-show="dirty" x-cloak>&#9679; Unsaved changes</span>
     </div>
 </form>
 
 <style>
     .df-node-card { min-width: 220px; font-family: inherit; position: relative; }
-    .df-node-title { font-weight: 600; font-size: 0.8rem; padding: 6px 10px; background: #047857; color: #fff; border-radius: 6px 6px 0 0; }
+    .df-node-title { font-weight: 600; font-size: 0.8rem; padding: 6px 6px 6px 10px; background: #047857; color: #fff; border-radius: 6px 6px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
     .df-trigger-card .df-node-title { background: #1e293b; }
     .df-node-body { padding: 8px 10px; background: #fff; border-radius: 0 0 6px 6px; display: flex; flex-direction: column; gap: 4px; }
+
+    /* Hidden until the card is hovered/selected so the title bar isn't cluttered for the
+       common case of just looking at or dragging a node — deletion is still reachable via
+       select + Delete key even when the button itself isn't visible. */
+    .df-delete-btn {
+        flex-shrink: 0; width: 18px; height: 18px; line-height: 16px; text-align: center;
+        border-radius: 4px; border: none; background: rgba(255,255,255,.15); color: #fff;
+        font-size: 14px; cursor: pointer; opacity: 0; transition: opacity .1s, background .1s;
+    }
+    .df-node-card:hover .df-delete-btn,
+    .drawflow-node.selected .df-delete-btn { opacity: 1; }
+    .df-delete-btn:hover { background: rgba(255,255,255,.35); }
+    .df-trigger-card .df-delete-btn { display: none; }
+
+    @@keyframes dfNodeFlash { 0%, 100% { outline-color: transparent; } 20%, 60% { outline-color: #f59e0b; } }
+    .df-node-flash .df-node-body { outline: 2px solid transparent; animation: dfNodeFlash 1.2s ease-in-out; }
 
     /* Specificity note: Drawflow's own stylesheet uses ".drawflow .drawflow-node" (two classes),
        which beats a plain ".drawflow-node" override — so every rule here that touches node/port
@@ -136,7 +170,10 @@
         return {
             canvas: null,
             stepDefs: window.AUTOMATION_STEP_DEFS || {},
+            stepCategories: window.AUTOMATION_STEP_CATEGORIES || [],
             sessionWindowWarning: null,
+            validationIssues: [],
+            dirty: false,
             init() {
                 const initial = {
                     triggerType: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TriggerType)),
@@ -153,9 +190,27 @@
                 };
                 this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial, (state) => {
                     this.sessionWindowWarning = state.sessionWindowWarning;
+                    this.validationIssues = state.validationIssues || [];
+                    if (!state.isInitialRender) this.dirty = true;
                 });
 
-                document.getElementById('automationForm').addEventListener('submit', () => {
+                const form = document.getElementById('automationForm');
+
+                // Catches everything the canvas callback above doesn't: the Name/Description/
+                // Active fields, and any node field edit typed via Drawflow's own df-* binding —
+                // those don't fire nodeCreated/connectionCreated, but as ordinary form controls
+                // inside #automationCanvas (itself inside this <form>), their input/change events
+                // still bubble all the way up here.
+                form.addEventListener('input', () => { this.dirty = true; });
+                form.addEventListener('change', () => { this.dirty = true; });
+
+                window.addEventListener('beforeunload', (e) => {
+                    if (!this.dirty) return;
+                    e.preventDefault();
+                    e.returnValue = '';
+                });
+
+                form.addEventListener('submit', () => {
                     const data = this.canvas.exportForSubmit();
                     this.$refs.triggerTypeInput.value = data.triggerType;
                     this.$refs.keywordsInput.value = data.keywords;
@@ -164,6 +219,7 @@
                     this.$refs.replyIdsInput.value = data.replyIds;
                     this.$refs.leadFormIdInput.value = data.leadFormId;
                     this.$refs.stepsJsonInput.value = data.stepsJson;
+                    this.dirty = false;
                 });
             },
         };

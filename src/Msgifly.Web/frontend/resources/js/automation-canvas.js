@@ -20,7 +20,13 @@ const FIELD_CLASS =
   'mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-xs focus:border-emerald-500 focus:ring-emerald-500';
 
 function node(title, icon, bodyHtml) {
-  return `<div class="df-node-card"><div class="df-node-title">${icon} ${title}</div><div class="df-node-body">${bodyHtml}</div></div>`;
+  return `<div class="df-node-card">
+    <div class="df-node-title">
+      <span>${icon} ${title}</span>
+      <button type="button" class="df-delete-btn" title="Delete this step">&times;</button>
+    </div>
+    <div class="df-node-body">${bodyHtml}</div>
+  </div>`;
 }
 
 // Matches AutomationEngine.Interpolate's {{contact.*}} handling — surfaced as clickable chips
@@ -180,6 +186,16 @@ const STEP_DEFS = {
     html: node('Stop', '⏹', `<p class="text-[11px] text-gray-400">Ends this branch here.</p>`),
   },
 };
+
+// A flat 8-button "Add step" row gives a first-time, non-technical admin no hint of which steps
+// are commonly used together — grouping by what each step actually does (send something to the
+// customer vs. branch/pause the automation vs. change data or stop) mirrors wacrm-main's
+// NODE_CATEGORIES grouping idea without changing addStepNode/startDrag at all.
+const STEP_CATEGORIES = [
+  { label: 'Messaging', types: ['SendMessage', 'SendTemplate', 'SendButtons'] },
+  { label: 'Logic', types: ['Condition', 'Wait'] },
+  { label: 'Actions', types: ['UpdateContactField', 'SendWebhook', 'Stop'] },
+];
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -396,6 +412,103 @@ function wireConditionFields(container) {
   return (nodeId) => updateCard(document.querySelector(`#node-${nodeId} .df-node-card`));
 }
 
+// Which trigger-type-specific field group each TriggerType actually reads server-side (see
+// AutomationEngine.TriggerMatches) — every trigger type showed every other type's fields at
+// once regardless of selection, which is confusing clutter on the very first node every
+// automation has (e.g. "Any inbound message" still showed Keywords/Button-ids/Lead-form fields).
+const TRIGGER_TYPE_FIELDS = {
+  KeywordMatch: ['df-trigger-keywords'],
+  InteractiveReply: ['df-trigger-replyids'],
+  FacebookLeadReceived: ['df-trigger-leadformid'],
+};
+const ALL_TRIGGER_FIELD_CLASSES = ['df-trigger-keywords', 'df-trigger-replyids', 'df-trigger-leadformid'];
+
+function wireTriggerFields(container) {
+  function updateCard(card) {
+    if (!card) return;
+    const typeSelect = card.querySelector('[df-triggertype]');
+    if (!typeSelect) return;
+    const active = new Set(TRIGGER_TYPE_FIELDS[typeSelect.value] || []);
+    for (const cls of ALL_TRIGGER_FIELD_CLASSES) {
+      card.querySelectorAll(`.${cls}`).forEach((el) => {
+        el.style.display = active.has(cls) ? '' : 'none';
+      });
+    }
+  }
+
+  container.addEventListener('change', (e) => {
+    if (e.target.matches('[df-triggertype]')) updateCard(e.target.closest('.df-trigger-card'));
+  });
+  container.addEventListener('input', (e) => {
+    if (e.target.matches('[df-triggertype]')) updateCard(e.target.closest('.df-trigger-card'));
+  });
+
+  return (nodeId) => updateCard(document.querySelector(`#node-${nodeId} .df-trigger-card`));
+}
+
+/**
+ * Node/connection deletion previously ran through Drawflow's own built-in Delete-key handler
+ * completely unconfirmed (select a node, hit Delete, it's gone — no undo) — and the app's own
+ * help caption described a "double-click a node to delete it" gesture that doesn't actually
+ * exist in this version of Drawflow at all (real deletion is select-then-Delete-key, confirmed
+ * by reading Drawflow's own source; double-click only adds a bend point to a selected
+ * connection). This intercepts Drawflow's deletion at the source — registered on the SAME
+ * container element Drawflow itself listens on, with `capture: true` so it runs during the
+ * capture pass (before the event ever reaches Drawflow's own bubble-phase listener) — asks for
+ * confirmation, and only calls through to Drawflow's real removal methods if confirmed. Also
+ * adds a hover-visible "×" button on every step card (Delete-key selection is easy to miss
+ * entirely if you've never used a node-graph editor before), wired the same confirm-first way.
+ */
+function wireDeleteConfirmation(editor, container) {
+  function isTriggerNode(el) {
+    return !!el?.classList?.contains('df-trigger');
+  }
+
+  function confirmAndRemoveNode(nodeEl) {
+    if (isTriggerNode(nodeEl)) {
+      window.alert('The Trigger step can\'t be deleted — every automation needs one. Change its type in the dropdown instead.');
+      return;
+    }
+    if (!window.confirm('Delete this step? This can\'t be undone.')) return;
+    editor.removeNodeId(nodeEl.id);
+  }
+
+  container.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Delete' && !(e.key === 'Backspace' && e.metaKey)) return;
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+
+      const selectedNode = editor.node_selected;
+      const selectedConnection = editor.connection_selected;
+      if (!selectedNode && !selectedConnection) return;
+
+      // Stop this exact keydown from ever reaching Drawflow's own (unconfirmed) deletion —
+      // capture-phase + stopping propagation here means its bubble-phase listener never fires.
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (selectedNode) {
+        confirmAndRemoveNode(selectedNode);
+      } else if (selectedConnection) {
+        if (window.confirm('Delete this connection? This can\'t be undone.')) {
+          editor.removeConnection();
+        }
+      }
+    },
+    true
+  );
+
+  container.addEventListener('click', (e) => {
+    const btn = e.target.closest('.df-delete-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const nodeEl = btn.closest('[id^="node-"]');
+    if (nodeEl) confirmAndRemoveNode(nodeEl);
+  });
+}
+
 /**
  * Clicking a "+ First name" chip inserts {{contact.firstName}} into whichever text field the
  * admin last focused within that same node card (falling back to the card's first text field if
@@ -459,18 +572,18 @@ const TRIGGER_HTML = (leadForms) => {
         <option value="FacebookLeadReceived">New Facebook lead received</option>
         <option value="InteractiveReply">Button / list reply tapped</option>
       </select>
-      <input df-keywords placeholder="Keywords, comma-separated" class="${FIELD_CLASS}" />
-      <select df-matchtype class="${FIELD_CLASS}">
+      <input df-keywords placeholder="Keywords, comma-separated" class="${FIELD_CLASS} df-trigger-keywords" />
+      <select df-matchtype class="${FIELD_CLASS} df-trigger-keywords">
         <option value="contains">Contains</option>
         <option value="exact">Exact match</option>
         <option value="word">Whole word</option>
       </select>
-      <select df-casesensitive class="${FIELD_CLASS}">
+      <select df-casesensitive class="${FIELD_CLASS} df-trigger-keywords">
         <option value="false">Case-insensitive</option>
         <option value="true">Case-sensitive</option>
       </select>
-      <input df-replyids placeholder="Button/row ids, comma-separated" class="${FIELD_CLASS}" />
-      <select df-leadformid class="${FIELD_CLASS}" title="Only for 'New Facebook lead received' — leave as Any to match every form on the connected Page">
+      <input df-replyids placeholder="Button/row ids, comma-separated" class="${FIELD_CLASS} df-trigger-replyids" />
+      <select df-leadformid class="${FIELD_CLASS} df-trigger-leadformid">
         <option value="">Any Facebook Lead Ads form</option>
         ${formOptions}
       </select>
@@ -505,6 +618,62 @@ function computeSessionWindowWarning(editor) {
   return `${stepLabel} can't reach ${triggerLabel} as the first step — WhatsApp only allows a Template message to someone who hasn't messaged you yet. Use "Send Template" first instead.`;
 }
 
+// Previously the only feedback an admin got about a half-filled step (an empty template picker,
+// a Condition with no comparison value, a step nobody wired anywhere) was a generic failure
+// after hitting Save — or, for a dead-end branch, nothing at all until the automation quietly did
+// less than expected in production. This re-checks the whole live graph on every change and
+// surfaces problems inline instead, matching the same "recompute on graph change, render as a
+// small persistent list" shape as computeSessionWindowWarning above.
+function computeValidationIssues(editor) {
+  const exported = editor.export();
+  const nodesById = exported.drawflow.Home.data;
+  const issues = [];
+
+  for (const n of Object.values(nodesById)) {
+    const def = STEP_DEFS[n.name];
+    if (!def) continue; // the Trigger node has its own shape and isn't in STEP_DEFS
+    const data = n.data || {};
+    const label = def.label;
+
+    if (n.name === 'SendTemplate' && !String(data.templatename || '').trim()) {
+      issues.push({ nodeId: n.id, message: `${label}: no template chosen yet.` });
+    } else if (n.name === 'SendMessage' && !String(data.text || '').trim()) {
+      issues.push({ nodeId: n.id, message: `${label}: message text is empty.` });
+    } else if (n.name === 'SendButtons') {
+      if (!String(data.bodytext || '').trim()) {
+        issues.push({ nodeId: n.id, message: `${label}: message body is empty.` });
+      }
+      const hasAnyButton = [1, 2, 3].some(
+        (i) => String(data[`button${i}id`] || '').trim() && String(data[`button${i}title`] || '').trim()
+      );
+      if (!hasAnyButton) {
+        issues.push({ nodeId: n.id, message: `${label}: no buttons filled in yet.` });
+      }
+    } else if (n.name === 'SendWebhook' && !String(data.url || '').trim()) {
+      issues.push({ nodeId: n.id, message: `${label}: webhook URL is empty.` });
+    } else if (n.name === 'Condition') {
+      const help = CONDITION_SUBJECT_HELP[data.subject] || CONDITION_SUBJECT_HELP.MessageContent;
+      if (help.showOperand && !String(data.operand || '').trim()) {
+        issues.push({ nodeId: n.id, message: `${label}: missing ${(help.operandPlaceholder || 'a value').toLowerCase()}.` });
+      }
+      if (help.showValue && !String(data.value || '').trim()) {
+        issues.push({ nodeId: n.id, message: `${label}: missing a value to compare.` });
+      }
+    }
+
+    // A "Stop" step is meant to have nowhere further to go — every other step type isn't, so
+    // zero outgoing connections there means the branch silently does nothing past this point.
+    if (n.name !== 'Stop') {
+      const hasAnyConnection = Object.values(n.outputs || {}).some((o) => (o.connections || []).length > 0);
+      if (!hasAnyConnection) {
+        issues.push({ nodeId: n.id, message: `${label}: doesn't lead anywhere — this branch dead-ends here. Add a "Stop" step if that's intentional.` });
+      }
+    }
+  }
+
+  return issues;
+}
+
 export function createAutomationCanvas(container, initial, onGraphChange) {
   const editor = new Drawflow(container);
   editor.reroute = true;
@@ -528,6 +697,9 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
   wirePersonalizationChips(container);
   const updateConditionCard = wireConditionFields(container);
   editor.on('nodeCreated', updateConditionCard);
+  const updateTriggerCard = wireTriggerFields(container);
+  editor.on('nodeCreated', updateTriggerCard);
+  wireDeleteConfirmation(editor, container);
 
   function addTriggerNode(x, y, triggerType, data) {
     const merged = { triggertype: triggerType || 'InboundMessage', keywords: '', matchtype: 'contains', casesensitive: 'false', replyids: '', leadformid: '', ...(data || {}) };
@@ -543,20 +715,49 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
     layoutChain(initial.steps, 420, 200, triggerNodeId, 'output_1');
   }
 
-  // ---- Session-window risk warning: recompute on anything that could change the answer ----
+  // ---- Session-window risk warning + validation: recompute on anything that could change the answer ----
+  // The very first call (below, after every listener is wired) reflects the canvas as it was
+  // just reconstructed from saved data — not a real edit — so it's flagged separately and
+  // excluded from dirty-state tracking in Save.cshtml; every call after that reflects a genuine
+  // user-driven change (Drawflow only fires its own nodeCreated/nodeRemoved/connection* events
+  // for actions taken after these listeners are registered, which is after the initial layout).
+  let hasRenderedOnce = false;
   function notifyGraphChanged() {
     if (typeof onGraphChange === 'function') {
-      onGraphChange({ sessionWindowWarning: computeSessionWindowWarning(editor) });
+      onGraphChange({
+        sessionWindowWarning: computeSessionWindowWarning(editor),
+        validationIssues: computeValidationIssues(editor),
+        isInitialRender: !hasRenderedOnce,
+      });
     }
+    hasRenderedOnce = true;
+  }
+
+  /** Scrolls the offending node into view and briefly flashes an outline around it — called from
+   * the validation panel's click handler in Save.cshtml. Drawflow has no public "select node"
+   * method to drive its own selected-state styling programmatically, so this uses a
+   * self-contained CSS class instead rather than reaching into its internals. */
+  function focusNode(nodeId) {
+    const el = document.getElementById(`node-${nodeId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    el.classList.add('df-node-flash');
+    setTimeout(() => el.classList.remove('df-node-flash'), 1200);
   }
 
   editor.on('connectionCreated', notifyGraphChanged);
   editor.on('connectionRemoved', notifyGraphChanged);
   editor.on('nodeCreated', notifyGraphChanged);
   editor.on('nodeRemoved', notifyGraphChanged);
-  container.addEventListener('change', (e) => {
-    if (e.target.matches('[df-triggertype]')) notifyGraphChanged();
-  });
+  // Structural events alone (above) miss the single most common edit: typing into a step's own
+  // fields. Picking a template, filling in message text, setting a Condition's value — none of
+  // those add or remove a node or connection, so without this the validation panel would only
+  // ever refresh on the *next* unrelated structural change, silently stale in between. Drawflow's
+  // own df-* data binding is 'input'-driven (confirmed by reading its source — 'change' alone
+  // doesn't reach it for text/textarea, and unreliably for selects), so listening for both here
+  // keeps this in step with whatever Drawflow's internal `data` actually holds at any moment.
+  container.addEventListener('input', notifyGraphChanged);
+  container.addEventListener('change', notifyGraphChanged);
   notifyGraphChanged();
 
   // A canvas Condition node only ever has two outputs (Yes/No) — there's no third "runs
@@ -710,6 +911,64 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
     return [stepNode, ...walkFrom(nodesById, next.id, 'output_1', visited)];
   }
 
+  // Node position is purely a canvas convenience — exportForSubmit()/walkFrom() below never
+  // include pos_x/pos_y in what gets saved, so a fresh load always re-lays-out from scratch via
+  // layoutChain(). "Tidy up" reuses that same top-to-bottom, sibling-chain shape but runs it
+  // against the CURRENT live graph (editor.export()) instead of a freshly-reconstructed one, so
+  // nodes the admin has dragged into a tangle can be re-organized without losing any connections
+  // or field values — this only ever touches position, never data.
+  function tidyUp() {
+    const exported = editor.export();
+    const nodesById = exported.drawflow.Home.data;
+    const triggerEntry = Object.values(nodesById).find((n) => n.name === 'Trigger');
+    if (!triggerEntry) return;
+
+    const positions = { [triggerEntry.id]: { x: 50, y: 200 } };
+
+    function placeFrom(fromId, fromOutput, x, y) {
+      const fromNode = nodesById[fromId];
+      const conn = fromNode?.outputs?.[fromOutput]?.connections?.[0];
+      if (!conn) return;
+      const id = conn.node;
+      if (positions[id]) return; // already placed — guards against a manually-wired loop
+      positions[id] = { x, y };
+      const targetNode = nodesById[id];
+      if (targetNode.name === 'Condition') {
+        placeFrom(id, 'output_1', x + 380, y - 60);
+        placeFrom(id, 'output_2', x + 380, y + 220);
+        return;
+      }
+      placeFrom(id, 'output_1', x + 380, y);
+    }
+
+    placeFrom(triggerEntry.id, 'output_1', 420, 200);
+
+    // A node the admin added but never connected to anything isn't reachable from the walk
+    // above — still needs a spot, or "tidy up" would silently leave it wherever it was,
+    // potentially now overlapping the freshly-organized main flow.
+    let overflowX = 50;
+    const overflowY = Math.max(200, ...Object.values(positions).map((p) => p.y)) + 260;
+    for (const id of Object.keys(nodesById)) {
+      if (positions[id]) continue;
+      positions[id] = { x: overflowX, y: overflowY };
+      overflowX += 380;
+    }
+
+    const moduleData = editor.drawflow.drawflow[editor.module].data;
+    for (const [id, pos] of Object.entries(positions)) {
+      if (moduleData[id]) {
+        moduleData[id].pos_x = pos.x;
+        moduleData[id].pos_y = pos.y;
+      }
+      const el = document.getElementById(`node-${id}`);
+      if (el) {
+        el.style.left = `${pos.x}px`;
+        el.style.top = `${pos.y}px`;
+      }
+      editor.updateConnectionNodes(`node-${id}`);
+    }
+  }
+
   function exportForSubmit() {
     const exported = editor.export();
     const nodesById = exported.drawflow.Home.data;
@@ -739,6 +998,8 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
       event.dataTransfer.setData('text/step-type', type);
     },
     exportForSubmit,
+    focusNode,
+    tidyUp,
     zoomIn: () => editor.zoom_in(),
     zoomOut: () => editor.zoom_out(),
     zoomReset: () => editor.zoom_reset(),
@@ -749,3 +1010,7 @@ window.createAutomationCanvas = createAutomationCanvas;
 window.AUTOMATION_STEP_DEFS = Object.fromEntries(
   Object.entries(STEP_DEFS).map(([key, def]) => [key, { label: def.label, icon: def.icon }])
 );
+window.AUTOMATION_STEP_CATEGORIES = STEP_CATEGORIES.map((cat) => ({
+  label: cat.label,
+  types: cat.types.filter((t) => STEP_DEFS[t]),
+}));
