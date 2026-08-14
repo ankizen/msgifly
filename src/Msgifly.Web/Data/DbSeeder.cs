@@ -76,6 +76,17 @@ public static class DbSeeder
 
             await userManager.AddToRoleAsync(adminUser, adminRoleName);
         }
+        else if (!adminUser.IsAdmin)
+        {
+            // Self-heals a row that predates IsAdmin being consistently enforced at creation time —
+            // the configured seed admin (Seed:AdminEmail) should always actually be a super admin,
+            // not just look like one because its Role happens to carry every permission. Without
+            // this, a pre-existing row stuck at IsAdmin=false silently loses access to anything
+            // gated specifically to the is_admin claim (e.g. ApiKeysController's MasterAdminOnly
+            // policy) on every future deploy, with no visible error — it just never shows up.
+            adminUser.IsAdmin = true;
+            await userManager.UpdateAsync(adminUser);
+        }
     }
 
     /// <summary>
