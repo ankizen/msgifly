@@ -451,11 +451,14 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<string>.Fail("Meta didn't return an upload session id.");
         }
 
-        // sessionId looks like "upload:AbC123..." — passed as a bare string, .NET's Uri parser
-        // reads the colon as a scheme separator ("upload" looks like a valid URI scheme name) and
-        // throws NotSupportedException instead of treating it as a relative path to combine with
-        // the client's BaseAddress. Forcing UriKind.Relative is what makes that combination work.
-        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(sessionId, UriKind.Relative))
+        // sessionId looks like "upload:AbC123..." — .NET's Uri class treats the colon as a scheme
+        // separator no matter how it's constructed: passed as a bare relative string it's
+        // misread as an absolute URI with scheme "upload" (NotSupportedException); explicitly
+        // forcing UriKind.Relative doesn't help either, since the constructor rejects a string
+        // that *looks* absolute regardless of the requested kind (UriFormatException). The only
+        // reliable fix is to skip Uri parsing for this one request and build the full absolute
+        // URL as a plain string instead, so "upload:" ends up mid-path rather than string-initial.
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, $"{client.BaseAddress}{sessionId}")
         {
             Content = new ByteArrayContent(bytes),
         };
