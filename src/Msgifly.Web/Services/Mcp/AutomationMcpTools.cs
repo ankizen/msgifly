@@ -190,4 +190,23 @@ public class AutomationMcpTools
 
         return new { success = true, automationId = automation.Id, isActive = automation.IsActive };
     }
+
+    [McpServerTool(Name = "delete_automation")]
+    [Description("Permanently deletes an automation and its run history. This can't be undone.")]
+    public async Task<object> DeleteAutomationAsync(
+        [Description("Automation id, from list_automations")] int automationId)
+    {
+        _httpContextAccessor.RequireScope(ApiScopes.AutomationsWrite);
+
+        var automation = await _db.Automations.FirstOrDefaultAsync(a => a.Id == automationId);
+        if (automation is null)
+        {
+            throw new McpException($"No automation with id {automationId} in this workspace.");
+        }
+
+        _db.Automations.Remove(automation);
+        await _db.SaveChangesAsync();
+
+        return new { success = true };
+    }
 }
