@@ -77,11 +77,15 @@ public class ChatController : Controller
         // PhoneNumberNormalizer, sometimes did) share the same number — a straight
         // ToDictionaryAsync throws ArgumentException on the second matching row instead of just
         // picking one, which took the whole chat list down.
-        var contactTypes = await _db.Contacts.AsNoTracking()
+        //
+        // Also carries the Contact's own name — once someone's saved as a Contact, whatever the
+        // CRM has for them (which the admin can rename freely) should win over Chat.Name, which
+        // is just whatever WhatsApp itself last reported as that number's own profile name.
+        var contactInfo = await _db.Contacts.AsNoTracking()
             .Where(c => receiverIds.Contains(c.Phone))
             .GroupBy(c => c.Phone)
-            .Select(g => new { Phone = g.Key, Type = g.First().Type })
-            .ToDictionaryAsync(x => x.Phone, x => x.Type);
+            .Select(g => new { Phone = g.Key, First = g.First() })
+            .ToDictionaryAsync(x => x.Phone, x => new { x.First.Type, Name = (x.First.FirstName + " " + x.First.LastName).Trim() });
 
         var unreadCounts = await _db.ChatMessages.AsNoTracking()
             .Where(m => chats.Select(c => c.Id).Contains(m.ChatId) && !m.IsRead && m.StaffId == null)
@@ -100,17 +104,21 @@ public class ChatController : Controller
             .ToDictionaryAsync(x => x.ChatId, x => x.LastInbound);
 
         var now = DateTime.UtcNow;
-        var result = chats.Select(c => new ChatSummaryDto(
-            c.Id,
-            c.Name,
-            c.ReceiverId,
-            c.LastMessage,
-            c.LastMessageTime,
-            unreadCounts.GetValueOrDefault(c.Id),
-            contactTypes.TryGetValue(c.ReceiverId, out var t) ? t.ToString() : "Unknown",
-            c.IsBotsStopped,
-            c.IsBlocked,
-            lastInboundTimes.TryGetValue(c.Id, out var lastInbound) && now - lastInbound < TimeSpan.FromHours(24)));
+        var result = chats.Select(c =>
+        {
+            var contact = contactInfo.GetValueOrDefault(c.ReceiverId);
+            return new ChatSummaryDto(
+                c.Id,
+                !string.IsNullOrWhiteSpace(contact?.Name) ? contact.Name : c.Name,
+                c.ReceiverId,
+                c.LastMessage,
+                c.LastMessageTime,
+                unreadCounts.GetValueOrDefault(c.Id),
+                contact is not null ? contact.Type.ToString() : "Unknown",
+                c.IsBotsStopped,
+                c.IsBlocked,
+                lastInboundTimes.TryGetValue(c.Id, out var lastInbound) && now - lastInbound < TimeSpan.FromHours(24));
+        });
 
         return Json(result);
     }
@@ -396,7 +404,7 @@ public class ChatController : Controller
         var existing = await _db.Contacts.FirstOrDefaultAsync(c => c.Phone == chat.ReceiverId || c.Phone == normalized || c.Phone == "+" + normalized);
         if (existing is not null)
         {
-            return Json(new { contactId = existing.Id, contactType = existing.Type.ToString() });
+            return Json(new { contactId = existing.Id, contactType = existing.Type.ToString(), contactName = $"{existing.FirstName} {existing.LastName}".Trim() });
         }
 
         var contact = new Contact
@@ -412,7 +420,7 @@ public class ChatController : Controller
         _db.Contacts.Add(contact);
         await _db.SaveChangesAsync();
 
-        return Json(new { contactId = contact.Id, contactType = contact.Type.ToString() });
+        return Json(new { contactId = contact.Id, contactType = contact.Type.ToString(), contactName = $"{contact.FirstName} {contact.LastName}".Trim() });
     }
 
     /// <summary>

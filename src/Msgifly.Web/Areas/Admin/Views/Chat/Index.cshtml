@@ -585,9 +585,12 @@ function chatInbox() {
                 return;
             }
 
-            const { contactType } = await res.json();
+            const { contactType, contactName } = await res.json();
             const chat = this.chats.find(c => c.id === this.activeChatId);
-            if (chat) chat.contactType = contactType;
+            if (chat) {
+                chat.contactType = contactType;
+                if (contactName) chat.name = contactName;
+            }
             this.contactModalOpen = false;
             window.showNotification('Contact added.', 'success');
         },
