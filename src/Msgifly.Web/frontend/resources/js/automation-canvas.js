@@ -51,7 +51,8 @@ const STEP_DEFS = {
     html: node(
       'Send Message',
       '💬',
-      `<textarea df-text rows="3" placeholder="Hi {{contact.firstName}}, thanks for..." class="${FIELD_CLASS}"></textarea>${personalizationChipsHtml()}`
+      `<textarea df-text rows="3" placeholder="Hi {{contact.firstName}}, thanks for..." class="${FIELD_CLASS}"></textarea>${personalizationChipsHtml()}
+       <p class="df-hint">⚠ Only works within 24h of the customer's last message — a brand-new contact needs a "Send Template" first.</p>`
     ),
   },
   SendTemplate: {
@@ -88,7 +89,9 @@ const STEP_DEFS = {
          <input df-button1id placeholder="Button 1 id" class="${FIELD_CLASS}" /><input df-button1title placeholder="Label" class="${FIELD_CLASS}" />
          <input df-button2id placeholder="Button 2 id" class="${FIELD_CLASS}" /><input df-button2title placeholder="Label" class="${FIELD_CLASS}" />
          <input df-button3id placeholder="Button 3 id" class="${FIELD_CLASS}" /><input df-button3title placeholder="Label" class="${FIELD_CLASS}" />
-       </div>`
+       </div>
+       <p class="df-hint">"id" is just a short code for this button that comes back to you when it's tapped (e.g. "yes"/"no") — the customer only ever sees the "Label" text.</p>
+       <p class="df-hint">⚠ Only works within 24h of the customer's last message — a brand-new contact needs a "Send Template" first.</p>`
     ),
   },
   Wait: {
@@ -126,6 +129,7 @@ const STEP_DEFS = {
          <option value="TemplateClicked">Last template was clicked</option>
        </select>
        <input df-operand placeholder="Field name / HH:mm-HH:mm (if needed)" class="${FIELD_CLASS} df-condition-operand" />
+       <p class="df-hint df-condition-operand-hint"></p>
        <input df-value placeholder="Value to compare" class="${FIELD_CLASS} df-condition-value" />
        <div class="df-condition-legend">
          <span class="text-green-600">● Yes</span>
@@ -338,18 +342,47 @@ function wireSendTemplateFields(editor, container, templateOptions) {
   });
 }
 
-/** TemplateClicked needs neither field (it's a fixed check against the last template sent) — hide
- * both rather than leave a "Field name / value" prompt dangling for an option that ignores them. */
+// Which of Operand/Value each Condition subject actually reads server-side (see
+// AutomationEngine.EvaluateConditionAsync) — showing a field the subject ignores, or leaving a
+// generic "Field name / HH:mm-HH:mm" placeholder regardless of what's selected, is exactly the
+// "overloaded and under-explained" friction a non-technical admin hits here.
+const CONDITION_SUBJECT_HELP = {
+  MessageContent: { showOperand: false, showValue: true, valuePlaceholder: 'Text to look for (e.g. price)' },
+  ContactField: {
+    showOperand: true, showValue: true,
+    operandPlaceholder: 'Field name', operandHint: 'One of: FirstName, LastName, Company, Email, City, State, Type',
+    valuePlaceholder: 'Value to match',
+  },
+  TimeOfDay: {
+    showOperand: true, showValue: false,
+    operandPlaceholder: 'e.g. 09:00-18:00', operandHint: '24-hour time range (start-end)',
+  },
+  TemplateClicked: { showOperand: false, showValue: false },
+};
+
 function wireConditionFields(container) {
   function updateCard(card) {
     if (!card) return;
     const subject = card.querySelector('[df-subject]');
     if (!subject) return;
-    const show = subject.value !== 'TemplateClicked';
+    const help = CONDITION_SUBJECT_HELP[subject.value] || CONDITION_SUBJECT_HELP.MessageContent;
+
     const operand = card.querySelector('.df-condition-operand');
+    const operandHint = card.querySelector('.df-condition-operand-hint');
     const value = card.querySelector('.df-condition-value');
-    if (operand) operand.style.display = show ? '' : 'none';
-    if (value) value.style.display = show ? '' : 'none';
+
+    if (operand) {
+      operand.style.display = help.showOperand ? '' : 'none';
+      if (help.operandPlaceholder) operand.placeholder = help.operandPlaceholder;
+    }
+    if (operandHint) {
+      operandHint.style.display = help.showOperand && help.operandHint ? '' : 'none';
+      operandHint.textContent = help.operandHint || '';
+    }
+    if (value) {
+      value.style.display = help.showValue ? '' : 'none';
+      if (help.valuePlaceholder) value.placeholder = help.valuePlaceholder;
+    }
   }
 
   container.addEventListener('change', (e) => {
