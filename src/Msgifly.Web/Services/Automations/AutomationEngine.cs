@@ -470,6 +470,28 @@ public class AutomationEngine
                 return from <= to ? minutes >= from && minutes < to : minutes >= from || minutes < to;
             }
 
+            // Lets a nurture sequence branch on "did they click the download link yet" — e.g.
+            // Wait 24h -> Condition (TemplateClicked) -> No -> send a reminder template. Looks at
+            // this contact's most recent outbound template send, not a specific earlier step (a
+            // Condition node has no reference back to which step sent it), since "the last thing
+            // we sent them" is what "did they click" means for a linear nurture chain in practice.
+            case "TemplateClicked":
+            {
+                var phone = await ResolvePhoneAsync(contactId, context);
+                var chat = await _db.Chats.AsNoTracking().FirstOrDefaultAsync(c => c.ReceiverId == phone);
+                if (chat is null)
+                {
+                    return false;
+                }
+
+                var lastTemplateMessage = await _db.ChatMessages.AsNoTracking()
+                    .Where(m => m.ChatId == chat.Id && m.TemplateName != null && m.SenderId != chat.ReceiverId)
+                    .OrderByDescending(m => m.Id)
+                    .FirstOrDefaultAsync();
+
+                return lastTemplateMessage?.Clicked ?? false;
+            }
+
             default:
                 return false;
         }

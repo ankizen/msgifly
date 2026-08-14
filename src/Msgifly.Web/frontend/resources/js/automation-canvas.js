@@ -123,9 +123,10 @@ const STEP_DEFS = {
          <option value="MessageContent">Message contains</option>
          <option value="ContactField">Contact field equals</option>
          <option value="TimeOfDay">Time of day between</option>
+         <option value="TemplateClicked">Last template was clicked</option>
        </select>
-       <input df-operand placeholder="Field name / HH:mm-HH:mm (if needed)" class="${FIELD_CLASS}" />
-       <input df-value placeholder="Value to compare" class="${FIELD_CLASS}" />
+       <input df-operand placeholder="Field name / HH:mm-HH:mm (if needed)" class="${FIELD_CLASS} df-condition-operand" />
+       <input df-value placeholder="Value to compare" class="${FIELD_CLASS} df-condition-value" />
        <div class="df-condition-legend">
          <span class="text-green-600">● Yes</span>
          <span class="text-red-600">● No</span>
@@ -337,6 +338,31 @@ function wireSendTemplateFields(editor, container, templateOptions) {
   });
 }
 
+/** TemplateClicked needs neither field (it's a fixed check against the last template sent) — hide
+ * both rather than leave a "Field name / value" prompt dangling for an option that ignores them. */
+function wireConditionFields(container) {
+  function updateCard(card) {
+    if (!card) return;
+    const subject = card.querySelector('[df-subject]');
+    if (!subject) return;
+    const show = subject.value !== 'TemplateClicked';
+    const operand = card.querySelector('.df-condition-operand');
+    const value = card.querySelector('.df-condition-value');
+    if (operand) operand.style.display = show ? '' : 'none';
+    if (value) value.style.display = show ? '' : 'none';
+  }
+
+  container.addEventListener('change', (e) => {
+    if (e.target.matches('[df-subject]')) updateCard(e.target.closest('.df-node-card'));
+  });
+  container.addEventListener('input', (e) => {
+    if (e.target.matches('[df-subject]')) updateCard(e.target.closest('.df-node-card'));
+  });
+
+  // Covers both a fresh palette-add and canvas reconstruction from a saved automation.
+  return (nodeId) => updateCard(document.querySelector(`#node-${nodeId} .df-node-card`));
+}
+
 /**
  * Clicking a "+ First name" chip inserts {{contact.firstName}} into whichever text field the
  * admin last focused within that same node card (falling back to the card's first text field if
@@ -467,6 +493,8 @@ export function createAutomationCanvas(container, initial, onGraphChange) {
 
   wireSendTemplateFields(editor, container, templateOptions);
   wirePersonalizationChips(container);
+  const updateConditionCard = wireConditionFields(container);
+  editor.on('nodeCreated', updateConditionCard);
 
   function addTriggerNode(x, y, triggerType, data) {
     const merged = { triggertype: triggerType || 'InboundMessage', keywords: '', matchtype: 'contains', casesensitive: 'false', replyids: '', leadformid: '', ...(data || {}) };
