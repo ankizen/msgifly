@@ -3,6 +3,11 @@ namespace Msgifly.Web.Authorization;
 /// <summary>
 /// The full permission list, carried over from the original app's PermissionSeeder (master doc §8.3) —
 /// effectively the module inventory. Referenced by [Authorize(Policy = Permissions.X)] and by DbSeeder.
+///
+/// Deliberately excludes api_key.* — API Keys is gated to the is_admin superuser flag only (see
+/// ApiKeysController, policy "MasterAdminOnly"), not the normal role/user permission grant this
+/// list feeds into. A granted API key can now drive MCP tools with real send/create/automation
+/// power, so it isn't delegable through Roles like everything else here.
 /// </summary>
 public static class Permissions
 {
@@ -28,7 +33,6 @@ public static class Permissions
         "user.view", "user.create", "user.edit", "user.delete",
         "email_template.view", "email_template.edit",
         "automation.view", "automation.create", "automation.edit", "automation.delete",
-        "api_key.view", "api_key.create", "api_key.delete",
         "workspace.view", "workspace.create", "workspace.edit",
     ];
 }

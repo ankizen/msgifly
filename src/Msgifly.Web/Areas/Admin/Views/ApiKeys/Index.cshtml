@@ -45,29 +45,23 @@
                     </td>
                     <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(key.LastUsedAt?.ToString("dd MMM, HH:mm") ?? "never")</td>
                     <td class="px-4 py-3 text-sm">
-                        @if (key.RevokedAt is not null)
-                        {
-                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">Revoked</span>
-                        }
-                        else if (key.ExpiresAt is not null && key.ExpiresAt <= DateTime.UtcNow)
+                        @if (key.ExpiresAt is not null && key.ExpiresAt <= DateTime.UtcNow && key.RevokedAt is null)
                         {
                             <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">Expired</span>
                         }
                         else
                         {
-                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">Active</span>
+                            <form asp-action="ToggleActive" asp-route-id="@key.Id" method="post" class="inline"
+                                  onsubmit="@(key.RevokedAt is null ? "return confirm('Revoke this key? Anything using it will stop working immediately.');" : null)">
+                                <button type="submit" class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium @(key.RevokedAt is null ? "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300" : "bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300")">
+                                    @(key.RevokedAt is null ? "Active" : "Revoked")
+                                </button>
+                            </form>
                         }
                     </td>
                     <td class="px-4 py-3 text-right text-sm space-x-3 whitespace-nowrap">
-                        @if (key.IsActive)
-                        {
-                            <form asp-action="Revoke" asp-route-id="@key.Id" method="post" class="inline"
-                                  onsubmit="return confirm('Revoke this key? Anything using it will stop working immediately.');">
-                                <button type="submit" class="text-orange-600 hover:text-orange-500">Revoke</button>
-                            </form>
-                        }
                         <form asp-action="Delete" asp-route-id="@key.Id" method="post" class="inline"
-                              onsubmit="return confirm('Delete this key permanently?');">
+                              onsubmit="return confirm('Delete this key permanently? This can\'t be undone.');">
                             <button type="submit" class="text-red-600 hover:text-red-500">Delete</button>
                         </form>
                     </td>

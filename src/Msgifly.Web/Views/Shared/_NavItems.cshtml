@@ -128,7 +128,7 @@
     </a>
 }
 
-@if (User.HasPermission("user.view", "role.view", "source.view", "status.view", "canned_reply.view", "api_key.view", "workspace.view", "billing.view"))
+@if (User.HasPermission("user.view", "role.view", "source.view", "status.view", "canned_reply.view", "workspace.view", "billing.view") || User.IsMasterAdmin())
 {
     <p class="mt-6 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500/80">Setup</p>
 
@@ -196,7 +196,7 @@
             Canned Replies
         </a>
     }
-    @if (User.HasPermission("api_key.view"))
+    @if (User.IsMasterAdmin())
     {
         <a asp-area="Admin" asp-controller="ApiKeys" asp-action="Index" class="@LinkClasses(IsActive("ApiKeys"))">
             <svg xmlns="http://www.w3.org/2000/svg" class="mr-3 h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">

@@ -50,7 +50,14 @@ builder.Services.ConfigureApplicationCookie(options =>
 
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // Registered by name, so PermissionPolicyProvider's fallback finds it here instead of
+    // treating "MasterAdminOnly" as a permission string — deliberately NOT the same as an
+    // "api_key.*" permission, which a role could be granted and would bypass the intent of
+    // restricting this to the is_admin superuser flag specifically (see ApiKeysController).
+    options.AddPolicy("MasterAdminOnly", policy => policy.RequireClaim(PermissionAuthorizationHandler.IsAdminClaimType, "true"));
+});
 
 // Second scheme alongside Identity's cookie scheme — the public /api/v1/* surface authenticates
 // machine callers via `Authorization: Bearer <api key>` instead of a browser session. Adding a
