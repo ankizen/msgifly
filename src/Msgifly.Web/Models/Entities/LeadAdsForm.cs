@@ -12,6 +12,16 @@ public class LeadAdsForm
 {
     public int Id { get; set; }
     public int WorkspaceId { get; set; }
+
+    /// <summary>Which Facebook Page this form was reported under. A Workspace's connected Page can
+    /// change (disconnect one, connect another) while old forms stay in this table for historical
+    /// reporting — this is what lets the "current forms" list show only the currently-connected
+    /// Page's forms instead of every form ever synced for this workspace. Null on rows written
+    /// before this column existed; those are permanently excluded from the current-forms list
+    /// (correctly, since there's no way to know retroactively which Page they belonged to) until
+    /// the next sync re-stamps whichever forms genuinely belong to the current Page.</summary>
+    public string? PageId { get; set; }
+
     public string FormId { get; set; } = string.Empty;
     public string FormName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;

@@ -261,6 +261,12 @@ public class LeadAdsSyncJob
                 row.FormName = form.Name;
                 row.Status = form.Status;
                 row.FormCreatedTime ??= form.CreatedTime;
+                // Re-stamped unconditionally, not just on first insert: this list came straight
+                // from GetLeadFormsAsync(workspace.FacebookPageId, ...), so every form in it
+                // genuinely belongs to the CURRENT Page by construction — this is also what heals
+                // a form's PageId if it was null (rows from before this column existed) or stale
+                // (the Workspace disconnected and reconnected the same Page again later).
+                row.PageId = workspace.FacebookPageId;
                 row.UpdatedAt = DateTime.UtcNow;
             }
             else
@@ -268,6 +274,7 @@ public class LeadAdsSyncJob
                 row = new LeadAdsForm
                 {
                     WorkspaceId = workspace.Id,
+                    PageId = workspace.FacebookPageId,
                     FormId = form.Id,
                     FormName = form.Name,
                     Status = form.Status,

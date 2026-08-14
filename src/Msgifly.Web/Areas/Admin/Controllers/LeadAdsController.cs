@@ -78,7 +78,14 @@ public class LeadAdsController : Controller
             .ToListAsync();
 
         var metaApp = await _settingsService.GetAsync<MetaAppSettings>(nameof(MetaAppSettings));
-        var forms = await _db.LeadAdsForms.OrderByDescending(f => f.FormCreatedTime ?? f.CreatedAt).ToListAsync();
+        // Scoped to the currently-connected Page, not every form this workspace has ever synced —
+        // a form from a Page that was later disconnected (in favor of a different one) stays in
+        // the table for historical Report links, but has no business showing up as a "current"
+        // form to turn sync on/off for. See LeadAdsForm.PageId's own doc comment.
+        var forms = await _db.LeadAdsForms
+            .Where(f => f.PageId == workspace.FacebookPageId)
+            .OrderByDescending(f => f.FormCreatedTime ?? f.CreatedAt)
+            .ToListAsync();
         var formImportCounts = await _db.LeadAdsImports
             .Where(l => l.ContactId != null && _db.Contacts.Any(c => c.Id == l.ContactId))
             .GroupBy(l => l.FormId)
