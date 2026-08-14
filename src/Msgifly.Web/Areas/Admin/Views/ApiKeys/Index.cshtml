@@ -1,14 +1,35 @@
 @model List<Msgifly.Web.Models.Entities.ApiKey>
 @{
     ViewData["Title"] = "API Keys";
+    var mcpUrl = $"{Context.Request.Scheme}://{Context.Request.Host}/mcp";
 }
 
 <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
     <div>
         <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">API Keys</h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Credentials for the public REST API (<code>/api/v1/*</code>) — for scripts, n8n/Zapier-style automations, or your own tools.</p>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Credentials for the public REST API (<code>/api/v1/*</code>) and for MCP tools — the same key works for both.</p>
     </div>
     <a asp-action="Create" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">+ New Key</a>
+</div>
+
+<div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4 mb-6" x-data="{ copied: false }">
+    <h2 class="text-sm font-semibold text-emerald-900 dark:text-emerald-300">Connect an MCP client</h2>
+    <p class="mt-1 text-sm text-emerald-800/80 dark:text-emerald-300/70">
+        Give an MCP client (Claude Desktop, or another AI agent) this URL plus a key below scoped to
+        <code>templates:*</code>, <code>automations:*</code>, and <code>messages:send</code> — it can then
+        create templates, build automations, and send messages here on your behalf.
+    </p>
+    <div class="mt-3 flex items-center gap-2 max-w-xl">
+        <input type="text" readonly value="@mcpUrl"
+               class="flex-1 font-mono text-xs rounded-md border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-slate-100 px-3 py-2"
+               onclick="this.select()" />
+        <button type="button"
+                x-on:click="navigator.clipboard.writeText('@mcpUrl'); copied = true; setTimeout(() => copied = false, 1500)"
+                class="px-3 py-2 rounded-md border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-xs font-medium hover:bg-emerald-100 dark:hover:bg-emerald-900/40 whitespace-nowrap">
+            <span x-show="!copied">Copy</span>
+            <span x-show="copied" x-cloak>Copied ✓</span>
+        </button>
+    </div>
 </div>
 
 <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-x-auto">
