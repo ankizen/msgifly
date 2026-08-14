@@ -451,7 +451,11 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<string>.Fail("Meta didn't return an upload session id.");
         }
 
-        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, sessionId)
+        // sessionId looks like "upload:AbC123..." — passed as a bare string, .NET's Uri parser
+        // reads the colon as a scheme separator ("upload" looks like a valid URI scheme name) and
+        // throws NotSupportedException instead of treating it as a relative path to combine with
+        // the client's BaseAddress. Forcing UriKind.Relative is what makes that combination work.
+        using var uploadRequest = new HttpRequestMessage(HttpMethod.Post, new Uri(sessionId, UriKind.Relative))
         {
             Content = new ByteArrayContent(bytes),
         };
