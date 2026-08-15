@@ -146,17 +146,22 @@ public class CoolifyDomainService
         }
 
         var domainCsv = string.Join(',', after);
+        // Coolify's documented schema for this field is an array of {name, domain} objects (one per
+        // compose service) — NOT the string-encoded-object shape the GET response happens to return
+        // it as. Read and write use different representations of the same data.
         var payload = new
         {
-            docker_compose_domains = JsonSerializer.Serialize(new Dictionary<string, object>
+            docker_compose_domains = new object[]
             {
-                [settings.ComposeServiceName] = new { domain = domainCsv },
-            }),
+                new { name = settings.ComposeServiceName, domain = domainCsv },
+            },
         };
 
         var patchResponse = await client.PatchAsJsonAsync($"applications/{settings.ApplicationUuid}", payload);
         if (!patchResponse.IsSuccessStatusCode)
         {
+            var body = await patchResponse.Content.ReadAsStringAsync();
+            _logger.LogWarning("Coolify PATCH rejected ({Status}): {Body}", (int)patchResponse.StatusCode, body);
             return (false, $"Coolify rejected the domain update ({(int)patchResponse.StatusCode}).");
         }
 
