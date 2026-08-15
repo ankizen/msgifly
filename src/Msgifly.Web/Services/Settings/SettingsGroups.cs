@@ -44,3 +44,26 @@ public class MetaAppSettings
     /// WhatsApp -> Embedded Signup -> Configurations. Needed to launch FB.login() for Phase 2.</summary>
     public string? EmbeddedSignupConfigId { get; set; }
 }
+
+/// <summary>
+/// Lets the running app register a newly-configured workspace tracking domain with our own Coolify
+/// deployment (see CoolifyDomainService) — routing/TLS for a docker-compose app is driven by domains
+/// baked into the container's labels at deploy time, so adding a domain means updating Coolify's
+/// stored domain list and triggering a redeploy. Doing this from inside the app itself (rather than
+/// requiring a human to run it manually every time a business sets up their own domain) is what
+/// makes the feature actually self-service.
+/// </summary>
+public class CoolifyIntegrationSettings
+{
+    public string? BaseUrl { get; set; } = "https://coolify.swarnapp.com";
+    public string? ApiToken { get; set; }
+    public string? ApplicationUuid { get; set; }
+
+    /// <summary>The docker-compose service key this app's domains live under (Coolify's
+    /// docker_compose_domains is keyed per service, e.g. {"web": {"domain": "https://..."}}).</summary>
+    public string ComposeServiceName { get; set; } = "web";
+
+    /// <summary>Domains that must never be dropped from the list, whatever else changes — a hard
+    /// safety net so a bug here can never accidentally take app.msgifly.com itself offline.</summary>
+    public List<string> RequiredDomains { get; set; } = [];
+}

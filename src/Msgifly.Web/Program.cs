@@ -81,6 +81,10 @@ builder.Services.AddHttpClient("AutomationWebhook", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
 });
+builder.Services.AddHttpClient("Coolify", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
 builder.Services.AddScoped<IWhatsAppService, WhatsAppService>();
 builder.Services.AddScoped<EmbeddedSignupService>();
 builder.Services.AddScoped<MetaLeadAdsService>();
@@ -88,6 +92,7 @@ builder.Services.AddScoped<AutomationEngine>();
 builder.Services.AddScoped<ContactGroupResolver>();
 builder.Services.AddScoped<LeadAdsSyncJob>();
 builder.Services.AddScoped<TrackingDomainVerificationService>();
+builder.Services.AddScoped<CoolifyDomainService>();
 builder.Services.AddScoped<TrackingDomainVerificationJob>();
 builder.Services.AddSignalR();
 

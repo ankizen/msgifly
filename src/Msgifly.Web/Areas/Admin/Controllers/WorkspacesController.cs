@@ -30,12 +30,14 @@ public class WorkspacesController : Controller
     private readonly ApplicationDbContext _db;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly TrackingDomainVerificationService _trackingDomainVerificationService;
+    private readonly CoolifyDomainService _coolifyDomainService;
 
-    public WorkspacesController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, TrackingDomainVerificationService trackingDomainVerificationService)
+    public WorkspacesController(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, TrackingDomainVerificationService trackingDomainVerificationService, CoolifyDomainService coolifyDomainService)
     {
         _db = db;
         _workspaceAccessor = workspaceAccessor;
         _trackingDomainVerificationService = trackingDomainVerificationService;
+        _coolifyDomainService = coolifyDomainService;
     }
 
     [Authorize(Policy = "workspace.view")]
@@ -163,30 +165,54 @@ public class WorkspacesController : Controller
             return NotFound();
         }
 
+        var previousDomain = workspace.TrackingDomain;
         var trimmed = domain?.Trim();
+
         if (string.IsNullOrEmpty(trimmed))
         {
             workspace.TrackingDomain = null;
             workspace.TrackingDomainStatus = TrackingDomainStatus.NotConfigured;
             workspace.TrackingDomainCheckedAt = null;
-        }
-        else
-        {
-            if (!HostnamePattern.IsMatch(trimmed))
+            workspace.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            if (!string.IsNullOrEmpty(previousDomain))
             {
-                this.Notify("That doesn't look like a valid domain (e.g. link.salonsteps.com).", "danger");
-                return RedirectToAction(nameof(TrackingDomain), new { id });
+                await _coolifyDomainService.RemoveDomainAsync(previousDomain); // best-effort cleanup
             }
 
-            workspace.TrackingDomain = trimmed.ToLowerInvariant();
-            workspace.TrackingDomainStatus = TrackingDomainStatus.Pending;
-            workspace.TrackingDomainCheckedAt = null;
+            this.Notify("Tracking domain cleared.");
+            return RedirectToAction(nameof(TrackingDomain), new { id });
         }
 
+        if (!HostnamePattern.IsMatch(trimmed))
+        {
+            this.Notify("That doesn't look like a valid domain (e.g. link.salonsteps.com).", "danger");
+            return RedirectToAction(nameof(TrackingDomain), new { id });
+        }
+
+        var normalized = trimmed.ToLowerInvariant();
+
+        workspace.TrackingDomain = normalized;
+        workspace.TrackingDomainStatus = TrackingDomainStatus.Pending;
+        workspace.TrackingDomainCheckedAt = null;
         workspace.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        this.Notify(trimmed is null ? "Tracking domain cleared." : "Tracking domain saved — add the DNS record below, then click \"Check now\".");
+        // Registers the domain with Coolify and triggers a redeploy — no manual step needed.
+        // Called on every save, not just a changed value, so re-saving the same domain is also how
+        // an admin retries a prior registration failure. AddDomainAsync itself is a cheap no-op
+        // (still triggers a harmless redeploy) if the domain is already registered.
+        // Best-effort: the domain is already saved either way, so a failure here just means
+        // "Check now" (or the hourly job) will need a retry rather than losing the setting.
+        var (success, error) = await _coolifyDomainService.AddDomainAsync(normalized);
+        if (!success)
+        {
+            this.Notify($"Domain saved, but automatic setup didn't complete: {error}", "danger");
+            return RedirectToAction(nameof(TrackingDomain), new { id });
+        }
+
+        this.Notify("Domain saved — make sure the DNS record below is set, then check back in about a minute (or click \"Check now\").");
         return RedirectToAction(nameof(TrackingDomain), new { id });
     }
 
