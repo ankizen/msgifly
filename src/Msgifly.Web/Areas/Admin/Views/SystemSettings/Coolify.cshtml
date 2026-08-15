@@ -1,0 +1,57 @@
+@model Msgifly.Web.Services.Settings.CoolifyIntegrationSettings
+@{
+    ViewData["Title"] = "Coolify Integration";
+    var isConfigured = !string.IsNullOrEmpty(Model.ApiToken) && !string.IsNullOrEmpty(Model.ApplicationUuid);
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Coolify Integration</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">
+        Lets the app self-register a workspace's tracking domain (Settings &rarr; Tracking domain) with
+        this deployment, so it goes live with no manual Coolify step. Master admin only — this token
+        can trigger a redeploy of the app itself.
+    </p>
+</div>
+
+<div class="max-w-2xl">
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">Configuration</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium @(isConfigured ? "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300" : "bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300")">
+                @(isConfigured ? "Configured" : "Not configured")
+            </span>
+        </div>
+
+        <form asp-action="SaveCoolify" method="post" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Coolify base URL</label>
+                <input name="baseUrl" value="@Model.BaseUrl" placeholder="https://coolify.example.com"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">API token</label>
+                <input name="apiToken" type="password" value="@Model.ApiToken" placeholder="Coolify API token (Keys & Tokens → API tokens)"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Application UUID</label>
+                <input name="applicationUuid" value="@Model.ApplicationUuid" placeholder="This app's UUID in Coolify"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Compose service name</label>
+                <input name="composeServiceName" value="@Model.ComposeServiceName" placeholder="web"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                <p class="mt-1 text-xs text-gray-400">The docker-compose service key this app's domains live under in Coolify's config.</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Required domains (comma-separated)</label>
+                <input name="requiredDomainsCsv" value="@string.Join(",", Model.RequiredDomains)" placeholder="https://app.msgifly.com,https://api.msgifly.com"
+                       class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm text-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                <p class="mt-1 text-xs text-gray-400">Safety net — a domain update is refused outright if it would drop any of these.</p>
+            </div>
+
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
+        </form>
+    </div>
+</div>
