@@ -134,7 +134,7 @@ public class AutomationEngine
     /// the point — and doesn't count toward ExecutionCount/LastExecutedAt, so the Automations
     /// list's "how many times has this fired for real" stat stays meaningful.
     /// </summary>
-    public async Task<(AutomationLogStatus Status, string? ErrorMessage)> RunAutomationForTestAsync(int automationId, int contactId)
+    public async Task<(AutomationLogStatus Status, string? ErrorMessage)> RunAutomationForTestAsync(int automationId, int contactId, string triggerLabel = "Test")
     {
         var automation = await _db.Automations.FirstOrDefaultAsync(a => a.Id == automationId);
         if (automation is null)
@@ -142,7 +142,7 @@ public class AutomationEngine
             return (AutomationLogStatus.Failed, "Automation not found.");
         }
 
-        return await RunAndLogAsync(automation, "Test", contactId, new AutomationContext(), countExecution: false);
+        return await RunAndLogAsync(automation, triggerLabel, contactId, new AutomationContext(), countExecution: false);
     }
 
     private async Task<(AutomationLogStatus Status, string? ErrorMessage)> RunAndLogAsync(

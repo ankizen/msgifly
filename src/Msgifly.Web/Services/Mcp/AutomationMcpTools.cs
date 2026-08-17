@@ -21,12 +21,14 @@ public class AutomationMcpTools
     private readonly ApplicationDbContext _db;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly AutomationEngine _automationEngine;
 
-    public AutomationMcpTools(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, IHttpContextAccessor httpContextAccessor)
+    public AutomationMcpTools(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, IHttpContextAccessor httpContextAccessor, AutomationEngine automationEngine)
     {
         _db = db;
         _workspaceAccessor = workspaceAccessor;
         _httpContextAccessor = httpContextAccessor;
+        _automationEngine = automationEngine;
     }
 
     [McpServerTool(Name = "list_automations")]
@@ -51,6 +53,72 @@ public class AutomationMcpTools
             .ToListAsync();
 
         return new { automations };
+    }
+
+    [McpServerTool(Name = "list_automation_logs")]
+    [Description("Lists an automation's run history, most recent first, including which contact each run was for — use this to find which specific leads a failed run affected (e.g. after a bug fix) before retrying them.")]
+    public async Task<object> ListAutomationLogsAsync(
+        [Description("Automation id, from list_automations")] int automationId,
+        [Description("Filter to only this status: Success | Failed | Partial. Omit for all.")] string? status = null,
+        [Description("Max rows to return, most recent first")] int limit = 50)
+    {
+        _httpContextAccessor.RequireScope(ApiScopes.AutomationsRead);
+
+        var query = _db.AutomationLogs.AsNoTracking().Where(l => l.AutomationId == automationId);
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (!Enum.TryParse<AutomationLogStatus>(status, ignoreCase: true, out var parsedStatus))
+            {
+                throw new McpException($"Unknown status '{status}'. Use one of: Success, Failed, Partial.");
+            }
+
+            query = query.Where(l => l.Status == parsedStatus);
+        }
+
+        var logs = await query
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(Math.Clamp(limit, 1, 200))
+            .Select(l => new
+            {
+                logId = l.Id,
+                createdAt = l.CreatedAt,
+                status = l.Status.ToString(),
+                triggerEvent = l.TriggerEvent,
+                errorMessage = l.ErrorMessage,
+                contactId = l.ContactId,
+                contactPhone = l.Contact != null ? l.Contact.Phone : null,
+                contactName = l.Contact != null ? (l.Contact.FirstName + " " + l.Contact.LastName).Trim() : null,
+            })
+            .ToListAsync();
+
+        return new { logs };
+    }
+
+    [McpServerTool(Name = "retry_automation_for_contact")]
+    [Description("""
+        Re-runs an automation's full step tree from the start for one specific contact — a real
+        run (real sends, real Wait scheduling, real Condition evaluation later), not a simulation.
+        Use after fixing a bug that caused real runs to fail (check list_automation_logs first to
+        find affected contactIds), so those leads get the complete intended sequence rather than
+        just a one-off resend of the first message. Doesn't require the automation to be Active,
+        and doesn't inflate its ExecutionCount/LastExecutedAt stats (those reflect real trigger
+        fires only) — the run is logged with triggerEvent "Retry" so it's visually distinguishable
+        from a normal fire on the automation's Logs page.
+        """)]
+    public async Task<object> RetryAutomationForContactAsync(
+        [Description("Automation id, from list_automations")] int automationId,
+        [Description("Contact id to retry — from list_automation_logs's contactId field")] int contactId)
+    {
+        _httpContextAccessor.RequireScope(ApiScopes.AutomationsWrite);
+
+        var contactExists = await _db.Contacts.AnyAsync(c => c.Id == contactId);
+        if (!contactExists)
+        {
+            throw new McpException($"No contact with id {contactId} in this workspace.");
+        }
+
+        var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(automationId, contactId, "Retry");
+        return new { success = status == AutomationLogStatus.Success, status = status.ToString(), errorMessage };
     }
 
     [McpServerTool(Name = "create_automation")]
