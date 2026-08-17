@@ -49,8 +49,10 @@ public class TemplateMcpTools
                 language = t.Language,
                 status = t.Status.ToString(),
                 headerFormat = t.HeaderFormat,
+                headerMediaUrl = t.HeaderMediaUrl,
                 bodyText = t.BodyText,
                 bodyParamsCount = t.BodyParamsCount,
+                rejectionReason = t.RejectionReason,
             })
             .ToListAsync();
 
