@@ -319,21 +319,17 @@ public class AutomationEngine
                     BodyParams = [.. cfg.BodyParams.Select(p => Interpolate(p, context, interpContact))],
                 };
                 var result = await _whatsAppService.SendTemplateMessageAsync(phone, sendRequest);
-                if (!result.Success)
-                {
-                    throw new InvalidOperationException(result.ErrorMessage);
-                }
 
-                // Previously this step sent the template but never recorded it anywhere — it
-                // didn't show up in the Chat inbox like every other outbound path does, and
-                // (more importantly for reporting) there was no row to ever attribute to this
-                // template at all. Skipped only if the template got deleted locally between when
-                // the automation was configured and when it actually ran — the send itself still
-                // succeeded, there's just nothing local to attach the record to.
+                // Recorded on success AND failure — a rejected send used to leave zero trace
+                // anywhere (unlike Campaigns, which always write a row either way), so the
+                // Templates Report silently under-counted failures for every automation-driven
+                // send. Skipped only if the template got deleted locally between when the
+                // automation was configured and when it actually ran.
                 if (template is not null)
                 {
                     var chat = await ResolveOrCreateChatAsync(phone, contactId);
                     var rendered = TemplateMessageRenderer.ForChatMessage(template, sendRequest);
+                    var now = DateTime.UtcNow;
                     await LogAndBroadcastOutboundMessageAsync(chat, new ChatMessage
                     {
                         ChatId = chat.Id,
@@ -341,13 +337,20 @@ public class AutomationEngine
                         Message = rendered.DisplayText,
                         MessageType = rendered.MediaMessageType ?? "text",
                         Url = rendered.MediaUrl,
-                        WhatsappMessageId = result.Data,
-                        Status = MessageDeliveryStatus.Sent,
-                        SentAt = DateTime.UtcNow,
+                        WhatsappMessageId = result.Success ? result.Data : null,
+                        Status = result.Success ? MessageDeliveryStatus.Sent : MessageDeliveryStatus.Failed,
+                        StatusDetail = result.Success ? null : result.ErrorMessage,
+                        SentAt = result.Success ? now : null,
+                        FailedAt = result.Success ? null : now,
                         TemplateName = cfg.TemplateName,
-                        TimeSent = DateTime.UtcNow,
+                        TimeSent = now,
                         IsRead = true,
                     });
+                }
+
+                if (!result.Success)
+                {
+                    throw new InvalidOperationException(result.ErrorMessage);
                 }
 
                 return $"template sent ({result.Data})";
@@ -680,9 +683,15 @@ public class AutomationEngine
             {
                 return parts[1] switch
                 {
-                    "firstName" => contact?.FirstName ?? string.Empty,
+                    // Facebook Lead Ads forms often don't collect a name field at all, leaving
+                    // FirstName blank — interpolating that straight into a template body sends
+                    // Meta an empty {{n}} value, which it rejects outright with "(#132012)
+                    // Parameter format does not match format in the created template" (variable
+                    // values can't be blank). Falling back to "there" avoids both the rejection
+                    // and a broken-looking "Hi !" greeting.
+                    "firstName" => string.IsNullOrWhiteSpace(contact?.FirstName) ? "there" : contact.FirstName,
                     "lastName" => contact?.LastName ?? string.Empty,
-                    "fullName" => contact is null ? string.Empty : $"{contact.FirstName} {contact.LastName}".Trim(),
+                    "fullName" => FullNameOrFallback(contact),
                     "phone" => contact?.Phone ?? string.Empty,
                     "email" => contact?.Email ?? string.Empty,
                     _ => string.Empty,
@@ -691,6 +700,12 @@ public class AutomationEngine
 
             return string.Empty;
         });
+
+    private static string FullNameOrFallback(Models.Entities.Contact? contact)
+    {
+        var fullName = contact is null ? string.Empty : $"{contact.FirstName} {contact.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? "there" : fullName;
+    }
 
     private static TimeSpan WaitDelay(WaitStepConfig cfg)
     {
