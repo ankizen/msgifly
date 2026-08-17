@@ -180,6 +180,21 @@ public class WhatsAppService : IWhatsAppService
                         parsed.ButtonsJson = existing.ButtonsJson;
                     }
 
+                    // Same story for media headers: ParseTemplateNode never populates
+                    // HeaderMediaUrl at all — Meta's sync response only ever returns an opaque
+                    // internal header_handle for an approved image/video/document header, never a
+                    // fetchable URL, so there's nothing to parse it FROM. Accepting that silently
+                    // wipes the field on every sync, which then drops the header component
+                    // entirely from every future send (the approved template still structurally
+                    // requires one) — Meta correctly rejects with "(#132012) Parameter format does
+                    // not match format in the created template". Local URL is never resubmitted to
+                    // Meta, purely used for our own send-time payload, so preserving it changes
+                    // nothing about what's actually approved.
+                    if (parsed.HeaderFormat is "IMAGE" or "VIDEO" or "DOCUMENT" && !string.IsNullOrEmpty(existing.HeaderMediaUrl))
+                    {
+                        parsed.HeaderMediaUrl = existing.HeaderMediaUrl;
+                    }
+
                     _db.Entry(existing).CurrentValues.SetValues(parsed);
                     existing.UpdatedAt = DateTime.UtcNow;
                 }

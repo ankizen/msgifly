@@ -224,4 +224,37 @@ public class TemplateMcpTools
 
         return new { success = true };
     }
+
+    [McpServerTool(Name = "set_template_header_media_url")]
+    [Description("""
+        Fixes an approved image/video/document-header template's locally-stored header media URL
+        without resubmitting anything to Meta — use after upload_template_header_image to attach a
+        fresh URL to an already-approved template whose stored URL was lost (e.g. by a Sync from
+        Meta, which can't recover it since Meta's own API never returns a fetchable URL for an
+        approved media header, only an internal handle). Purely a local repair: Meta's approved
+        template definition is untouched, this only fixes what gets used when actually sending it.
+        """)]
+    public async Task<object> SetTemplateHeaderMediaUrlAsync(
+        [Description("Local template id, from list_templates")] int templateId,
+        [Description("Public URL, typically from upload_template_header_image")] string headerMediaUrl)
+    {
+        _httpContextAccessor.RequireScope(ApiScopes.TemplatesWrite);
+
+        var template = await _db.WhatsappTemplates.FirstOrDefaultAsync(t => t.Id == templateId);
+        if (template is null)
+        {
+            throw new McpException($"No template with id {templateId} in this workspace.");
+        }
+
+        if (template.HeaderFormat is not ("IMAGE" or "VIDEO" or "DOCUMENT"))
+        {
+            throw new McpException($"Template '{template.TemplateName}' has header format '{template.HeaderFormat ?? "none"}', not a media header — nothing to set.");
+        }
+
+        template.HeaderMediaUrl = headerMediaUrl;
+        template.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return new { success = true, templateId = template.Id, headerMediaUrl = template.HeaderMediaUrl };
+    }
 }
