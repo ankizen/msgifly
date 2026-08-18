@@ -6,7 +6,7 @@
 
 <div class="mb-4">
     <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Drag steps onto the canvas and connect them. A Condition node has two outputs — Yes and No.</p>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Click a step's + to add what comes next. A Condition step branches into Yes and No.</p>
 </div>
 
 @if (!ViewData.ModelState.IsValid)
@@ -54,31 +54,9 @@
                 </ul>
             </div>
         </template>
-        <div class="flex flex-wrap items-start gap-x-4 gap-y-2 p-3 border-b border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900">
-            <template x-for="cat in stepCategories" :key="cat.label">
-                <div class="flex flex-wrap items-center gap-1.5 pr-4 border-r border-gray-200 dark:border-slate-700 last:border-r-0">
-                    <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400 mr-0.5" x-text="cat.label"></span>
-                    <template x-for="type in cat.types" :key="type">
-                        <button type="button" draggable="true"
-                                x-on:dragstart="canvas.startDrag($event, type)"
-                                x-on:click="canvas.addStepNode(type)"
-                                class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-xs font-medium text-gray-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-700 cursor-grab">
-                            <span x-text="stepDefs[type]?.icon"></span> <span x-text="stepDefs[type]?.label"></span>
-                        </button>
-                    </template>
-                </div>
-            </template>
-            <div class="ml-auto flex items-center gap-1">
-                <button type="button" x-on:click="canvas.tidyUp()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 text-xs" title="Auto-arrange the steps top-to-bottom">Tidy up</button>
-                <button type="button" x-on:click="canvas.zoomOut()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" title="Zoom out">&minus;</button>
-                <button type="button" x-on:click="canvas.zoomReset()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 text-xs">Reset</button>
-                <button type="button" x-on:click="canvas.zoomIn()" class="px-2 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700" title="Zoom in">+</button>
-            </div>
-        </div>
-
-        <div id="automationCanvas" class="relative w-full" style="height: 620px;"></div>
+        <div id="automationCanvas" class="relative w-full" style="height: 620px;" x-ignore></div>
         <p class="px-3 py-2 text-xs text-gray-400 dark:text-slate-500 border-t border-gray-100 dark:border-slate-700">
-            Drag from an output dot to an input dot to connect steps. To delete a step or a connection, click it to select it, then press Delete (or use the &times; button on a step's title bar) — you'll be asked to confirm. Double-click a connection line to add a bend point.
+            Click the + on any step to add what comes next. Click a step to edit it in the panel. Delete a step from that same panel — you'll be asked to confirm.
         </p>
     </div>
 
@@ -91,90 +69,22 @@
     <input type="hidden" name="StepsJson" x-ref="stepsJsonInput" />
 
     <div class="flex items-center gap-3">
-        <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save Automation</button>
+        <button type="submit" :disabled="loading" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Save Automation</button>
         <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</a>
         <span class="text-xs text-amber-600 dark:text-amber-400" x-show="dirty" x-cloak>&#9679; Unsaved changes</span>
     </div>
 </form>
-
-<style>
-    .df-node-card { min-width: 220px; font-family: inherit; position: relative; }
-    .df-node-title { font-weight: 600; font-size: 0.8rem; padding: 6px 6px 6px 10px; background: #047857; color: #fff; border-radius: 6px 6px 0 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-    .df-trigger-card .df-node-title { background: #1e293b; }
-    .df-node-body { padding: 8px 10px; background: #fff; border-radius: 0 0 6px 6px; display: flex; flex-direction: column; gap: 4px; }
-
-    /* Hidden until the card is hovered/selected so the title bar isn't cluttered for the
-       common case of just looking at or dragging a node — deletion is still reachable via
-       select + Delete key even when the button itself isn't visible. */
-    .df-delete-btn {
-        flex-shrink: 0; width: 18px; height: 18px; line-height: 16px; text-align: center;
-        border-radius: 4px; border: none; background: rgba(255,255,255,.15); color: #fff;
-        font-size: 14px; cursor: pointer; opacity: 0; transition: opacity .1s, background .1s;
-    }
-    .df-node-card:hover .df-delete-btn,
-    .drawflow-node.selected .df-delete-btn { opacity: 1; }
-    .df-delete-btn:hover { background: rgba(255,255,255,.35); }
-    .df-trigger-card .df-delete-btn { display: none; }
-
-    @@keyframes dfNodeFlash { 0%, 100% { outline-color: transparent; } 20%, 60% { outline-color: #f59e0b; } }
-    .df-node-flash .df-node-body { outline: 2px solid transparent; animation: dfNodeFlash 1.2s ease-in-out; }
-
-    /* Specificity note: Drawflow's own stylesheet uses ".drawflow .drawflow-node" (two classes),
-       which beats a plain ".drawflow-node" override — so every rule here that touches node/port
-       chrome must match or exceed that ancestor-qualified selector, or the library's default
-       cyan/black debug styling silently wins. */
-    .drawflow .drawflow-node {
-        background: transparent;
-        border: none;
-        box-shadow: 0 1px 4px rgba(0,0,0,.15);
-        border-radius: 6px;
-        padding: 0;
-        width: auto;
-        /* Ports are centered on the whole node's height by default; since our cards have
-           variable-height bodies (different field counts per step type), that leaves ports
-           landing at a different, unpredictable row per node and makes connection lines look
-           crooked. Pin them to a fixed offset (the title bar) instead, so every node's ports
-           line up on the same row regardless of body content. */
-        align-items: flex-start;
-    }
-    .drawflow .drawflow-node.selected { background: transparent; }
-    .drawflow .drawflow-node.selected .df-node-body { outline: 2px solid #047857; }
-    .drawflow .drawflow-node .inputs,
-    .drawflow .drawflow-node .outputs { margin-top: 13px; }
-    .drawflow .drawflow-node .input,
-    .drawflow .drawflow-node .output { border-color: #047857; background: #fff; }
-    .drawflow .drawflow-node .input { background: #10b981; }
-
-    .df-condition-legend { position: absolute; top: 10px; right: -54px; display: flex; flex-direction: column; gap: 12px; font-size: 10px; font-weight: 600; white-space: nowrap; pointer-events: none; }
-
-    .df-hint { font-size: 10px; line-height: 1.4; color: #94a3b8; margin-top: 2px; }
-    .df-chip-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-    .df-chip {
-        font-size: 10px; line-height: 1.4; padding: 2px 7px; border-radius: 9999px;
-        background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; cursor: pointer;
-    }
-    .df-chip:hover { background: #d1fae5; }
-    html.dark .df-chip { background: #064e3b; color: #6ee7b7; border-color: #065f46; }
-    html.dark .df-chip:hover { background: #065f46; }
-
-    .drawflow .connection .main-path { stroke: #94a3b8; stroke-width: 2px; }
-    .drawflow .connection .main-path:hover { stroke: #047857; }
-    #automationCanvas { background-color: #f8fafc; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 18px 18px; }
-    html.dark #automationCanvas { background-color: #0f172a; background-image: radial-gradient(#334155 1px, transparent 1px); }
-    html.dark .df-node-body { background: #1e293b; color: #e2e8f0; }
-</style>
 
 @section Scripts {
 <script>
     function automationCanvasController() {
         return {
             canvas: null,
-            stepDefs: window.AUTOMATION_STEP_DEFS || {},
-            stepCategories: window.AUTOMATION_STEP_CATEGORIES || [],
+            loading: true,
             sessionWindowWarning: null,
             validationIssues: [],
             dirty: false,
-            init() {
+            async init() {
                 const initial = {
                     triggerType: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TriggerType)),
                     triggerFields: {
@@ -188,19 +98,21 @@
                     templateOptions: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewData["TemplateOptions"], new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
                     steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
                 };
-                this.canvas = window.createAutomationCanvas(document.getElementById('automationCanvas'), initial, (state) => {
+                const { mountAutomationBuilder } = await window.loadAutomationBuilder();
+                this.canvas = mountAutomationBuilder(document.getElementById('automationCanvas'), initial, (state) => {
                     this.sessionWindowWarning = state.sessionWindowWarning;
                     this.validationIssues = state.validationIssues || [];
                     if (!state.isInitialRender) this.dirty = true;
                 });
+                this.loading = false;
 
                 const form = document.getElementById('automationForm');
 
                 // Catches everything the canvas callback above doesn't: the Name/Description/
-                // Active fields, and any node field edit typed via Drawflow's own df-* binding —
-                // those don't fire nodeCreated/connectionCreated, but as ordinary form controls
-                // inside #automationCanvas (itself inside this <form>), their input/change events
-                // still bubble all the way up here.
+                // Active fields, and any field typed inside the React properties panel — React
+                // still renders real DOM <input>/<textarea>/<select> elements, and their
+                // input/change events bubble up through the actual DOM tree like any other
+                // native form control inside this <form>, same as before.
                 form.addEventListener('input', () => { this.dirty = true; });
                 form.addEventListener('change', () => { this.dirty = true; });
 

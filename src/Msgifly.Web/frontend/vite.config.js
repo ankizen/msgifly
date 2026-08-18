@@ -1,9 +1,14 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // No laravel-vite-plugin / manifest here — Razor views reference the fixed output filenames
 // directly with the asp-append-version tag helper for cache-busting instead of manifest hashes.
 export default defineConfig({
   root: '.',
+  // Only used by the automation-builder/*.tsx entry, reached via a dynamic import() from app.js —
+  // every other entry stays plain JS, so this plugin's cost is a build-time-only dependency, not
+  // a runtime one for pages that never load that chunk.
+  plugins: [react()],
   // Everything Vite builds is served from /build/ (asp-append-version references ~/build/app.css
   // etc. directly), but Vite's own default base is site-root — without this, any URL Vite
   // generates for you (e.g. a `?url` import of a binary asset) comes out missing the /build/

@@ -5,7 +5,6 @@ import './bootstrap';
 import './config';
 import './tippy';
 import './chat-realtime';
-import './automation-canvas';
 import './embedded-signup';
 import './lead-ads';
 // NOTE: the original bundled a Livewire data-grid package (PowerGrid) here. This project
@@ -127,3 +126,11 @@ window.initializeEmojiPicker = initializeEmojiPicker;
 Alpine.plugin(persist);
 window.Alpine = Alpine;
 Alpine.start();
+
+// The automation builder (React + React Flow) is only ever needed on one page — a dynamic
+// import() here (rather than a static one above) means its whole chunk is fetched only when
+// Save.cshtml actually calls this, not on every page load. The import() call has to live in a
+// Vite-processed file for Rollup to code-split it into a real, cache-busted chunk — Save.cshtml's
+// own inline <script> block is never parsed by Vite, so the call site and the import() itself are
+// deliberately split across the two files.
+window.loadAutomationBuilder = () => import('./automation-builder');
