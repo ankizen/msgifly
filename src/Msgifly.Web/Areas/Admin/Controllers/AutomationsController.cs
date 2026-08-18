@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -51,6 +52,158 @@ public class AutomationsController : Controller
         ViewData["Automation"] = automation;
         var query = _db.AutomationLogs.AsNoTracking().Where(l => l.AutomationId == id).OrderByDescending(l => l.CreatedAt);
         return View(await PagedList<AutomationLog>.CreateAsync(query, page, PageSize));
+    }
+
+    /// <summary>
+    /// Run-level and per-step analytics for one automation — how many contacts have gone through
+    /// it, and for each step in the tree (in the same order the canvas draws it), how far it got.
+    /// Scoped to this automation's own AutomationLog rows, unlike the Templates Report page which
+    /// aggregates a template globally across every automation/campaign/quick-send.
+    /// </summary>
+    [Authorize(Policy = "automation.view")]
+    public async Task<IActionResult> Report(int id)
+    {
+        var automation = await _db.Automations.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+        if (automation is null)
+        {
+            return NotFound();
+        }
+
+        var steps = await _db.AutomationSteps.AsNoTracking().Where(s => s.AutomationId == id).ToListAsync();
+        var logs = await _db.AutomationLogs.AsNoTracking().Where(l => l.AutomationId == id).ToListAsync();
+
+        var model = new AutomationReportViewModel
+        {
+            AutomationId = automation.Id,
+            AutomationName = automation.Name,
+            TotalRuns = logs.Count,
+            CompletedRuns = logs.Count(l => l.Status == AutomationLogStatus.Success),
+            WaitingRuns = logs.Count(l => l.Status == AutomationLogStatus.Partial),
+            FailedRuns = logs.Count(l => l.Status == AutomationLogStatus.Failed),
+        };
+
+        var allResults = new List<AutomationStepResult>();
+        foreach (var log in logs)
+        {
+            allResults.AddRange(SafeDeserialize<List<AutomationStepResult>>(log.StepsExecutedJson) ?? []);
+        }
+
+        var byStepId = allResults.Where(r => r.StepId is not null).ToLookup(r => r.StepId!.Value);
+
+        // A successful SendTemplate step's Detail is "template sent (wamid...)" — pull the message
+        // id back out so live delivery/read/click status (which changes after the send, via later
+        // webhooks) can be looked up, rather than trusting the log's own send-time snapshot.
+        var wamidPattern = new Regex(@"\(([^()]+)\)\s*$");
+        var wamids = new HashSet<string>();
+        foreach (var r in allResults.Where(r => r.StepType == "SendTemplate" && r.Status == "success"))
+        {
+            var m = wamidPattern.Match(r.Detail);
+            if (m.Success)
+            {
+                wamids.Add(m.Groups[1].Value);
+            }
+        }
+
+        var messagesByWamid = wamids.Count == 0
+            ? new Dictionary<string, ChatMessage>()
+            : await _db.ChatMessages.AsNoTracking()
+                .Where(m => m.WhatsappMessageId != null && wamids.Contains(m.WhatsappMessageId))
+                .ToDictionaryAsync(m => m.WhatsappMessageId!);
+
+        foreach (var (step, depth) in WalkInTreeOrder(steps, null, null, 0))
+        {
+            var results = byStepId[step.Id].ToList();
+            var report = new AutomationStepReport
+            {
+                StepId = step.Id,
+                StepType = step.StepType.ToString(),
+                Branch = step.Branch ?? string.Empty,
+                Depth = depth,
+                Label = DescribeStep(step),
+                ReachedCount = results.Count,
+                SuccessCount = results.Count(r => r.Status == "success"),
+                FailedCount = results.Count(r => r.Status == "failed"),
+                FailureReasons = [.. results.Where(r => r.Status == "failed")
+                    .GroupBy(r => r.Detail)
+                    .Select(g => new AutomationFailureReason(g.Key, g.Count()))
+                    .OrderByDescending(f => f.Count)],
+            };
+
+            if (step.StepType == AutomationStepType.SendTemplate)
+            {
+                report.IsSendTemplate = true;
+                foreach (var r in results.Where(r => r.Status == "success"))
+                {
+                    var m = wamidPattern.Match(r.Detail);
+                    if (m.Success && messagesByWamid.TryGetValue(m.Groups[1].Value, out var msg))
+                    {
+                        if (msg.Status is MessageDeliveryStatus.Delivered or MessageDeliveryStatus.Read) report.DeliveredCount++;
+                        if (msg.Status == MessageDeliveryStatus.Read) report.ReadCount++;
+                        if (msg.Clicked) report.ClickedCount++;
+                    }
+                }
+            }
+            else if (step.StepType == AutomationStepType.Condition)
+            {
+                report.IsCondition = true;
+                report.YesCount = results.Count(r => r.Detail == "branch=Yes");
+                report.NoCount = results.Count(r => r.Detail == "branch=No");
+            }
+
+            model.Steps.Add(report);
+        }
+
+        return View(model);
+    }
+
+    /// <summary>Walks the flattened AutomationStep rows in the same root-then-Yes-then-No order
+    /// the canvas draws them (mirrors AutomationFormViewModel.BuildTree's recursion), but yields a
+    /// flat (step, depth) sequence instead of nested JSON — depth drives the report's indentation.</summary>
+    private static IEnumerable<(AutomationStep Step, int Depth)> WalkInTreeOrder(List<AutomationStep> allSteps, int? parentId, string? branch, int depth)
+    {
+        var scoped = allSteps.Where(s => s.ParentStepId == parentId && s.Branch == branch).OrderBy(s => s.Position);
+        foreach (var step in scoped)
+        {
+            yield return (step, depth);
+            if (step.StepType == AutomationStepType.Condition)
+            {
+                foreach (var x in WalkInTreeOrder(allSteps, step.Id, "Yes", depth + 1)) yield return x;
+                foreach (var x in WalkInTreeOrder(allSteps, step.Id, "No", depth + 1)) yield return x;
+            }
+        }
+    }
+
+    private static string DescribeStep(AutomationStep step)
+    {
+        switch (step.StepType)
+        {
+            case AutomationStepType.SendTemplate:
+                return SafeDeserialize<SendTemplateStepConfig>(step.StepConfigJson)?.TemplateName is { Length: > 0 } name ? name : "(unknown template)";
+            case AutomationStepType.Wait:
+                var wait = SafeDeserialize<WaitStepConfig>(step.StepConfigJson);
+                return wait is null ? "Wait" : $"Wait {wait.Amount} {wait.Unit}";
+            case AutomationStepType.Condition:
+                var cond = SafeDeserialize<ConditionStepConfig>(step.StepConfigJson);
+                return cond is null ? "Condition" : cond.Subject + (string.IsNullOrEmpty(cond.Operand) ? "" : $" ({cond.Operand})");
+            case AutomationStepType.UpdateContactField:
+                return $"Update {SafeDeserialize<UpdateContactFieldStepConfig>(step.StepConfigJson)?.Field}";
+            case AutomationStepType.SendWebhook:
+                return $"Webhook: {SafeDeserialize<SendWebhookStepConfig>(step.StepConfigJson)?.Url}";
+            default:
+                return step.StepType.ToString();
+        }
+    }
+
+    private static T? SafeDeserialize<T>(string json) where T : class
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     [Authorize(Policy = "automation.create,automation.edit")]

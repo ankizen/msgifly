@@ -1,0 +1,148 @@
+@model Msgifly.Web.Models.ViewModels.AutomationReportViewModel
+@{
+    ViewData["Title"] = $"Report — {Model.AutomationName}";
+    var successRate = Model.TotalRuns == 0 ? 0 : (int)Math.Round(Model.CompletedRuns * 100.0 / Model.TotalRuns);
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.AutomationName</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">How many contacts went through each step, and how far they got.</p>
+    </div>
+    <div class="flex gap-2">
+        <a asp-action="Logs" asp-route-id="@Model.AutomationId" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Raw run log</a>
+        <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Back to Automations</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Total runs</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.TotalRuns</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Completed</p>
+        <p class="text-2xl font-semibold text-emerald-600 dark:text-emerald-400">@Model.CompletedRuns</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Waiting</p>
+        <p class="text-2xl font-semibold text-amber-600 dark:text-amber-400">@Model.WaitingRuns</p>
+        <p class="text-xs text-gray-400 dark:text-slate-500">mid-sequence (Wait step)</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Failed</p>
+        <p class="text-2xl font-semibold text-red-600 dark:text-red-400">@Model.FailedRuns</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+        <p class="text-xs text-gray-500 dark:text-slate-400">Success rate</p>
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@successRate%</p>
+        <p class="text-xs text-gray-400 dark:text-slate-500">of finished runs</p>
+    </div>
+</div>
+
+@if (Model.TotalRuns == 0)
+{
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-8 text-center">
+        <p class="text-sm text-gray-500 dark:text-slate-400">This automation hasn't run for any contact yet — nothing to report.</p>
+        <p class="text-xs text-gray-400 dark:text-slate-500 mt-1">Once it fires (or you use "Test"/"Run Automation"), each step's numbers will show up here.</p>
+    </div>
+}
+else
+{
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white p-6 pb-3">Step by step</h2>
+        <div class="divide-y divide-gray-200 dark:divide-slate-700">
+            @foreach (var step in Model.Steps)
+            {
+                var reachedBase = Math.Max(step.ReachedCount, 1);
+                int PercentOfReached(int count) => (int)Math.Round(count * 100.0 / reachedBase);
+                var branchColor = step.Branch == "Yes" ? "border-emerald-500" : step.Branch == "No" ? "border-red-500" : "border-transparent";
+
+                <div class="p-6 border-l-4 @branchColor" style="margin-left: @(step.Depth * 1.5)rem">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <div class="flex items-center gap-2">
+                            @if (!string.IsNullOrEmpty(step.Branch))
+                            {
+                                <span class="text-xs font-semibold px-1.5 py-0.5 rounded @(step.Branch == "Yes" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300")">@step.Branch</span>
+                            }
+                            <span class="text-xs uppercase tracking-wide text-gray-400 dark:text-slate-500">@step.StepType</span>
+                            <span class="text-sm font-medium text-gray-900 dark:text-white">@step.Label</span>
+                        </div>
+                        <span class="text-xs text-gray-500 dark:text-slate-400">Reached <span class="font-semibold text-gray-700 dark:text-slate-300">@step.ReachedCount</span> contact(s)</span>
+                    </div>
+
+                    @if (step.IsSendTemplate)
+                    {
+                        <div class="space-y-1.5 mb-3">
+                            @{
+                                var stages = new (string Label, int Count, string Color)[]
+                                {
+                                    ("Sent", step.SuccessCount, "bg-gray-400 dark:bg-slate-500"),
+                                    ("Delivered", step.DeliveredCount, "bg-blue-500"),
+                                    ("Read", step.ReadCount, "bg-emerald-500"),
+                                    ("Clicked", step.ClickedCount, "bg-purple-500"),
+                                };
+                            }
+                            @foreach (var stage in stages)
+                            {
+                                <div class="flex items-center gap-3">
+                                    <span class="w-20 text-xs text-gray-500 dark:text-slate-400 flex-shrink-0">@stage.Label</span>
+                                    <div class="flex-1 h-4 rounded-full bg-gray-100 dark:bg-slate-900 overflow-hidden">
+                                        <div class="h-full @stage.Color rounded-full" style="width: @(PercentOfReached(stage.Count))%"></div>
+                                    </div>
+                                    <span class="w-10 text-xs text-gray-700 dark:text-slate-300 text-right flex-shrink-0">@stage.Count</span>
+                                </div>
+                            }
+                        </div>
+                        @if (step.FailedCount > 0)
+                        {
+                            <p class="text-xs text-red-600 dark:text-red-400 mb-1">@step.FailedCount failed to send</p>
+                            <ul class="text-xs text-gray-500 dark:text-slate-400 list-disc list-inside space-y-0.5">
+                                @foreach (var reason in step.FailureReasons)
+                                {
+                                    <li>@reason.Reason <span class="text-gray-400 dark:text-slate-500">(@reason.Count)</span></li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else if (step.IsCondition)
+                    {
+                        var yesPct = PercentOfReached(step.YesCount);
+                        var noPct = PercentOfReached(step.NoCount);
+                        <div class="flex items-center gap-3">
+                            <span class="w-20 text-xs text-gray-500 dark:text-slate-400 flex-shrink-0">Branch split</span>
+                            <div class="flex-1 h-4 rounded-full bg-gray-100 dark:bg-slate-900 overflow-hidden flex">
+                                <div class="h-full bg-emerald-500" style="width: @(yesPct)%"></div>
+                                <div class="h-full bg-red-500" style="width: @(noPct)%"></div>
+                            </div>
+                        </div>
+                        <p class="mt-1.5 text-xs text-gray-500 dark:text-slate-400">
+                            <span class="text-emerald-600 dark:text-emerald-400 font-medium">Yes: @step.YesCount (@yesPct%)</span>
+                            &nbsp;·&nbsp;
+                            <span class="text-red-600 dark:text-red-400 font-medium">No: @step.NoCount (@noPct%)</span>
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="text-xs text-gray-500 dark:text-slate-400">
+                            <span class="text-gray-700 dark:text-slate-300 font-medium">@step.SuccessCount</span> succeeded
+                            @if (step.FailedCount > 0)
+                            {
+                                <text>&nbsp;·&nbsp;<span class="text-red-600 dark:text-red-400 font-medium">@step.FailedCount</span> failed</text>
+                            }
+                        </p>
+                        @if (step.FailedCount > 0)
+                        {
+                            <ul class="mt-1 text-xs text-gray-500 dark:text-slate-400 list-disc list-inside space-y-0.5">
+                                @foreach (var reason in step.FailureReasons)
+                                {
+                                    <li>@reason.Reason <span class="text-gray-400 dark:text-slate-500">(@reason.Count)</span></li>
+                                }
+                            </ul>
+                        }
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}

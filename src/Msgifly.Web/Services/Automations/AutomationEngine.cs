@@ -105,8 +105,14 @@ public class AutomationEngine
 
         try
         {
+            // A Condition only ever takes ONE of Yes/No per run, never both — so a run has exactly
+            // one pending Wait continuation at a time, whether that Wait sits at the root or nested
+            // inside a branch. Finalizing only when parentStepId is null left any run whose Wait
+            // lives inside a branch stuck reporting Partial forever, even after that branch (and so
+            // the whole run) actually finished — this now matches the catch block below, which
+            // already finalized unconditionally on failure.
             var (status, errorMessage) = await ExecuteStepsFromAsync(automation, contactId, context, parentStepId, branch, nextPosition);
-            if (parentStepId is null && logId is not null)
+            if (logId is not null)
             {
                 await FinalizeLogAsync(logId.Value, status, errorMessage);
             }

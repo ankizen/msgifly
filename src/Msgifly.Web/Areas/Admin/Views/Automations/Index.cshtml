@@ -53,6 +53,7 @@
                         </form>
                     </td>
                     <td class="px-4 py-3 text-right text-sm space-x-3 whitespace-nowrap">
+                        <a asp-action="Report" asp-route-id="@automation.Id" class="text-emerald-600 hover:text-emerald-500">Report</a>
                         <button type="button" class="text-emerald-600 hover:text-emerald-500"
                                 x-on:click="testId = @automation.Id; testName = @System.Text.Json.JsonSerializer.Serialize(automation.Name); testPhone = ''; testFirstName = ''; testOpen = true">
                             Test
