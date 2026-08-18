@@ -77,6 +77,9 @@ public record TemplateOption(
 /// <summary>A published Flow, for the "Send Flow" quick action on the Contacts list.</summary>
 public record FlowOption(string MetaFlowId, string Name);
 
+/// <summary>An automation, for the "Run Automation" quick action on the Contacts list.</summary>
+public record AutomationOption(int Id, string Name);
+
 public record ContactOption(int Id, string Label);
 
 public class CampaignListItem

@@ -7,6 +7,7 @@
     var leadAdsFormOptions = (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewData["LeadAdsFormOptions"]!;
     var templateOptions = (List<TemplateOption>)ViewData["TemplateOptions"]!;
     var flowOptions = (List<FlowOption>)ViewData["FlowOptions"]!;
+    var automationOptions = (List<AutomationOption>)ViewData["AutomationOptions"]!;
     var groupOptions = (List<GroupOption>)ViewData["GroupOptions"]!;
     var groupFilterOptions = (List<GroupOption>)ViewData["GroupFilterOptions"]!;
     var hasActiveFilters = !string.IsNullOrEmpty(ViewData["Search"]?.ToString())
@@ -101,6 +102,13 @@
                 x-on:click="addToGroupId = ''; newGroupName = ''; addToGroupOpen = true">
             Add to group
         </button>
+        @if (automationOptions.Count > 0)
+        {
+            <button type="button" class="text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 font-medium"
+                    x-on:click="openAutomationForBulk(selectedIds)">
+                Run Automation
+            </button>
+        }
         <button type="button" class="text-red-600 hover:text-red-500 font-medium"
                 x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("BulkDelete")?ids=' + selectedIds.join(','), message: `Delete ${selectedIds.length} contact(s)? This cannot be undone.` })">
             Delete selected
@@ -180,6 +188,13 @@
                                         <button type="button" class="block w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
                                                 x-on:click="openFlowFor(@contact.Id, @System.Text.Json.JsonSerializer.Serialize(contact.FullName))">
                                             Send Flow
+                                        </button>
+                                    }
+                                    @if (automationOptions.Count > 0)
+                                    {
+                                        <button type="button" class="block w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                x-on:click="openAutomationFor(@contact.Id, @System.Text.Json.JsonSerializer.Serialize(contact.FullName))">
+                                            Run Automation
                                         </button>
                                     }
                                     <a asp-action="Save" asp-route-id="@contact.Id" class="block px-3 py-1.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">Edit</a>
@@ -336,6 +351,43 @@
     </div>
 </div>
 
+@* ---------- Run Automation modal ---------- *@
+<div x-show="runAutomationOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+    <div class="fixed inset-0 bg-black/40" x-on:click="runAutomationOpen = false"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6" x-on:click.stop>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Run Automation</h2>
+            <p class="text-sm text-gray-500 dark:text-slate-400 mb-1"
+               x-text="runAutomationBulkMode ? (runAutomationBulkIds.length + ' contact(s) selected') : ('For: ' + runAutomationContactName)"></p>
+            <p class="text-xs text-gray-400 dark:text-slate-500 mb-4">Runs the automation's full step tree right now — real sends, real waits. Works even if the automation is paused.</p>
+
+            <form method="post" class="space-y-4"
+                  x-bind:action="runAutomationBulkMode ? '@Url.Action("BulkRunAutomation")' : '@Url.Action("RunAutomation")'">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="contactId" x-bind:value="runAutomationContactId" />
+                <input type="hidden" name="ids" x-bind:value="runAutomationBulkIds.join(',')" />
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Automation</label>
+                    <select name="automationId" x-model="automationId"
+                            class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="">Choose an automation...</option>
+                        @foreach (var a in automationOptions)
+                        {
+                            <option value="@a.Id">@a.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="submit" :disabled="!automationId" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Run</button>
+                    <button type="button" x-on:click="runAutomationOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 </div>
 
 @section Scripts {
@@ -357,6 +409,13 @@
             flowContactName: '',
             flowId: '',
 
+            runAutomationOpen: false,
+            runAutomationBulkMode: false,
+            runAutomationBulkIds: [],
+            runAutomationContactId: null,
+            runAutomationContactName: '',
+            automationId: '',
+
             init() {},
 
             openFlowFor(contactId, contactName) {
@@ -364,6 +423,21 @@
                 this.flowContactName = contactName;
                 this.flowId = '';
                 this.flowOpen = true;
+            },
+
+            openAutomationFor(contactId, contactName) {
+                this.runAutomationBulkMode = false;
+                this.runAutomationContactId = contactId;
+                this.runAutomationContactName = contactName;
+                this.automationId = '';
+                this.runAutomationOpen = true;
+            },
+
+            openAutomationForBulk(ids) {
+                this.runAutomationBulkMode = true;
+                this.runAutomationBulkIds = ids;
+                this.automationId = '';
+                this.runAutomationOpen = true;
             },
 
             get selectedTemplate() {

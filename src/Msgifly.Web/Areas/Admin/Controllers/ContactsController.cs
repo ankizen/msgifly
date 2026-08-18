@@ -114,6 +114,10 @@ public class ContactsController : Controller
             .OrderBy(f => f.Name)
             .Select(f => new FlowOption(f.MetaFlowId!, f.Name))
             .ToListAsync();
+        ViewData["AutomationOptions"] = await _db.Automations.AsNoTracking()
+            .OrderBy(a => a.Name)
+            .Select(a => new AutomationOption(a.Id, a.Name))
+            .ToListAsync();
         ViewData["GroupOptions"] = await _db.ContactGroups.AsNoTracking()
             .Where(g => g.Type == ContactGroupType.Static)
             .OrderBy(g => g.Name)
@@ -348,6 +352,68 @@ public class ContactsController : Controller
         await _db.SaveChangesAsync();
 
         this.Notify($"Flow sent to {contact.FullName}.");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>
+    /// The "Run Automation" quick action on the Contacts list — runs one automation's full step
+    /// tree right now for one contact, via the same engine path as the Automations page's own
+    /// Test button and MCP's retry_automation_for_contact. Doesn't require the automation to be
+    /// Active and doesn't inflate its ExecutionCount/LastExecutedAt — this is a manual one-off
+    /// injection (e.g. a lead that came in before the automation existed), not a real trigger fire.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RunAutomation(int contactId, int automationId)
+    {
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Id == contactId);
+        if (contact is null)
+        {
+            return NotFound();
+        }
+
+        var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(automationId, contactId, "Manual");
+        this.Notify(
+            status == AutomationLogStatus.Success ? $"Automation started for {contact.FullName}." : $"Couldn't run automation for {contact.FullName}: {errorMessage}",
+            status == AutomationLogStatus.Success ? "success" : "danger");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Bulk version of RunAutomation — same sequential-loop pattern as BulkSendTemplate.</summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkRunAutomation(string ids, int automationId)
+    {
+        var contactIds = ParseIds(ids);
+        if (contactIds.Count == 0)
+        {
+            this.Notify("No contacts selected.", "warning");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var contacts = await _db.Contacts.Where(c => contactIds.Contains(c.Id)).ToListAsync();
+        var succeeded = 0;
+        var failures = new List<string>();
+
+        foreach (var contact in contacts)
+        {
+            var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(automationId, contact.Id, "Manual");
+            if (status == AutomationLogStatus.Success)
+            {
+                succeeded++;
+            }
+            else
+            {
+                failures.Add($"{contact.FullName} ({errorMessage})");
+            }
+        }
+
+        var message = failures.Count == 0
+            ? $"Automation started for all {succeeded} contact(s)."
+            : $"Started for {succeeded} of {contacts.Count}. Failed: {string.Join("; ", failures.Take(5))}{(failures.Count > 5 ? $" and {failures.Count - 5} more" : "")}.";
+        this.Notify(message, failures.Count == 0 ? "success" : "warning");
         return RedirectToAction(nameof(Index));
     }
 
