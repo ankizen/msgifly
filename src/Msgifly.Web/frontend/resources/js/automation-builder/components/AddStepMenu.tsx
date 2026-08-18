@@ -39,9 +39,17 @@ export function AddStepMenu({ pending, onPick, onClose }: Props) {
     };
   }, [onClose]);
 
-  // Clamp so the menu doesn't render off the right/bottom edge of the viewport.
-  const left = Math.min(pending.screenPos.x, window.innerWidth - 240);
-  const top = Math.min(pending.screenPos.y, window.innerHeight - 320);
+  // Opens to the side of the click, vertically centered on it — not directly below, which in this
+  // top-to-bottom flow is exactly where the next step in the chain already sits. Flips to the left
+  // of the click near the right edge instead of clamping flush against it, so the menu never
+  // overlaps the "+" button (and the node below it) that opened it.
+  const MENU_WIDTH = 224;
+  const MENU_HEIGHT_EST = 300;
+  const left =
+    pending.screenPos.x + 16 + MENU_WIDTH <= window.innerWidth
+      ? pending.screenPos.x + 16
+      : pending.screenPos.x - 16 - MENU_WIDTH;
+  const top = Math.min(Math.max(pending.screenPos.y - 60, 8), window.innerHeight - MENU_HEIGHT_EST - 8);
 
   return (
     <div

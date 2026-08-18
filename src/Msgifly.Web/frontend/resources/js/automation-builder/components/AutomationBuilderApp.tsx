@@ -3,7 +3,7 @@ import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, type Edge,
 import '@xyflow/react/dist/style.css';
 import { BuilderActionsContext, type BuilderActions } from '../builder-context';
 import { deriveGraph, heightFor, NODE_WIDTH, TRIGGER_NODE_ID, type BuilderNode, type StepNodeData } from '../derive-graph';
-import { computeMissingPositions, tidyLayout, type Point } from '../layout';
+import { tidyLayout, type Point } from '../layout';
 import type { InsertScope } from '../tree';
 import { countDescendants, deleteStep, findNode, insertAfterNode, insertAtScopeStart, newStep, treeFromWire, treeToWire, updateStepConfig } from '../tree';
 import { computeSessionWindowWarning, computeValidationIssues, detectTrailingSiblingsAfterCondition } from '../validation';
@@ -60,6 +60,10 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
   // Set right after inserting a step whose position isn't computed yet — the effect below pans to
   // it the moment dagre actually places it, instead of trying to pan to a not-yet-known position.
   const pendingFocusId = useRef<string | null>(null);
+  // The last set of node ids a layout was computed for — lets the layout effect tell "a step was
+  // added or removed" (the id set changed) apart from "a config field was edited" (same ids, but
+  // still a new `tree`/`baseNodes` reference) without a separate change-type flag to keep in sync.
+  const prevNodeIdsRef = useRef<Set<string>>(new Set());
 
   const leadForms = useMemo(() => initial.leadForms ?? [], [initial]);
   const templateOptions = useMemo(() => initial.templateOptions ?? [], [initial]);
@@ -74,20 +78,25 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
   // Positions are local-only state, deliberately outside the canonical tree (the wire contract has
   // no position field at all — every load re-lays-out from scratch, matching old canvas exactly).
   // Runs before paint (not useEffect) so a newly-added node's fallback position is never visible.
+  //
+  // Full re-layout on every STRUCTURAL change (a step added or removed), not just a position for
+  // the new/removed node: computing only the new node's position from a fresh whole-graph dagre
+  // run while leaving every sibling at its old coordinates let the new node drift out of sync with
+  // where its neighbors actually were — dagre's run assumes the whole graph reflows together, so
+  // only the new node acting on that assumption while its siblings didn't move is exactly what
+  // produced steps landing overlapped/hidden behind each other after a couple of adds. A
+  // config-only edit (typing in a field) produces a new `tree` and therefore new baseNodes/edges
+  // references too, but the node ID SET is unchanged then — that's the signal used to skip
+  // re-layout and leave any manually-dragged positions alone.
   useLayoutEffect(() => {
-    const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightFor(n) }));
-    const missing = computeMissingPositions(layoutNodes, edges, positions);
-    if (missing.size > 0) {
-      setPositions((prev) => {
-        const next = new Map(prev);
-        missing.forEach((p, id) => next.set(id, p));
-        return next;
-      });
+    const currentIds = new Set(baseNodes.map((n) => n.id));
+    const prevIds = prevNodeIdsRef.current;
+    const structureChanged = currentIds.size !== prevIds.size || [...currentIds].some((id) => !prevIds.has(id));
+    if (structureChanged) {
+      const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightFor(n) }));
+      setPositions(tidyLayout(layoutNodes, edges));
     }
-    // positions intentionally excluded — this effect only ever ADDS entries for ids missing from
-    // it, so depending on it would either no-op or self-trigger on every drag; re-running only
-    // when the node/edge SET actually changes is what's wanted here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    prevNodeIdsRef.current = currentIds;
   }, [baseNodes, edges]);
 
   const nodes: BuilderNode[] = useMemo(

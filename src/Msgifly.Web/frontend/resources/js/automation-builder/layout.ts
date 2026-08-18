@@ -48,25 +48,16 @@ function runDagre(nodes: LayoutNode[], edges: LayoutEdge[]): Map<string, Point> 
   return positions;
 }
 
-/** Runs dagre over the whole current graph (every node needs the full structure to be positioned
- * sensibly relative to its neighbors) but returns positions only for ids NOT already present in
- * `knownPositions` — the caller merges these in, leaving anything already positioned (including
- * anything the user manually dragged) untouched. */
-export function computeMissingPositions(nodes: LayoutNode[], edges: LayoutEdge[], knownPositions: Map<string, Point>): Map<string, Point> {
-  const missingIds = new Set(nodes.filter((n) => !knownPositions.has(n.id)).map((n) => n.id));
-  if (missingIds.size === 0) return new Map();
-
-  const all = runDagre(nodes, edges);
-  const result = new Map<string, Point>();
-  for (const id of missingIds) {
-    const pos = all.get(id);
-    if (pos) result.set(id, pos);
-  }
-  return result;
-}
-
-/** Re-runs dagre for every currently-visible node, ignoring any prior manual positioning — the
- * deliberate "Tidy up" escape hatch. */
+/** Re-runs dagre for every currently-visible node, ignoring any prior manual positioning. Used for
+ * both the initial load AND every structural tree edit (a step added or removed) — see
+ * AutomationBuilderApp's layout effect for why a full re-layout on every structural change, rather
+ * than only positioning the new/removed node, turned out to be the right call: computing just the
+ * new node's position from a fresh whole-graph dagre run while leaving siblings at their old
+ * (pre-edit) coordinates let the new node's position and its neighbors' actual on-screen positions
+ * drift out of sync — dagre's fresh run assumes everyone reflows together, so cherry-picking one
+ * node's answer out of that run while ignoring the rest is exactly what produced the reported
+ * "newly added step lands hidden behind an existing one" bug. Also the deliberate "Tidy up"
+ * escape hatch. */
 export function tidyLayout(nodes: LayoutNode[], edges: LayoutEdge[]): Map<string, Point> {
   return runDagre(nodes, edges);
 }
