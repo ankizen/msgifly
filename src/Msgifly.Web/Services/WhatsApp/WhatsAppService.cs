@@ -1528,10 +1528,12 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Fail(response.ErrorMessage!);
         }
 
-        _logger.LogInformation("pricing_analytics raw response for {Bac} [{Start},{End}]: {Json}", settings.BusinessAccountId, startUnix, endUnix, response.Data!.ToJsonString());
-
         var dataPoints = new List<PricingAnalyticsDataPoint>();
-        var pointsArray = response.Data!["pricing_analytics"]?["data_points"]?.AsArray();
+        // Meta wraps this the same way every edge-like Graph API field does — data_points sits
+        // inside pricing_analytics.data[0], not directly on pricing_analytics — confirmed against
+        // a real response that had non-zero cost entries the old (wrong) path silently missed,
+        // making every date range read as "no billed messages" even with real spend.
+        var pointsArray = response.Data!["pricing_analytics"]?["data"]?[0]?["data_points"]?.AsArray();
         if (pointsArray is not null)
         {
             foreach (var node in pointsArray)
