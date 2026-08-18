@@ -158,7 +158,11 @@ public static class AutomationTreeBuilder
                     FlattenTree(node.Yes, automationId, null, "Yes", yesChildren);
                     foreach (var child in yesChildren)
                     {
-                        child.ParentStep = step;
+                        // yesChildren also holds grandchildren pulled in by a nested Condition's own
+                        // recursive call (it shares this same buffer as its output) — those already
+                        // have ParentStep correctly set to their own immediate Condition ancestor, so
+                        // only backfill it for this branch's direct children (still null here).
+                        child.ParentStep ??= step;
                     }
 
                     output.AddRange(yesChildren);
@@ -170,7 +174,7 @@ public static class AutomationTreeBuilder
                     FlattenTree(node.No, automationId, null, "No", noChildren);
                     foreach (var child in noChildren)
                     {
-                        child.ParentStep = step;
+                        child.ParentStep ??= step;
                     }
 
                     output.AddRange(noChildren);

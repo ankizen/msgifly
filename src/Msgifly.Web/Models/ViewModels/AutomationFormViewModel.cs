@@ -7,7 +7,7 @@ using Msgifly.Web.Services.Automations;
 
 namespace Msgifly.Web.Models.ViewModels;
 
-/// <summary>Wire shape for one node in the client-authored step tree — see Views/Automations/Save.cshtml's Alpine builder. Yes/No are only ever populated one level deep (a Condition's children can't themselves be Conditions) — a deliberate scope cut from a full recursive canvas builder.</summary>
+/// <summary>Wire shape for one node in the client-authored step tree — see the automation-builder React canvas and AutomationTreeBuilder. Yes/No may nest arbitrarily deep (a Condition's children can themselves be Conditions).</summary>
 public class AutomationStepNode
 {
     public string Type { get; set; } = string.Empty;
