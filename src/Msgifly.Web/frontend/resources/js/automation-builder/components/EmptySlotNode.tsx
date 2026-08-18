@@ -13,7 +13,7 @@ export function EmptySlotNodeCard({ data }: NodeProps) {
 
   return (
     <div style={{ width: 170 }}>
-      <Handle type="target" position={Position.Top} isConnectable={false} className="!bg-transparent !border-transparent" />
+      <Handle type="target" position={Position.Left} isConnectable={false} className="!bg-transparent !border-transparent" />
       <button
         type="button"
         onClick={(e) => actions.onAddAtSlot(scope, e)}

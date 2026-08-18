@@ -16,14 +16,14 @@ export interface Point {
   y: number;
 }
 
-// Top-to-bottom, tree-branches style: each step stacks downward, and a Condition's Yes/No
-// branches fan out left/right beneath it rather than offsetting in y while continuing rightward.
-// nodesep is now the HORIZONTAL gap between sibling branch columns (wider, since two branch
-// columns sitting close together read as cramped); ranksep is the VERTICAL gap between successive
-// steps (tighter than the old LR ranksep, since these cards are short).
+// Left-to-right, n8n-style pipeline: each step sits in its own column reading left to right, and a
+// Condition's Yes/No branches fan out vertically (stacked rows) on the right edge while continuing
+// rightward — matching n8n's own flow direction and how an IF node's two outputs branch there,
+// rather than a top-to-bottom tree/org-chart shape. nodesep is the VERTICAL gap between sibling
+// branch rows; ranksep is the HORIZONTAL gap between successive columns.
 function runDagre(nodes: LayoutNode[], edges: LayoutEdge[]): Map<string, Point> {
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'TB', nodesep: 90, ranksep: 70 });
+  g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 100 });
   g.setDefaultEdgeLabel(() => ({}));
 
   for (const n of nodes) {
