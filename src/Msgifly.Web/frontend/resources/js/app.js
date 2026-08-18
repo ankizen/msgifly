@@ -120,17 +120,24 @@ function initializeEmojiPicker() {
 }
 window.initializeEmojiPicker = initializeEmojiPicker;
 
-// The original app got Alpine.js bundled for free via Livewire's JS runtime. Since this
-// rewrite has no Livewire, Alpine is now an explicit dependency, started once here.
-// $persist (used by the dark-mode toggle in _Layout.cshtml) needs the persist plugin.
-Alpine.plugin(persist);
-window.Alpine = Alpine;
-Alpine.start();
-
 // The automation builder (React + React Flow) is only ever needed on one page — a dynamic
 // import() here (rather than a static one above) means its whole chunk is fetched only when
 // Save.cshtml actually calls this, not on every page load. The import() call has to live in a
 // Vite-processed file for Rollup to code-split it into a real, cache-busted chunk — Save.cshtml's
 // own inline <script> block is never parsed by Vite, so the call site and the import() itself are
 // deliberately split across the two files.
+//
+// MUST be assigned before Alpine.start(): Alpine walks the DOM and calls each x-data component's
+// init() synchronously as part of start() itself. Automations/Save's controller calls
+// `await window.loadAutomationBuilder()` as the first line of its own init() — if that happens
+// after Alpine.start() below, window.loadAutomationBuilder is still undefined at that point,
+// init() throws into an unhandled promise rejection, and the canvas silently never mounts (blank
+// page, no console-visible crash, nothing — this exact bug shipped once already).
 window.loadAutomationBuilder = () => import('./automation-builder');
+
+// The original app got Alpine.js bundled for free via Livewire's JS runtime. Since this
+// rewrite has no Livewire, Alpine is now an explicit dependency, started once here.
+// $persist (used by the dark-mode toggle in _Layout.cshtml) needs the persist plugin.
+Alpine.plugin(persist);
+window.Alpine = Alpine;
+Alpine.start();
