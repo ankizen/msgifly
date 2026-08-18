@@ -37,8 +37,8 @@ export function TriggerNodeCard({ data, selected }: NodeProps) {
           e.stopPropagation();
           actions.onAddAfter(TRIGGER_NODE_ID, e);
         }}
-        style={{ color: TRIGGER_COLOR.accent }}
-        className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
+        style={{ background: TRIGGER_COLOR.accent }}
+        className="nodrag absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm leading-none shadow-md ring-2 ring-white dark:ring-slate-900 transition-transform duration-150 hover:scale-110"
       >
         +
       </button>

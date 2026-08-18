@@ -39,7 +39,7 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
             e.stopPropagation();
             actions.onDelete(id);
           }}
-          className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 leading-none"
+          className="nodrag absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 leading-none"
         >
           &times;
         </button>
@@ -53,8 +53,8 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
             e.stopPropagation();
             actions.onAddAfter(id, e);
           }}
-          style={{ color: color.accent }}
-          className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
+          style={{ background: color.accent }}
+          className="nodrag absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center text-white text-sm leading-none shadow-md ring-2 ring-white dark:ring-slate-900 transition-transform duration-150 hover:scale-110"
         >
           +
         </button>

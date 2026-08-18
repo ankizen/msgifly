@@ -17,7 +17,7 @@ export function EmptySlotNodeCard({ data }: NodeProps) {
       <button
         type="button"
         onClick={(e) => actions.onAddAtSlot(scope, e)}
-        className={`w-full rounded-xl border-2 border-dashed px-2 py-3 text-xs font-medium bg-white/60 dark:bg-slate-800/60 dark:border-slate-600 transition-all duration-150 hover:scale-[1.02] hover:shadow-sm ${color}`}
+        className={`nodrag w-full rounded-xl border-2 border-dashed px-2 py-3 text-xs font-medium bg-white/60 dark:bg-slate-800/60 dark:border-slate-600 transition-all duration-150 hover:scale-[1.02] hover:shadow-sm ${color}`}
       >
         + Add {label} step
       </button>

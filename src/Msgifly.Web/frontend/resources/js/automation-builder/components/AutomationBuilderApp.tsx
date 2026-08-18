@@ -10,6 +10,7 @@ import { computeSessionWindowWarning, computeValidationIssues, detectTrailingSib
 import { STEP_COLOR, TRIGGER_COLOR } from '../step-meta';
 import type { AutomationBuilderHandle, AutomationTree, ExportResult, InitialProps, OnChangeState, StepType } from '../types';
 import { AddStepMenu } from './AddStepMenu';
+import { ConfirmDialog } from './ConfirmDialog';
 import { PropertiesPanel } from './PropertiesPanel';
 import { Toolbar } from './Toolbar';
 import { StepNodeCard } from './StepNode';
@@ -52,8 +53,13 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
   const [positions, setPositions] = useState<Map<string, Point>>(new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; message: string } | null>(null);
   const rfInstance = useRef<ReactFlowInstance<BuilderNode, Edge> | null>(null);
   const hasRenderedOnce = useRef(false);
+  const hasFitOnce = useRef(false);
+  // Set right after inserting a step whose position isn't computed yet — the effect below pans to
+  // it the moment dagre actually places it, instead of trying to pan to a not-yet-known position.
+  const pendingFocusId = useRef<string | null>(null);
 
   const leadForms = useMemo(() => initial.leadForms ?? [], [initial]);
   const templateOptions = useMemo(() => initial.templateOptions ?? [], [initial]);
@@ -88,6 +94,24 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
     () => baseNodes.map((n) => ({ ...n, position: positions.get(n.id) ?? { x: -9999, y: -9999 } })),
     [baseNodes, positions]
   );
+
+  // Two one-off camera moves, both gated on positions actually being known (never on the -9999
+  // placeholder): fit the whole tree into view the first time real positions land, and pan/zoom to
+  // whatever step was just inserted via "+" so adding a step never feels like "nothing happened".
+  useEffect(() => {
+    if (!rfInstance.current) return;
+    if (!hasFitOnce.current && nodes.length > 0 && nodes.every((n) => n.position.x !== -9999)) {
+      hasFitOnce.current = true;
+      rfInstance.current.fitView({ padding: 0.2, duration: 0 });
+    }
+    if (pendingFocusId.current) {
+      const pos = positions.get(pendingFocusId.current);
+      if (pos) {
+        rfInstance.current.setCenter(pos.x + NODE_WIDTH / 2, pos.y + 60, { zoom: 1, duration: 300 });
+        pendingFocusId.current = null;
+      }
+    }
+  }, [nodes, positions]);
 
   const selectedStep = useMemo(() => (selectedId && selectedId !== TRIGGER_NODE_ID ? findNode(tree.steps, selectedId) : null), [tree.steps, selectedId]);
 
@@ -125,18 +149,24 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
         node.type === 'Condition' && count > 0
           ? `Delete this step and the ${count} step${count === 1 ? '' : 's'} in its Yes/No branches below it? This can't be undone.`
           : "Delete this step? This can't be undone.";
-      if (!window.confirm(message)) return;
-      const result = deleteStep(tree.steps, id);
-      setTree((t) => ({ ...t, steps: result.steps }));
-      setPositions((prev) => {
-        const next = new Map(prev);
-        next.delete(id);
-        return next;
-      });
-      if (selectedId === id) setSelectedId(null);
+      setPendingDelete({ id, message });
     },
-    [tree.steps, selectedId]
+    [tree.steps]
   );
+
+  function confirmDelete() {
+    if (!pendingDelete) return;
+    const { id } = pendingDelete;
+    const result = deleteStep(tree.steps, id);
+    setTree((t) => ({ ...t, steps: result.steps }));
+    setPositions((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    if (selectedId === id) setSelectedId(null);
+    setPendingDelete(null);
+  }
 
   const actions: BuilderActions = useMemo(
     () => ({
@@ -168,7 +198,27 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
     });
     setPending(null);
     setSelectedId(node.id);
+    pendingFocusId.current = node.id;
   }
+
+  // Escape clears the current selection (closing the properties panel); Delete/Backspace deletes
+  // the selected step. Both skip while focus is inside a text input/textarea/select so typing in
+  // the properties panel — including hitting Backspace to edit text — never gets misread as a
+  // canvas-level shortcut. The Trigger can't be deleted this way (matches the panel: no delete
+  // button is shown for it either).
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (typing) return;
+      if (e.key === 'Escape' && selectedId) setSelectedId(null);
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId && selectedId !== TRIGGER_NODE_ID) {
+        onDelete(selectedId);
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedId, onDelete]);
 
   useImperativeHandle(
     ref,
@@ -261,6 +311,7 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
         />
 
         {pending && <AddStepMenu pending={{ screenPos: pending.screenPos }} onPick={handlePick} onClose={() => setPending(null)} />}
+        {pendingDelete && <ConfirmDialog message={pendingDelete.message} onConfirm={confirmDelete} onCancel={() => setPendingDelete(null)} />}
       </div>
     </BuilderActionsContext.Provider>
   );
