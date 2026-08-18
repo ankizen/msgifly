@@ -1528,6 +1528,8 @@ public class WhatsAppService : IWhatsAppService
             return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Fail(response.ErrorMessage!);
         }
 
+        _logger.LogInformation("pricing_analytics raw response for {Bac} [{Start},{End}]: {Json}", settings.BusinessAccountId, startUnix, endUnix, response.Data!.ToJsonString());
+
         var dataPoints = new List<PricingAnalyticsDataPoint>();
         var pointsArray = response.Data!["pricing_analytics"]?["data_points"]?.AsArray();
         if (pointsArray is not null)
