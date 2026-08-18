@@ -374,9 +374,16 @@ public class ContactsController : Controller
         }
 
         var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(automationId, contactId, "Manual");
+        // Partial isn't a failure — it just means the run reached a Wait step and is scheduled to
+        // resume later (e.g. this automation's first step already sent a real template). Only
+        // Failed should read as an error; treating Partial as one made a genuinely successful send
+        // show up as "Couldn't run automation" with no reason, since errorMessage is null there.
+        var failed = status == AutomationLogStatus.Failed;
         this.Notify(
-            status == AutomationLogStatus.Success ? $"Automation started for {contact.FullName}." : $"Couldn't run automation for {contact.FullName}: {errorMessage}",
-            status == AutomationLogStatus.Success ? "success" : "danger");
+            failed ? $"Couldn't run automation for {contact.FullName}: {errorMessage}"
+            : status == AutomationLogStatus.Partial ? $"Automation started for {contact.FullName} — now waiting on a Wait step."
+            : $"Automation completed for {contact.FullName}.",
+            failed ? "danger" : "success");
         return RedirectToAction(nameof(Index));
     }
 
@@ -400,7 +407,7 @@ public class ContactsController : Controller
         foreach (var contact in contacts)
         {
             var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(automationId, contact.Id, "Manual");
-            if (status == AutomationLogStatus.Success)
+            if (status != AutomationLogStatus.Failed)
             {
                 succeeded++;
             }

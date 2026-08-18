@@ -400,9 +400,15 @@ public class AutomationsController : Controller
         }
 
         var (status, errorMessage) = await _automationEngine.RunAutomationForTestAsync(id, contact.Id);
+        // Partial means it hit a Wait step and is scheduled to resume later — not a failure. Only
+        // Failed should read as an error; otherwise a real successful send got reported as "didn't
+        // finish cleanly" with no reason (errorMessage is null for Partial).
+        var testFailed = status == AutomationLogStatus.Failed;
         this.Notify(
-            status == AutomationLogStatus.Success ? $"Test run to {phone} completed — see the log below." : $"Test run to {phone} didn't finish cleanly: {errorMessage}",
-            status == AutomationLogStatus.Success ? "success" : "danger");
+            testFailed ? $"Test run to {phone} didn't finish cleanly: {errorMessage}"
+            : status == AutomationLogStatus.Partial ? $"Test run to {phone} started — now waiting on a Wait step. See the log below."
+            : $"Test run to {phone} completed — see the log below.",
+            testFailed ? "danger" : "success");
 
         return RedirectToAction(nameof(Logs), new { id });
     }
