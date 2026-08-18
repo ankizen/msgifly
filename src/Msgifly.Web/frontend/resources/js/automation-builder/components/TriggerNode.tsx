@@ -38,11 +38,11 @@ export function TriggerNodeCard({ data, selected }: NodeProps) {
           actions.onAddAfter(TRIGGER_NODE_ID, e);
         }}
         style={{ color: TRIGGER_COLOR.accent }}
-        className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
+        className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
       >
         +
       </button>
-      <Handle type="source" position={Position.Right} isConnectable={false} style={{ background: TRIGGER_COLOR.accent }} className="!w-2.5 !h-2.5 !border-2 !border-white dark:!border-slate-800" />
+      <Handle type="source" position={Position.Bottom} isConnectable={false} style={{ background: TRIGGER_COLOR.accent }} className="!w-2.5 !h-2.5 !border-2 !border-white dark:!border-slate-800" />
     </div>
   );
 }

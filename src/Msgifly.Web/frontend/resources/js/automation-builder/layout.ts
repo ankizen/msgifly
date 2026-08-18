@@ -16,12 +16,14 @@ export interface Point {
   y: number;
 }
 
-// Old canvas laid out left-to-right (steps at increasing x, a Condition's Yes/No branches offset
-// in y while continuing rightward) — matched here via dagre's 'LR' rankdir rather than wacrm's
-// top-to-bottom, to keep the layout direction the user is already used to in this app.
+// Top-to-bottom, tree-branches style: each step stacks downward, and a Condition's Yes/No
+// branches fan out left/right beneath it rather than offsetting in y while continuing rightward.
+// nodesep is now the HORIZONTAL gap between sibling branch columns (wider, since two branch
+// columns sitting close together read as cramped); ranksep is the VERTICAL gap between successive
+// steps (tighter than the old LR ranksep, since these cards are short).
 function runDagre(nodes: LayoutNode[], edges: LayoutEdge[]): Map<string, Point> {
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', nodesep: 70, ranksep: 120 });
+  g.setGraph({ rankdir: 'TB', nodesep: 90, ranksep: 70 });
   g.setDefaultEdgeLabel(() => ({}));
 
   for (const n of nodes) {

@@ -12,7 +12,7 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
 
   return (
     <div className="group relative" style={{ width: NODE_WIDTH }}>
-      <Handle type="target" position={Position.Left} isConnectable={false} className="!w-2.5 !h-2.5 !bg-slate-400 !border-2 !border-white dark:!border-slate-800" />
+      <Handle type="target" position={Position.Top} isConnectable={false} className="!w-2.5 !h-2.5 !bg-slate-400 !border-2 !border-white dark:!border-slate-800" />
 
       <div
         onClick={() => actions.onSelectNode(id)}
@@ -54,7 +54,7 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
             actions.onAddAfter(id, e);
           }}
           style={{ color: color.accent }}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
+          className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
         >
           +
         </button>
@@ -63,7 +63,7 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
       {step.type !== 'Condition' && (
         <Handle
           type="source"
-          position={Position.Right}
+          position={Position.Bottom}
           isConnectable={false}
           style={{ background: color.accent }}
           className="!w-2.5 !h-2.5 !border-2 !border-white dark:!border-slate-800"
@@ -71,8 +71,8 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
       )}
       {step.type === 'Condition' && (
         <>
-          <Handle type="source" position={Position.Right} id="yes" style={{ top: '35%' }} isConnectable={false} className="!w-2.5 !h-2.5 !bg-green-600 !border-2 !border-white dark:!border-slate-800" />
-          <Handle type="source" position={Position.Right} id="no" style={{ top: '65%' }} isConnectable={false} className="!w-2.5 !h-2.5 !bg-red-600 !border-2 !border-white dark:!border-slate-800" />
+          <Handle type="source" position={Position.Bottom} id="yes" style={{ left: '35%' }} isConnectable={false} className="!w-2.5 !h-2.5 !bg-green-600 !border-2 !border-white dark:!border-slate-800" />
+          <Handle type="source" position={Position.Bottom} id="no" style={{ left: '65%' }} isConnectable={false} className="!w-2.5 !h-2.5 !bg-red-600 !border-2 !border-white dark:!border-slate-800" />
         </>
       )}
     </div>
