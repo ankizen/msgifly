@@ -22,6 +22,31 @@ export const STEP_META: Record<StepType, StepMetaEntry> = {
   Stop: { label: 'Stop', icon: '⏹', category: 'Actions' },
 };
 
+export interface StepColor {
+  /** Solid accent — icon badge background, left rail, ring on selection, edge/handle tint. */
+  accent: string;
+  /** Pale tint for the icon badge's own background so the accent icon sits on a soft chip. */
+  tint: string;
+}
+
+// One distinct hue per step type (not category) — a canvas full of same-colored cards is the
+// single biggest reason a flow builder reads as flat/lifeless at a glance. Applied via inline
+// style, not Tailwind color classes: Tailwind's JIT scanner needs statically-visible class names,
+// so a dynamically-picked "bg-{color}-500" would silently never generate.
+export const STEP_COLOR: Record<StepType, StepColor> = {
+  SendMessage: { accent: '#2563eb', tint: '#eff6ff' },
+  SendTemplate: { accent: '#7c3aed', tint: '#f5f3ff' },
+  SendButtons: { accent: '#0d9488', tint: '#f0fdfa' },
+  Condition: { accent: '#ea580c', tint: '#fff7ed' },
+  Wait: { accent: '#d97706', tint: '#fffbeb' },
+  UpdateContactField: { accent: '#db2777', tint: '#fdf2f8' },
+  SendWebhook: { accent: '#0891b2', tint: '#ecfeff' },
+  Stop: { accent: '#dc2626', tint: '#fef2f2' },
+};
+
+// The flow's origin gets its own distinct treatment (indigo) — never reused by a step color above.
+export const TRIGGER_COLOR: StepColor = { accent: '#4338ca', tint: '#eef2ff' };
+
 export const STEP_CATEGORIES: { label: StepMetaEntry['category']; types: StepType[] }[] = [
   { label: 'Messaging', types: ['SendMessage', 'SendTemplate', 'SendButtons'] },
   { label: 'Logic', types: ['Condition', 'Wait'] },

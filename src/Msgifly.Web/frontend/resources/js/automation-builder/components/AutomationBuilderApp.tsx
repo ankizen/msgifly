@@ -1,12 +1,13 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Background, Controls, MiniMap, ReactFlow, type Edge, type NodeMouseHandler, type OnNodeDrag, type ReactFlowInstance } from '@xyflow/react';
+import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, type Edge, type NodeMouseHandler, type OnNodeDrag, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { BuilderActionsContext, type BuilderActions } from '../builder-context';
-import { deriveGraph, heightFor, TRIGGER_NODE_ID, type BuilderNode } from '../derive-graph';
+import { deriveGraph, heightFor, NODE_WIDTH, TRIGGER_NODE_ID, type BuilderNode, type StepNodeData } from '../derive-graph';
 import { computeMissingPositions, tidyLayout, type Point } from '../layout';
 import type { InsertScope } from '../tree';
 import { countDescendants, deleteStep, findNode, insertAfterNode, insertAtScopeStart, newStep, treeFromWire, treeToWire, updateStepConfig } from '../tree';
 import { computeSessionWindowWarning, computeValidationIssues, detectTrailingSiblingsAfterCondition } from '../validation';
+import { STEP_COLOR, TRIGGER_COLOR } from '../step-meta';
 import type { AutomationBuilderHandle, AutomationTree, ExportResult, InitialProps, OnChangeState, StepType } from '../types';
 import { AddStepMenu } from './AddStepMenu';
 import { PropertiesPanel } from './PropertiesPanel';
@@ -16,7 +17,12 @@ import { TriggerNodeCard } from './TriggerNode';
 import { EmptySlotNodeCard } from './EmptySlotNode';
 
 const NODE_TYPES = { trigger: TriggerNodeCard, step: StepNodeCard, emptySlot: EmptySlotNodeCard };
-const LAYOUT_NODE_WIDTH = 240;
+
+function minimapColor(node: BuilderNode): string {
+  if (node.type === 'trigger') return TRIGGER_COLOR.accent;
+  if (node.type === 'step') return STEP_COLOR[(node.data as StepNodeData).step.type].accent;
+  return '#cbd5e1';
+}
 
 type PendingTarget = { kind: 'root' } | { kind: 'after'; anchorId: string } | { kind: 'slot'; scope: InsertScope };
 interface PendingState {
@@ -63,7 +69,7 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
   // no position field at all — every load re-lays-out from scratch, matching old canvas exactly).
   // Runs before paint (not useEffect) so a newly-added node's fallback position is never visible.
   useLayoutEffect(() => {
-    const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: LAYOUT_NODE_WIDTH, height: heightFor(n) }));
+    const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightFor(n) }));
     const missing = computeMissingPositions(layoutNodes, edges, positions);
     if (missing.size > 0) {
       setPositions((prev) => {
@@ -181,12 +187,12 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
       focusNode(nodeId: string) {
         const pos = positions.get(nodeId);
         if (pos && rfInstance.current) {
-          rfInstance.current.setCenter(pos.x + LAYOUT_NODE_WIDTH / 2, pos.y + 60, { zoom: 1, duration: 400 });
+          rfInstance.current.setCenter(pos.x + NODE_WIDTH / 2, pos.y + 60, { zoom: 1, duration: 400 });
         }
         setSelectedId(nodeId);
       },
       tidyUp() {
-        const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: LAYOUT_NODE_WIDTH, height: heightFor(n) }));
+        const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightFor(n) }));
         setPositions(tidyLayout(layoutNodes, edges));
       },
       zoomIn() {
@@ -224,14 +230,14 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
           maxZoom={1.6}
           proOptions={{ hideAttribution: true }}
         >
-          <Background />
-          <Controls showInteractive={false} />
-          <MiniMap pannable zoomable className="!bg-white dark:!bg-slate-800" />
+          <Background variant={BackgroundVariant.Dots} gap={20} size={1.5} color="#cbd5e1" />
+          <Controls showInteractive={false} className="!shadow-sm !border !border-slate-200 dark:!border-slate-600 [&>button]:dark:!bg-slate-800 [&>button]:dark:!fill-slate-300 [&>button]:dark:!border-slate-600" />
+          <MiniMap pannable zoomable nodeColor={minimapColor} maskColor="rgba(148, 163, 184, 0.15)" className="!bg-white dark:!bg-slate-800 !border !border-slate-200 dark:!border-slate-600 !shadow-sm" />
         </ReactFlow>
 
         <Toolbar
           onTidyUp={() => {
-            const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: LAYOUT_NODE_WIDTH, height: heightFor(n) }));
+            const layoutNodes = baseNodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: heightFor(n) }));
             setPositions(tidyLayout(layoutNodes, edges));
           }}
           onZoomIn={() => rfInstance.current?.zoomIn()}

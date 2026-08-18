@@ -1,4 +1,4 @@
-import type { Edge, Node } from '@xyflow/react';
+import { MarkerType, type Edge, type Node } from '@xyflow/react';
 import type { InsertScope } from './tree';
 import type { AutomationTree, StepNode } from './types';
 
@@ -9,11 +9,12 @@ export const TRIGGER_NODE_ID = '__trigger__';
 // plain Wait card), and an unloaded image's real box height isn't known until it finishes loading
 // anyway. Same reasoning the old canvas used for its own static CONDITION_BRANCH_OFFSETS. These
 // only seed dagre's initial guess — dragging is always available to fix any card that's taller
-// than this in practice.
+// than this in practice. The SAME NODE_WIDTH is imported by every node component's own inline
+// style, so the DOM card and dagre's reserved column width can never drift apart again.
 export const NODE_WIDTH = 260;
-export const NODE_HEIGHT = 170;
-export const TRIGGER_NODE_HEIGHT = 230;
-export const EMPTY_SLOT_HEIGHT = 64;
+export const NODE_HEIGHT = 120;
+export const TRIGGER_NODE_HEIGHT = 110;
+export const EMPTY_SLOT_HEIGHT = 56;
 
 export interface TriggerNodeData extends Record<string, unknown> {
   kind: 'trigger';
@@ -36,7 +37,10 @@ interface EdgeStyle {
   color: string;
 }
 
+const DEFAULT_EDGE_COLOR = '#94a3b8';
+
 function makeEdge(source: string, target: string, style: EdgeStyle | undefined): Edge {
+  const color = style?.color ?? DEFAULT_EDGE_COLOR;
   return {
     id: `${source}->${target}`,
     source,
@@ -44,9 +48,13 @@ function makeEdge(source: string, target: string, style: EdgeStyle | undefined):
     // other node type has one unnamed default handle, so sourceHandle is only set when relevant.
     sourceHandle: style ? style.label.toLowerCase() : undefined,
     target,
+    type: 'smoothstep',
     label: style?.label,
-    style: style ? { stroke: style.color } : { stroke: '#94a3b8' },
+    style: { stroke: color, strokeWidth: 2 },
     labelStyle: style ? { fill: style.color, fontWeight: 600, fontSize: 11 } : undefined,
+    labelBgStyle: style ? { fill: '#ffffff', fillOpacity: 0.9 } : undefined,
+    labelBgPadding: style ? [4, 2] : undefined,
+    markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
   };
 }
 

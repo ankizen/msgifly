@@ -1,40 +1,48 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useBuilderActions } from '../builder-context';
-import { STEP_META } from '../step-meta';
+import { STEP_COLOR, STEP_META } from '../step-meta';
 import { summarizeStep } from '../summarize';
-import type { StepNodeData } from '../derive-graph';
+import { NODE_WIDTH, type StepNodeData } from '../derive-graph';
 
 export function StepNodeCard({ id, data, selected }: NodeProps) {
   const { step } = data as unknown as StepNodeData;
   const actions = useBuilderActions();
   const meta = STEP_META[step.type];
+  const color = STEP_COLOR[step.type];
 
   return (
-    <div className="relative" style={{ width: 240 }}>
-      <Handle type="target" position={Position.Left} isConnectable={false} className="!bg-emerald-600 !border-emerald-700" />
+    <div className="group relative" style={{ width: NODE_WIDTH }}>
+      <Handle type="target" position={Position.Left} isConnectable={false} className="!w-2.5 !h-2.5 !bg-slate-400 !border-2 !border-white dark:!border-slate-800" />
+
       <div
         onClick={() => actions.onSelectNode(id)}
-        className={`rounded-md shadow-sm cursor-pointer bg-white dark:bg-slate-800 border ${
-          selected ? 'border-emerald-500 ring-2 ring-emerald-500/40' : 'border-gray-200 dark:border-slate-600'
+        style={selected ? { borderColor: color.accent, boxShadow: `0 0 0 3px ${color.accent}33` } : undefined}
+        className={`relative flex items-start gap-2.5 rounded-xl border bg-white dark:bg-slate-800 px-3 py-2.5 cursor-pointer shadow-sm transition-shadow duration-150 hover:shadow-md ${
+          selected ? '' : 'border-slate-200 dark:border-slate-600'
         }`}
       >
-        <div className="flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-t-md text-white text-xs font-semibold" style={{ background: '#047857' }}>
-          <span className="truncate">
-            {meta.icon} {meta.label}
-          </span>
-          <button
-            type="button"
-            title="Delete this step"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onDelete(id);
-            }}
-            className="flex-shrink-0 w-4 h-4 rounded text-white/90 hover:bg-white/20 leading-none"
-          >
-            &times;
-          </button>
+        <span
+          className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm"
+          style={{ background: color.tint }}
+        >
+          {meta.icon}
+        </span>
+        <div className="min-w-0 flex-1 pr-4">
+          <div className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{meta.label}</div>
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{summarizeStep(step)}</div>
         </div>
-        <div className="px-2.5 py-1.5 text-[11px] text-gray-600 dark:text-slate-300 truncate">{summarizeStep(step)}</div>
+
+        <button
+          type="button"
+          title="Delete this step"
+          onClick={(e) => {
+            e.stopPropagation();
+            actions.onDelete(id);
+          }}
+          className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150 leading-none"
+        >
+          &times;
+        </button>
       </div>
 
       {step.type !== 'Condition' && (
@@ -45,17 +53,26 @@ export function StepNodeCard({ id, data, selected }: NodeProps) {
             e.stopPropagation();
             actions.onAddAfter(id, e);
           }}
-          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 text-emerald-600 text-sm leading-none shadow hover:bg-emerald-50 dark:hover:bg-slate-700"
+          style={{ color: color.accent }}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-sm leading-none shadow transition-transform duration-150 hover:scale-110"
         >
           +
         </button>
       )}
 
-      {step.type !== 'Condition' && <Handle type="source" position={Position.Right} isConnectable={false} className="!bg-emerald-600 !border-emerald-700" />}
+      {step.type !== 'Condition' && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          isConnectable={false}
+          style={{ background: color.accent }}
+          className="!w-2.5 !h-2.5 !border-2 !border-white dark:!border-slate-800"
+        />
+      )}
       {step.type === 'Condition' && (
         <>
-          <Handle type="source" position={Position.Right} id="yes" style={{ top: '35%' }} isConnectable={false} className="!bg-green-600 !border-green-700" />
-          <Handle type="source" position={Position.Right} id="no" style={{ top: '65%' }} isConnectable={false} className="!bg-red-600 !border-red-700" />
+          <Handle type="source" position={Position.Right} id="yes" style={{ top: '35%' }} isConnectable={false} className="!w-2.5 !h-2.5 !bg-green-600 !border-2 !border-white dark:!border-slate-800" />
+          <Handle type="source" position={Position.Right} id="no" style={{ top: '65%' }} isConnectable={false} className="!w-2.5 !h-2.5 !bg-red-600 !border-2 !border-white dark:!border-slate-800" />
         </>
       )}
     </div>
