@@ -34,8 +34,19 @@ else
 {
     <div class="grid grid-cols-2 gap-4 mb-6">
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
-            <p class="text-xs text-gray-500 dark:text-slate-400">Total spend</p>
+            <p class="text-xs text-gray-500 dark:text-slate-400">Total spend @(string.IsNullOrEmpty(Model.Currency) ? "" : $"({Model.Currency})")</p>
             <p class="text-2xl font-semibold text-gray-900 dark:text-white">@Model.TotalCost.ToString("N2")</p>
+            @if (Model.ConvertedTotals.Count > 0)
+            {
+                <p class="text-xs text-gray-400 dark:text-slate-500 mt-1">
+                    &asymp;
+                    @foreach (var c in Model.ConvertedTotals)
+                    {
+                        <span class="mr-2">@c.Code @c.Amount.ToString("N2")</span>
+                    }
+                    <span class="italic">(approx., static rate)</span>
+                </p>
+            }
         </div>
         <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
             <p class="text-xs text-gray-500 dark:text-slate-400">Messages billed</p>

@@ -118,5 +118,5 @@ public interface IWhatsAppService
     // ---- Billing / spend (pricing_analytics — the live replacement for deprecated conversation_analytics) ----
 
     /// <summary>Per-message cost/volume for the current WABA over [startUtc, endUtc), broken down by the given dimensions (e.g. ["PRICING_CATEGORY"]). Meta caps the lookback window at 1 year.</summary>
-    Task<WhatsAppResult<List<PricingAnalyticsDataPoint>>> GetPricingAnalyticsAsync(DateTime startUtc, DateTime endUtc, string granularity, List<string> dimensions);
+    Task<WhatsAppResult<PricingAnalyticsResult>> GetPricingAnalyticsAsync(DateTime startUtc, DateTime endUtc, string granularity, List<string> dimensions);
 }

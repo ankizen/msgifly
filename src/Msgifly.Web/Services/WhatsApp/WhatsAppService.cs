@@ -1509,26 +1509,30 @@ public class WhatsAppService : IWhatsAppService
         });
     }
 
-    public async Task<WhatsAppResult<List<PricingAnalyticsDataPoint>>> GetPricingAnalyticsAsync(DateTime startUtc, DateTime endUtc, string granularity, List<string> dimensions)
+    public async Task<WhatsAppResult<PricingAnalyticsResult>> GetPricingAnalyticsAsync(DateTime startUtc, DateTime endUtc, string granularity, List<string> dimensions)
     {
         var settings = await GetSettingsAsync();
         if (string.IsNullOrWhiteSpace(settings.BusinessAccountId) || string.IsNullOrWhiteSpace(settings.AccessToken))
         {
-            return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Fail("WhatsApp Business Account is not configured yet.");
+            return WhatsAppResult<PricingAnalyticsResult>.Fail("WhatsApp Business Account is not configured yet.");
         }
 
         var startUnix = new DateTimeOffset(DateTime.SpecifyKind(startUtc, DateTimeKind.Utc)).ToUnixTimeSeconds();
         var endUnix = new DateTimeOffset(DateTime.SpecifyKind(endUtc, DateTimeKind.Utc)).ToUnixTimeSeconds();
         var dimensionsLiteral = string.Join(",", dimensions.Select(d => $"\"{d}\""));
-        var fieldsExpression = $"pricing_analytics.start({startUnix}).end({endUnix}).granularity({granularity}).dimensions([{dimensionsLiteral}])";
+        // "currency" alongside pricing_analytics in the same fields expression — one request gets
+        // both the cost figures AND the ISO code they're denominated in (the WABA's own billing
+        // currency), so the page can label amounts correctly instead of just printing bare numbers.
+        var fieldsExpression = $"currency,pricing_analytics.start({startUnix}).end({endUnix}).granularity({granularity}).dimensions([{dimensionsLiteral}])";
 
         var response = await GetAsync(settings, $"{settings.BusinessAccountId}?fields={Uri.EscapeDataString(fieldsExpression)}");
         if (!response.Success)
         {
-            return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Fail(response.ErrorMessage!);
+            return WhatsAppResult<PricingAnalyticsResult>.Fail(response.ErrorMessage!);
         }
 
-        var dataPoints = new List<PricingAnalyticsDataPoint>();
+        var result = new PricingAnalyticsResult { Currency = response.Data!["currency"]?.GetValue<string>() };
+        var dataPoints = result.DataPoints;
         // Meta wraps this the same way every edge-like Graph API field does — data_points sits
         // inside pricing_analytics.data[0], not directly on pricing_analytics — confirmed against
         // a real response that had non-zero cost entries the old (wrong) path silently missed,
@@ -1557,7 +1561,7 @@ public class WhatsAppService : IWhatsAppService
             }
         }
 
-        return WhatsAppResult<List<PricingAnalyticsDataPoint>>.Ok(dataPoints);
+        return WhatsAppResult<PricingAnalyticsResult>.Ok(result);
     }
 
     private HttpClient CreateClient(ResolvedWhatsAppSettings settings)

@@ -14,6 +14,15 @@ public class BillingController : Controller
 {
     private static readonly DateTime MetaLookbackFloor = DateTime.UtcNow.AddYears(-1);
 
+    // Static snapshot (fetched 2026-08-18), not a live feed — good enough for an approximate
+    // cross-currency read, not for anything that needs to be exact to the day. Units per 1 USD.
+    private static readonly Dictionary<string, decimal> UsdRates = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["USD"] = 1m,
+        ["INR"] = 95.75m,
+        ["AED"] = 3.6725m,
+    };
+
     private readonly ApplicationDbContext _db;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
@@ -57,9 +66,11 @@ public class BillingController : Controller
             return View(model);
         }
 
-        var dataPoints = result.Data!;
+        var dataPoints = result.Data!.DataPoints;
+        model.Currency = result.Data!.Currency;
         model.TotalCost = dataPoints.Sum(d => d.Cost);
         model.TotalVolume = dataPoints.Sum(d => d.Volume);
+        model.ConvertedTotals = ConvertToDisplayCurrencies(model.TotalCost, model.Currency);
 
         model.ByCategory = [.. dataPoints
             .GroupBy(d => d.PricingCategory ?? "(uncategorized)")
@@ -72,5 +83,19 @@ public class BillingController : Controller
             .OrderBy(r => r.Date)];
 
         return View(model);
+    }
+
+    /// <summary>Converts one amount into every currency in UsdRates (including its own source
+    /// currency, so the page can show USD/INR/AED side by side regardless of which one Meta
+    /// actually bills in). Returns empty if the source currency isn't in the static table.</summary>
+    private static List<BillingCurrencyRow> ConvertToDisplayCurrencies(decimal amount, string? sourceCurrency)
+    {
+        if (string.IsNullOrWhiteSpace(sourceCurrency) || !UsdRates.TryGetValue(sourceCurrency, out var sourceRate))
+        {
+            return [];
+        }
+
+        var usdAmount = amount / sourceRate;
+        return [.. UsdRates.Select(kv => new BillingCurrencyRow(kv.Key.ToUpperInvariant(), usdAmount * kv.Value))];
     }
 }

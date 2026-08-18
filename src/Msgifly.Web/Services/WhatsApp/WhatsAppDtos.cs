@@ -182,6 +182,14 @@ public class PricingAnalyticsDataPoint
     public string? PricingType { get; set; }
 }
 
+/// <summary>GetPricingAnalyticsAsync's result — Cost on every data point is in this one ISO 4217
+/// currency code (the WABA's own billing currency, e.g. "USD"), not per-point.</summary>
+public class PricingAnalyticsResult
+{
+    public string? Currency { get; set; }
+    public List<PricingAnalyticsDataPoint> DataPoints { get; set; } = [];
+}
+
 /// <summary>One Flow as listed by GET /{WABA_ID}/flows — used by SyncFlowsAsync to upsert local rows.</summary>
 public class FlowSummary
 {
