@@ -55,6 +55,12 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
   const [pending, setPending] = useState<PendingState | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; message: string } | null>(null);
   const rfInstance = useRef<ReactFlowInstance<BuilderNode, Edge> | null>(null);
+  // A ref alone isn't enough to gate the auto-fitView effect below: setting rfInstance.current in
+  // onInit doesn't trigger a re-render, so if that effect happens to run (and bail on a null ref)
+  // before onInit fires, nothing would ever re-run it once the instance actually becomes
+  // available — fitView() would then silently never be called at all. This mirrors it into state
+  // purely so the effect has something to legitimately depend on and re-fire from.
+  const [rfReady, setRfReady] = useState(false);
   const hasRenderedOnce = useRef(false);
   const hasFitOnce = useRef(false);
   // Set right after inserting a step whose position isn't computed yet — the effect below pans to
@@ -120,7 +126,7 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
         pendingFocusId.current = null;
       }
     }
-  }, [nodes, positions]);
+  }, [nodes, positions, rfReady]);
 
   const selectedStep = useMemo(() => (selectedId && selectedId !== TRIGGER_NODE_ID ? findNode(tree.steps, selectedId) : null), [tree.steps, selectedId]);
 
@@ -279,6 +285,7 @@ export const AutomationBuilderApp = forwardRef<AutomationBuilderHandle, Props>(f
           nodeTypes={NODE_TYPES}
           onInit={(instance) => {
             rfInstance.current = instance;
+            setRfReady(true);
           }}
           onNodeDragStop={onNodeDragStop}
           onNodeClick={onNodeClick}

@@ -55,8 +55,8 @@
             </div>
         </template>
         <div class="relative">
-            <div id="automationCanvas" class="relative w-full" style="height: 620px;" x-ignore></div>
-            <div x-show="loading" x-cloak class="absolute inset-0 flex items-center justify-center bg-white dark:bg-slate-800" style="height: 620px;">
+            <div id="automationCanvas" class="relative w-full" style="height: clamp(420px, calc(100vh - 320px), 900px);" x-ignore></div>
+            <div x-show="loading" x-cloak class="absolute inset-0 flex items-center justify-center bg-white dark:bg-slate-800" style="height: clamp(420px, calc(100vh - 320px), 900px);">
                 <div class="flex flex-col items-center gap-2 text-gray-400 dark:text-slate-500">
                     <svg class="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -95,7 +95,22 @@
             sessionWindowWarning: null,
             validationIssues: [],
             dirty: false,
+            // A fixed/CSS-only height can't account for the validation-issues banner above the
+            // canvas, which appears/grows conditionally (0 to N lines depending on the tree) — so
+            // the canvas either wastes space when there's no banner or gets cut off when there is
+            // one. Measuring the canvas's actual current top and sizing it to whatever's genuinely
+            // left below that (down to the viewport bottom) adapts to both cases and to the real
+            // window size, closer to how a real flow builder's canvas fills available space.
+            resizeCanvas() {
+                const el = document.getElementById('automationCanvas');
+                if (!el) return;
+                const top = el.getBoundingClientRect().top;
+                const height = Math.max(420, Math.round(window.innerHeight - top - 16));
+                el.style.height = height + 'px';
+                if (el.nextElementSibling) el.nextElementSibling.style.height = height + 'px';
+            },
             async init() {
+                window.addEventListener('resize', () => this.resizeCanvas());
                 const initial = {
                     triggerType: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TriggerType)),
                     triggerFields: {
@@ -109,11 +124,15 @@
                     templateOptions: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ViewData["TemplateOptions"], new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerOptions.Web))),
                     steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
                 };
+                this.resizeCanvas();
                 const { mountAutomationBuilder } = await window.loadAutomationBuilder();
                 this.canvas = mountAutomationBuilder(document.getElementById('automationCanvas'), initial, (state) => {
                     this.sessionWindowWarning = state.sessionWindowWarning;
                     this.validationIssues = state.validationIssues || [];
                     if (!state.isInitialRender) this.dirty = true;
+                    // The banner above the canvas just changed size/visibility (Alpine needs a
+                    // tick to actually paint that before re-measuring where the canvas now starts).
+                    this.$nextTick(() => this.resizeCanvas());
                 });
                 this.loading = false;
 
