@@ -448,6 +448,11 @@ function chatInbox() {
                         this.$nextTick(() => this.scrollToBottom());
                         if (!message.isOutbound) {
                             this.markAsRead(chatId);
+                            // A live message into the chat the admin already has open is read
+                            // instantly — but app.js's own (separate) global connection has no way
+                            // to know that, so it just ticked the sidebar badge up for it. Cancel
+                            // that increment back out rather than leaving a permanent ghost count.
+                            window.decrementChatUnread?.(1);
                         }
                     }
                 }
@@ -512,7 +517,15 @@ function chatInbox() {
             await this.loadMessages(chatId, false);
             await this.markAsRead(chatId);
             const chat = this.chats.find(c => c.id === chatId);
-            if (chat) chat.unreadCount = 0;
+            if (chat) {
+                // Drop the sidebar nav badge (see app.js) by however many this chat is clearing —
+                // that badge is a separate global counter, so it won't correct itself otherwise
+                // until the next full page load.
+                if (chat.unreadCount > 0) {
+                    window.decrementChatUnread?.(chat.unreadCount);
+                }
+                chat.unreadCount = 0;
+            }
             this.$nextTick(() => this.scrollToBottom());
         },
 

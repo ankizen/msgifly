@@ -134,11 +134,13 @@
             </svg>
             Chat
         </span>
-        @if (chatUnreadCount > 0)
-        {
-            <span class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-red-500 text-white text-xs font-semibold">@(chatUnreadCount > 99 ? "99+" : chatUnreadCount.ToString())</span>
-        }
+        @* Reactive from here on (app.js's global SignalR listener updates $store.chat.unreadCount
+           live) — chatUnreadCount below only seeds its initial value on first paint. *@
+        <span x-show="$store.chat.unreadCount > 0" x-cloak
+              x-text="$store.chat.unreadCount > 99 ? '99+' : $store.chat.unreadCount"
+              class="inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full bg-red-500 text-white text-xs font-semibold"></span>
     </a>
+    <script>window.__chatUnreadCount = @chatUnreadCount;</script>
 }
 
 @if (User.HasPermission("user.view", "role.view", "source.view", "status.view", "canned_reply.view", "workspace.view", "billing.view") || User.IsMasterAdmin())

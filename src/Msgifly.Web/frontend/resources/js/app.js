@@ -135,6 +135,34 @@ window.initializeEmojiPicker = initializeEmojiPicker;
 // page, no console-visible crash, nothing — this exact bug shipped once already).
 window.loadAutomationBuilder = () => import('./automation-builder');
 
+// Global unread-message badge (the "Chat" sidebar nav item, see _NavItems.cshtml) — live on
+// every page, not just while actually on /Admin/Chat, so an admin working anywhere else in the
+// app still sees a new message arrive without needing to reload or navigate there. This is a
+// SEPARATE SignalR connection from the one Chat/Index.cshtml's own chatInbox() opens for itself
+// (that one only exists on the Chat page) — two connections receiving the same broadcast is a
+// little wasteful but simplest given the two live in genuinely different JS scopes.
+// Must be registered before Alpine.start(), same reason as window.loadAutomationBuilder above:
+// Alpine resolves $store references as part of walking the DOM synchronously during start().
+Alpine.store('chat', { unreadCount: window.__chatUnreadCount ?? 0 });
+
+const globalChatConnection = window.createChatConnection();
+const seenGlobalMessageIds = new Set(); // guards against a reconnect redelivering the same message
+globalChatConnection.on('ReceiveMessage', (chatId, message) => {
+  if (seenGlobalMessageIds.has(message.id)) return;
+  seenGlobalMessageIds.add(message.id);
+  if (!message.isOutbound) {
+    Alpine.store('chat').unreadCount++;
+  }
+});
+globalChatConnection.start().catch((err) => console.error('Global chat connection failed:', err));
+
+// Called by Chat/Index.cshtml's own markAsRead flow so this badge drops immediately instead of
+// only correcting itself on the next page load/navigation.
+window.decrementChatUnread = function (count) {
+  const store = Alpine.store('chat');
+  store.unreadCount = Math.max(0, store.unreadCount - count);
+};
+
 // The original app got Alpine.js bundled for free via Livewire's JS runtime. Since this
 // rewrite has no Livewire, Alpine is now an explicit dependency, started once here.
 // $persist (used by the dark-mode toggle in _Layout.cshtml) needs the persist plugin.
