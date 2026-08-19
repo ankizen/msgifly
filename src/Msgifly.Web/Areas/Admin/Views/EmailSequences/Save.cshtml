@@ -16,8 +16,18 @@
     </div>
 }
 
+@{
+    // Plain @expression (auto-HTML-encoded), NOT Html.Raw — this JSON lands inside an HTML
+    // ATTRIBUTE value, and Subject/BodyHtml are free-typed admin content that will routinely
+    // contain '"', '<', '>' etc. Html.Raw here would dump those characters straight into an
+    // attribute already delimited by '"', truncating x-data (or worse, injecting stray
+    // attributes/tags) the moment any mail's subject or body contained a quote — Alpine then
+    // fails to parse the mangled expression and this whole editor silently stops working.
+    // Razor's default encoding round-trips safely through the browser's attribute decoder.
+    var mailsJson = System.Text.Json.JsonSerializer.Serialize(Model.Mails.Select(m => new { m.Subject, m.BodyHtml, m.DelayAmount, m.DelayUnit }));
+}
 <form asp-action="Save" asp-route-id="@Model.Id" method="post" class="space-y-4"
-      x-data="{ mails: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Mails.Select(m => new { m.Subject, m.BodyHtml, m.DelayAmount, m.DelayUnit }))) }">
+      x-data="{ mails: @mailsJson }">
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
             <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>

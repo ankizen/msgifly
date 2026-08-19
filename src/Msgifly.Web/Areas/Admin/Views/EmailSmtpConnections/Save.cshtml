@@ -7,7 +7,18 @@
     <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
 </div>
 
-<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl" x-data="{ provider: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Provider.ToString())) }">
+@{
+    // Plain @expression (auto-HTML-encoded), NOT Html.Raw: this is an HTML ATTRIBUTE value, not a
+    // <script> body. Html.Raw here emitted a literal `"` from the JSON string straight into an
+    // attribute already delimited by `"`, truncating x-data at that inner quote — Alpine then
+    // failed to parse the resulting garbage expression and silently never initialized this
+    // component, so every x-cloak'd provider-specific field stayed hidden forever regardless of
+    // which provider was selected. Razor's default encoding turns the embedded `"` into `&quot;`,
+    // which the browser decodes back to a real `"` in the parsed attribute value before Alpine
+    // ever sees it — the standard fix for embedding JSON into an Alpine x-data attribute.
+    var providerJson = System.Text.Json.JsonSerializer.Serialize(Model.Provider.ToString());
+}
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl" x-data="{ provider: @providerJson }">
     <form asp-action="Save" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <input type="hidden" asp-for="Id" />
         <div class="sm:col-span-2" asp-validation-summary="ModelOnly"></div>
