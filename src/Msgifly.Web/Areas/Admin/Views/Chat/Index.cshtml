@@ -380,6 +380,11 @@ function chatInbox() {
     return {
         chats: [],
         messages: [],
+        // Every message id ReceiveMessage has already counted toward an unread badge — a SignalR
+        // reconnect can redeliver the same message (see addMessageIfNew's comment below), and
+        // unlike the active chat's own message list, a background chat has nothing else guarding
+        // bumpChat() against incrementing unreadCount twice for that one redelivered message.
+        bumpedMessageIds: new Set(),
         cannedReplies: [],
         activeChatId: null,
         search: '',
@@ -458,6 +463,11 @@ function chatInbox() {
         },
 
         bumpChat(chatId, message) {
+            if (this.bumpedMessageIds.has(message.id)) {
+                return;
+            }
+            this.bumpedMessageIds.add(message.id);
+
             const chat = this.chats.find(c => c.id === chatId);
             if (chat) {
                 chat.lastMessage = message.message;
