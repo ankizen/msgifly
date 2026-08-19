@@ -637,10 +637,30 @@ public class ContactsController : Controller
             return NotFound();
         }
 
+        await ClearStaleChatNameAsync(contact);
         _db.Contacts.Remove(contact);
         await _db.SaveChangesAsync();
         this.Notify("Contact deleted.");
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Chat.Name only ever reflects a real, verified WhatsApp profile name when it came
+    /// from an inbound webhook (WhatsAppWebhookController sets it from contacts[].profile.name).
+    /// A quick-send/automation instead seeds a brand-new Chat's Name from the CRM Contact's own
+    /// FullName at send time (AutomationEngine.ResolveOrCreateChatAsync) — never confirmed against
+    /// WhatsApp itself. Deleting that Contact leaves that CRM-sourced name behind with no record
+    /// backing it, looking like a verified name it never was. Reset it to the phone number — this
+    /// codebase's existing "no name known yet" sentinel (see SendTemplate/SendFlow, which detect
+    /// "not yet named" via `chat.Name == contact.Phone`) — but only if the name still exactly
+    /// matches what this contact was called; if it differs, a real inbound reply already refreshed
+    /// it with a genuine WhatsApp profile name, which must not be touched.</summary>
+    private async Task ClearStaleChatNameAsync(Contact contact)
+    {
+        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == contact.Phone);
+        if (chat is not null && chat.Name == contact.FullName)
+        {
+            chat.Name = chat.ReceiverId;
+        }
     }
 
     [HttpPost]
@@ -659,6 +679,11 @@ public class ContactsController : Controller
         // The workspace query filter already confines this to the current tenant's own contacts —
         // an id for another workspace simply matches nothing rather than needing an explicit check.
         var contacts = await _db.Contacts.Where(c => contactIds.Contains(c.Id)).ToListAsync();
+        foreach (var contact in contacts)
+        {
+            await ClearStaleChatNameAsync(contact);
+        }
+
         _db.Contacts.RemoveRange(contacts);
         await _db.SaveChangesAsync();
 
