@@ -18,11 +18,14 @@ public static class ApiScopes
     public const string TemplatesWrite = "templates:write";
     public const string AutomationsRead = "automations:read";
     public const string AutomationsWrite = "automations:write";
+    public const string EmailRead = "email:read";
+    public const string EmailWrite = "email:write";
 
     public static readonly string[] All =
     [
         MessagesSend, MessagesRead, ContactsRead, ContactsWrite, ConversationsRead,
         TemplatesRead, TemplatesWrite, AutomationsRead, AutomationsWrite,
+        EmailRead, EmailWrite,
     ];
 
     public static readonly Dictionary<string, string> Descriptions = new()
@@ -36,5 +39,7 @@ public static class ApiScopes
         [TemplatesWrite] = "Create WhatsApp message templates",
         [AutomationsRead] = "List automations",
         [AutomationsWrite] = "Create and update automations",
+        [EmailRead] = "List email lists, tags, campaigns, automations, and sequences",
+        [EmailWrite] = "Manage email list/tag membership, campaigns, automations, and sequences",
     };
 }
