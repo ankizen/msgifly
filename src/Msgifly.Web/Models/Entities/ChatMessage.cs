@@ -51,6 +51,11 @@ public class ChatMessage
     public bool Clicked { get; set; }
     public string? ClickedButtonText { get; set; }
 
+    /// <summary>The single emoji currently reacted onto this message (from either side — customer
+    /// or agent), or null if none/removed. WhatsApp allows only one reaction per person per
+    /// message, and this inbox shows one combined state per message rather than per-person.</summary>
+    public string? ReactionEmoji { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -90,6 +90,9 @@ public class MediaMessageRequest
     public string? MediaId { get; set; }
     public string? Caption { get; set; }
     public string? Filename { get; set; }
+
+    /// <summary>WhatsApp message id (wamid...) this send should be a quoted reply to, if any.</summary>
+    public string? ReplyToMessageId { get; set; }
 }
 
 public class LocationMessageRequest

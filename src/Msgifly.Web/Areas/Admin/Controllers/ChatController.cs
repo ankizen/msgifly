@@ -154,14 +154,24 @@ public class ChatController : Controller
             : await _db.WhatsappTemplates.AsNoTracking().Where(t => templateNames.Contains(t.TemplateName))
                 .ToDictionaryAsync(t => t.TemplateName);
 
-        var result = messages.Select(m => ToDto(m, chat, m.TemplateName is not null ? templatesByName.GetValueOrDefault(m.TemplateName) : null));
+        var refIds = messages.Where(m => m.RefMessageId != null).Select(m => m.RefMessageId!).Distinct().ToList();
+        Dictionary<string, ChatMessage> repliedToByWamid = refIds.Count == 0
+            ? new()
+            : await _db.ChatMessages.AsNoTracking().Where(m => m.WhatsappMessageId != null && refIds.Contains(m.WhatsappMessageId))
+                .ToDictionaryAsync(m => m.WhatsappMessageId!);
+
+        var result = messages.Select(m => ToDto(
+            m,
+            chat,
+            m.TemplateName is not null ? templatesByName.GetValueOrDefault(m.TemplateName) : null,
+            m.RefMessageId is not null ? repliedToByWamid.GetValueOrDefault(m.RefMessageId) : null));
         return Json(result);
     }
 
     [HttpPost]
     [Authorize(Policy = "chat.view")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SendMessage(int chatId, string text)
+    public async Task<IActionResult> SendMessage(int chatId, string text, int? replyToId)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -184,7 +194,11 @@ public class ChatController : Controller
             return BadRequest("The 24-hour window is closed — this contact hasn't messaged in over a day, so only a template message can reach them now.");
         }
 
-        var result = await _whatsAppService.SendPlainTextMessageAsync(chat.ReceiverId, text);
+        var replyTo = replyToId is not null
+            ? await _db.ChatMessages.FirstOrDefaultAsync(m => m.Id == replyToId && m.ChatId == chatId)
+            : null;
+
+        var result = await _whatsAppService.SendPlainTextMessageAsync(chat.ReceiverId, text, replyTo?.WhatsappMessageId);
         if (!result.Success)
         {
             return BadRequest(result.ErrorMessage);
@@ -203,6 +217,7 @@ public class ChatController : Controller
             Status = MessageDeliveryStatus.Sent,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
+            RefMessageId = replyTo?.WhatsappMessageId,
         };
         _db.ChatMessages.Add(message);
 
@@ -210,7 +225,7 @@ public class ChatController : Controller
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        var dto = ToDto(message, chat);
+        var dto = ToDto(message, chat, repliedToMessage: replyTo);
         await _hubContext.Clients.All.SendAsync("ReceiveMessage", chatId, dto);
 
         return Json(dto);
@@ -219,7 +234,7 @@ public class ChatController : Controller
     [HttpPost]
     [Authorize(Policy = "chat.view")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SendMedia(int chatId, IFormFile file, string? caption)
+    public async Task<IActionResult> SendMedia(int chatId, IFormFile file, string? caption, int? replyToId)
     {
         if (file is null || file.Length == 0)
         {
@@ -260,12 +275,17 @@ public class ChatController : Controller
 
         var publicUrl = $"{Request.Scheme}://{Request.Host}/uploads/chat/{storedFileName}";
 
+        var replyTo = replyToId is not null
+            ? await _db.ChatMessages.FirstOrDefaultAsync(m => m.Id == replyToId && m.ChatId == chatId)
+            : null;
+
         var sendResult = await _whatsAppService.SendMediaMessageAsync(chat.ReceiverId, new MediaMessageRequest
         {
             MediaType = mediaType,
             Link = publicUrl,
             Caption = string.IsNullOrWhiteSpace(caption) ? null : caption,
             Filename = mediaType == "document" ? file.FileName : null,
+            ReplyToMessageId = replyTo?.WhatsappMessageId,
         });
 
         if (!sendResult.Success)
@@ -288,6 +308,7 @@ public class ChatController : Controller
             Status = MessageDeliveryStatus.Sent,
             TimeSent = DateTime.UtcNow,
             IsRead = true,
+            RefMessageId = replyTo?.WhatsappMessageId,
         };
         _db.ChatMessages.Add(message);
 
@@ -295,7 +316,7 @@ public class ChatController : Controller
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        var dto = ToDto(message, chat);
+        var dto = ToDto(message, chat, repliedToMessage: replyTo);
         await _hubContext.Clients.All.SendAsync("ReceiveMessage", chatId, dto);
 
         return Json(dto);
@@ -357,6 +378,43 @@ public class ChatController : Controller
         }
 
         return Ok();
+    }
+
+    /// <summary>
+    /// Reacts to a message with a single emoji, or clears it — pass "" to remove. The reaction is
+    /// combined per-message (not per-person) to keep the inbox simple, matching how ReactionEmoji
+    /// is modeled. Broadcasts the same event WhatsAppWebhookController fires for an inbound
+    /// reaction, so both sides land in the same client handler.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "chat.view")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReactToMessage(int messageId, string emoji)
+    {
+        var message = await _db.ChatMessages.Include(m => m.Chat).FirstOrDefaultAsync(m => m.Id == messageId);
+        if (message is null)
+        {
+            return NotFound();
+        }
+
+        if (string.IsNullOrEmpty(message.WhatsappMessageId))
+        {
+            return BadRequest("This message can't be reacted to.");
+        }
+
+        var result = await _whatsAppService.SendReactionAsync(message.Chat.ReceiverId, message.WhatsappMessageId, emoji);
+        if (!result.Success)
+        {
+            return BadRequest(result.ErrorMessage);
+        }
+
+        message.ReactionEmoji = string.IsNullOrEmpty(emoji) ? null : emoji;
+        message.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await _hubContext.Clients.All.SendAsync("MessageReactionUpdated", message.ChatId, message.Id, message.ReactionEmoji);
+
+        return Json(new { reactionEmoji = message.ReactionEmoji });
     }
 
     [HttpPost]
@@ -522,7 +580,7 @@ public class ChatController : Controller
         return lastInbound is not null && DateTime.UtcNow - lastInbound < TimeSpan.FromHours(24);
     }
 
-    private static ChatMessageDto ToDto(ChatMessage message, Chat chat, WhatsappTemplate? template = null) => new(
+    private static ChatMessageDto ToDto(ChatMessage message, Chat chat, WhatsappTemplate? template = null, ChatMessage? repliedToMessage = null) => new(
         message.Id,
         message.SenderId,
         StripLegacyFooterSuffix(message.Message, template?.FooterText),
@@ -532,7 +590,12 @@ public class ChatController : Controller
         message.Status.ToString(),
         message.Url,
         template?.FooterText,
-        template?.ButtonsJson);
+        template?.ButtonsJson,
+        repliedToMessage is null ? null : new RepliedToPreview(
+            repliedToMessage.Id,
+            ChatPreviewText.ForMedia(repliedToMessage.MessageType ?? "text", repliedToMessage.Message),
+            repliedToMessage.MessageType),
+        message.ReactionEmoji);
 
     /// <summary>Messages sent before TemplateMessageRenderer stopped folding footer text into the
     /// body had it appended as a trailing "\n\nFooter" paragraph. Now that the Chat view renders

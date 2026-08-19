@@ -580,15 +580,19 @@ public class WhatsAppService : IWhatsAppService
         return result.Success ? WhatsAppResult.Ok() : WhatsAppResult.Fail(result.ErrorMessage!);
     }
 
-    public async Task<WhatsAppResult<string>> SendPlainTextMessageAsync(string toPhoneNumber, string messageText)
+    public async Task<WhatsAppResult<string>> SendPlainTextMessageAsync(string toPhoneNumber, string messageText, string? replyToMessageId = null)
     {
-        var payload = new
+        var payload = new Dictionary<string, object?>
         {
-            messaging_product = "whatsapp",
-            to = toPhoneNumber,
-            type = "text",
-            text = new { body = messageText },
+            ["messaging_product"] = "whatsapp",
+            ["to"] = toPhoneNumber,
+            ["type"] = "text",
+            ["text"] = new { body = messageText },
         };
+        if (!string.IsNullOrEmpty(replyToMessageId))
+        {
+            payload["context"] = new { message_id = replyToMessageId };
+        }
 
         return await PostMessageAsync(payload);
     }
@@ -829,6 +833,10 @@ public class WhatsAppService : IWhatsAppService
             ["type"] = mediaType,
             [mediaType] = mediaObject,
         };
+        if (!string.IsNullOrEmpty(request.ReplyToMessageId))
+        {
+            payload["context"] = new { message_id = request.ReplyToMessageId };
+        }
 
         return await PostMessageAsync(payload);
     }

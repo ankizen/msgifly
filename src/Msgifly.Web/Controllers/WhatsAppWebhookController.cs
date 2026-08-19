@@ -258,8 +258,18 @@ public class WhatsAppWebhookController : Controller
                 continue; // Meta retries delivery at-least-once — already processed.
             }
 
-            var messageText = ExtractText(message);
             var messageType = message["type"]?.GetValue<string>() ?? "text";
+            if (messageType == "reaction")
+            {
+                // A reaction updates an EXISTING message, not a new inbound one — Meta's own
+                // retry-at-least-once is naturally idempotent here (re-applying the same emoji to
+                // the same message is a no-op), so this doesn't need the WhatsappMessageId dedup
+                // check above, which only guards against duplicate rows.
+                await ProcessInboundReactionAsync(message);
+                continue;
+            }
+
+            var messageText = ExtractText(message);
             var mediaUrl = await DownloadInboundMediaAsync(message, messageType);
 
             var chat = await _db.Chats.FirstOrDefaultAsync(c => c.ReceiverId == from);
@@ -299,6 +309,8 @@ public class WhatsAppWebhookController : Controller
 
             await _db.SaveChangesAsync(); // need chat.Id for the message below
 
+            var contextMessageId = message["context"]?["id"]?.GetValue<string>();
+
             var inboundMessage = new ChatMessage
             {
                 ChatId = chat.Id,
@@ -310,6 +322,7 @@ public class WhatsAppWebhookController : Controller
                 Status = MessageDeliveryStatus.Read,
                 TimeSent = DateTime.UtcNow,
                 IsRead = false,
+                RefMessageId = contextMessageId,
             };
             _db.ChatMessages.Add(inboundMessage);
             await _db.SaveChangesAsync();
@@ -321,7 +334,6 @@ public class WhatsAppWebhookController : Controller
                 await _db.SaveChangesAsync();
             }
 
-            var contextMessageId = message["context"]?["id"]?.GetValue<string>();
             if (!string.IsNullOrEmpty(contextMessageId))
             {
                 await ProcessReplyAttributionAsync(contextMessageId, messageType, message);
@@ -388,6 +400,35 @@ public class WhatsAppWebhookController : Controller
         {
             await _db.SaveChangesAsync();
         }
+    }
+
+    /// <summary>
+    /// A customer reacting to (or removing a reaction from) one of our outbound messages, or one
+    /// of their own. Meta's payload shape: {"type":"reaction","reaction":{"message_id":"wamid...",
+    /// "emoji":"😀"}} — emoji is absent/empty when a reaction is removed. Combined per-message
+    /// (not per-person) to match ReactionEmoji's own model — see ChatController.ReactToMessage for
+    /// the admin-side equivalent, which broadcasts the same SignalR event.
+    /// </summary>
+    private async Task ProcessInboundReactionAsync(JsonNode message)
+    {
+        var reactedMessageId = message["reaction"]?["message_id"]?.GetValue<string>();
+        if (string.IsNullOrEmpty(reactedMessageId))
+        {
+            return;
+        }
+
+        var target = await _db.ChatMessages.FirstOrDefaultAsync(m => m.WhatsappMessageId == reactedMessageId);
+        if (target is null)
+        {
+            return;
+        }
+
+        var emoji = message["reaction"]?["emoji"]?.GetValue<string>();
+        target.ReactionEmoji = string.IsNullOrEmpty(emoji) ? null : emoji;
+        target.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await _hubContext.Clients.All.SendAsync("MessageReactionUpdated", target.ChatId, target.Id, target.ReactionEmoji);
     }
 
     private async Task FireAutomationsAsync(Chat chat, Contact? contact, string messageText, bool isFirstMessage, string? interactiveReplyId)

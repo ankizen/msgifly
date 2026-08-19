@@ -103,8 +103,37 @@
                             class="mx-auto block text-xs text-emerald-600 hover:text-emerald-500 mb-2">Load older messages</button>
 
                     <template x-for="message in messages" :key="message.id">
-                        <div class="flex" :class="message.isOutbound ? 'justify-end' : 'justify-start'">
-                            <div class="max-w-[85%] sm:max-w-sm rounded-lg overflow-hidden text-sm shadow-sm"
+                        <div class="flex group" :class="message.isOutbound ? 'justify-end' : 'justify-start'">
+                        <div class="relative max-w-[85%] sm:max-w-sm">
+
+                            @* Hover toolbar: reply + react, revealed via the group-hover on the row above — same convention WhatsApp Web itself uses instead of always-visible icons cluttering every bubble. *@
+                            <div class="absolute -top-3 hidden group-hover:flex items-center gap-0.5 bg-white dark:bg-slate-700 rounded-full shadow border border-gray-200 dark:border-slate-600 px-1 py-0.5 z-10"
+                                 :class="message.isOutbound ? 'right-2' : 'left-2'">
+                                <button type="button" x-on:click="startReply(message)" title="Reply"
+                                        class="p-1 rounded-full text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 016 6v2" />
+                                    </svg>
+                                </button>
+                                <div class="relative" x-data="{ pickerOpen: false }">
+                                    <button type="button" x-on:click="pickerOpen = !pickerOpen" x-on:click.outside="pickerOpen = false" title="React"
+                                            class="p-1 rounded-full text-gray-500 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-600">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.008v.015h-.008V9.75zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm-.375 0h.008v.015h-.008V9.75z" />
+                                        </svg>
+                                    </button>
+                                    <div x-show="pickerOpen" x-cloak
+                                         class="absolute top-7 flex gap-1 bg-white dark:bg-slate-700 rounded-full shadow-lg ring-1 ring-black ring-opacity-5 px-2 py-1 z-20"
+                                         :class="message.isOutbound ? 'right-0' : 'left-0'">
+                                        <template x-for="emoji in quickEmojis" :key="emoji">
+                                            <button type="button" x-on:click="reactTo(message, emoji); pickerOpen = false"
+                                                    class="text-lg leading-none hover:scale-125 transition-transform" x-text="emoji"></button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="rounded-lg overflow-hidden text-sm shadow-sm"
                                  :class="message.isOutbound ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100'">
 
                                 @* Image/video headers render edge-to-edge, filling the bubble's own width — same as WhatsApp itself. w-full + h-auto (no object-fit, no height cap) means it always spans the full bubble width with height following the image's real aspect ratio, so nothing is ever cropped or stretched out of shape; the bubble's own max-width above is what keeps it from growing unbounded. *@
@@ -118,6 +147,13 @@
                                 </template>
 
                                 <div class="px-3 py-2">
+                                    @* Quoted-reply preview — a colored left strip + the original's resolved preview text, matching WhatsApp's own reply-quote block. *@
+                                    <template x-if="message.repliedTo">
+                                        <div class="mb-1.5 pl-2 py-1 border-l-4 rounded-sm text-xs opacity-80 truncate"
+                                             :class="message.isOutbound ? 'border-emerald-300 bg-emerald-700/40' : 'border-emerald-500 bg-gray-100 dark:bg-slate-600'"
+                                             x-text="message.repliedTo.preview"></div>
+                                    </template>
+
                                     <template x-if="message.messageType === 'audio'">
                                         <audio :src="message.url" controls class="mb-1 max-w-full"></audio>
                                     </template>
@@ -174,6 +210,13 @@
                                     </a>
                                 </template>
                             </div>
+
+                            @* Reaction badge — a small floating chip overlapping the bubble's corner, matching WhatsApp's own reaction display. *@
+                            <button type="button" x-show="message.reactionEmoji" x-cloak
+                                    x-on:click="reactTo(message, message.reactionEmoji)" title="Remove reaction"
+                                    class="absolute -bottom-2 flex items-center justify-center h-5 w-5 rounded-full bg-white dark:bg-slate-800 shadow border border-gray-200 dark:border-slate-600 text-xs leading-none"
+                                    :class="message.isOutbound ? 'right-1' : 'left-1'" x-text="message.reactionEmoji"></button>
+                        </div>
                         </div>
                     </template>
                 </div>
@@ -201,6 +244,12 @@
                 </template>
                 <template x-if="!activeChat?.isBlocked">
                 <div class="p-3 border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                    <template x-if="replyingTo">
+                        <div class="mb-2 flex items-center gap-2 rounded-md bg-gray-50 dark:bg-slate-900 pl-3 pr-2 py-1.5 border-l-4 border-emerald-500">
+                            <span class="flex-1 min-w-0 truncate text-xs text-gray-600 dark:text-slate-300" x-text="replyingTo.preview"></span>
+                            <button type="button" x-on:click="replyingTo = null" title="Cancel reply" class="p-1 text-gray-400 hover:text-red-500">&times;</button>
+                        </div>
+                    </template>
                     <div class="flex items-end gap-2">
                         <div class="relative" x-data="{ open: false }">
                             <button type="button" x-on:click="open = !open" x-on:click.outside="open = false"
@@ -395,6 +444,9 @@ function chatInbox() {
         isMobile: window.innerWidth < 640,
         connection: null,
 
+        replyingTo: null, // { id, preview } — set via startReply(), sent along with the next message
+        quickEmojis: ['👍', '❤️', '😂', '😮', '😢', '🙏'],
+
         templates: config.templates,
         statusOptions: config.statusOptions,
         sourceOptions: config.sourceOptions,
@@ -464,6 +516,13 @@ function chatInbox() {
                 if (message) message.status = status;
             });
 
+            // Fired by both ChatController.ReactToMessage (an admin reacting) and
+            // WhatsAppWebhookController's inbound-reaction handling — same event either way.
+            this.connection.on('MessageReactionUpdated', (chatId, messageId, emoji) => {
+                const message = this.messages.find(m => m.id === messageId);
+                if (message) message.reactionEmoji = emoji;
+            });
+
             this.connection.start().catch(err => console.error('SignalR connection failed:', err));
         },
 
@@ -514,6 +573,7 @@ function chatInbox() {
         async selectChat(chatId) {
             this.activeChatId = chatId;
             this.messages = [];
+            this.replyingTo = null;
             await this.loadMessages(chatId, false);
             await this.markAsRead(chatId);
             const chat = this.chats.find(c => c.id === chatId);
@@ -555,12 +615,18 @@ function chatInbox() {
                     formData.append('chatId', this.activeChatId);
                     formData.append('file', this.pendingFile);
                     formData.append('caption', this.composeText);
+                    if (this.replyingTo) formData.append('replyToId', this.replyingTo.id);
                     formData.append('__RequestVerificationToken', this.antiForgeryToken());
                     res = await fetch('/Admin/Chat/SendMedia', { method: 'POST', body: formData });
                 } else {
                     res = await fetch('/Admin/Chat/SendMessage', {
                         method: 'POST',
-                        body: new URLSearchParams({ chatId: this.activeChatId, text: this.composeText, __RequestVerificationToken: this.antiForgeryToken() }),
+                        body: new URLSearchParams({
+                            chatId: this.activeChatId,
+                            text: this.composeText,
+                            replyToId: this.replyingTo?.id ?? '',
+                            __RequestVerificationToken: this.antiForgeryToken(),
+                        }),
                     });
                 }
 
@@ -573,6 +639,7 @@ function chatInbox() {
                 this.addMessageIfNew(message);
                 this.composeText = '';
                 this.pendingFile = null;
+                this.replyingTo = null;
                 this.$refs.fileInput.value = '';
                 this.bumpChat(this.activeChatId, message);
                 this.$nextTick(() => this.scrollToBottom());
@@ -590,6 +657,31 @@ function chatInbox() {
             if (!value) return '';
             const date = new Date(value);
             return date.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' });
+        },
+
+        startReply(message) {
+            const mediaLabels = { image: '📷 Photo', video: '🎥 Video', audio: '🎵 Audio', sticker: 'Sticker', document: '📄 Document' };
+            this.replyingTo = {
+                id: message.id,
+                preview: message.message || mediaLabels[message.messageType] || message.messageType || '',
+            };
+        },
+
+        // Tapping the same emoji the message already has removes it (toggle), matching WhatsApp's
+        // own reaction behavior — same clicked from the floating badge itself (see the reaction
+        // badge markup) or from the quick-react picker.
+        async reactTo(message, emoji) {
+            const nextEmoji = message.reactionEmoji === emoji ? '' : emoji;
+            const res = await fetch('/Admin/Chat/ReactToMessage', {
+                method: 'POST',
+                body: new URLSearchParams({ messageId: message.id, emoji: nextEmoji, __RequestVerificationToken: this.antiForgeryToken() }),
+            });
+            if (!res.ok) {
+                window.showNotification(await res.text(), 'danger');
+                return;
+            }
+            const { reactionEmoji } = await res.json();
+            message.reactionEmoji = reactionEmoji;
         },
 
         // Tolerant of both shapes ButtonsJson can actually be stored in: Meta's own sync format

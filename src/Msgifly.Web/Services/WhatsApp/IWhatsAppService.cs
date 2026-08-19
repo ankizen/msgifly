@@ -22,8 +22,8 @@ public interface IWhatsAppService
 
     Task<WhatsAppResult> SendTestMessageAsync(string toPhoneNumber, string messageText);
 
-    /// <summary>Returns the WhatsApp message id (wamid) on success — needed to correlate later delivery-status webhooks.</summary>
-    Task<WhatsAppResult<string>> SendPlainTextMessageAsync(string toPhoneNumber, string messageText);
+    /// <summary>Returns the WhatsApp message id (wamid) on success — needed to correlate later delivery-status webhooks. replyToMessageId, if given, makes this a quoted reply to that message (Meta's "context").</summary>
+    Task<WhatsAppResult<string>> SendPlainTextMessageAsync(string toPhoneNumber, string messageText, string? replyToMessageId = null);
 
     /// <summary>Sends an approved template message. Returns the WhatsApp message id (wamid) on success.</summary>
     Task<WhatsAppResult<string>> SendTemplateMessageAsync(string toPhoneNumber, TemplateSendRequest request);
