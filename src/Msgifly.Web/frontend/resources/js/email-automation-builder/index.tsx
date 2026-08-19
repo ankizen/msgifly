@@ -20,10 +20,6 @@ export function mountEmailAutomationBuilder(container: HTMLElement, initial: Ini
   const handle: EmailAutomationBuilderHandle = {
     exportForSubmit: () => inner.current?.exportForSubmit() ?? EMPTY_EXPORT,
     focusNode: (nodeId) => inner.current?.focusNode(nodeId),
-    tidyUp: () => inner.current?.tidyUp(),
-    zoomIn: () => inner.current?.zoomIn(),
-    zoomOut: () => inner.current?.zoomOut(),
-    zoomReset: () => inner.current?.zoomReset(),
     destroy: () => {
       inner.current?.destroy();
       root.unmount();

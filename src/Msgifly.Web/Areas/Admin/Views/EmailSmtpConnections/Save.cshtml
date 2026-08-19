@@ -7,16 +7,22 @@
     <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
 </div>
 
-<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl">
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl" x-data="{ provider: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Provider.ToString())) }">
     <form asp-action="Save" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <input type="hidden" asp-for="Id" />
         <div class="sm:col-span-2" asp-validation-summary="ModelOnly"></div>
 
         <div>
             <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-            <input asp-for="Name" placeholder="Primary SMTP" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <input asp-for="Name" placeholder="Primary sender" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
-        <div class="flex items-end gap-4 pb-1">
+        <div>
+            <label asp-for="Provider" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <select asp-for="Provider" x-model="provider" asp-items="Html.GetEnumSelectList<Msgifly.Web.Models.Enums.EmailSmtpProvider>()"
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
+        </div>
+
+        <div class="flex items-center gap-4 sm:col-span-2">
             <label class="inline-flex items-center gap-2">
                 <input asp-for="IsDefault" type="checkbox" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
                 <span class="text-sm text-gray-700 dark:text-slate-300">Default connection</span>
@@ -27,11 +33,12 @@
             </label>
         </div>
 
-        <div>
+        @* ---- Smtp ---- *@
+        <div x-show="provider === 'Smtp'" x-cloak>
             <label asp-for="Host" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
             <input asp-for="Host" placeholder="smtp.example.com" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div x-show="provider === 'Smtp'" x-cloak class="grid grid-cols-2 gap-4">
             <div>
                 <label asp-for="Port" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
                 <input asp-for="Port" type="number" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
@@ -41,15 +48,57 @@
                 <span class="text-sm text-gray-700 dark:text-slate-300">Use SSL/TLS</span>
             </label>
         </div>
-
-        <div>
+        <div x-show="provider === 'Smtp'" x-cloak>
             <label asp-for="Username" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
             <input asp-for="Username" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
-        <div>
+        <div x-show="provider === 'Smtp'" x-cloak>
             <label asp-for="Password" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-            <input asp-for="Password" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current password")"
+            <input asp-for="Password" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        @* ---- Brevo / SendGrid / Postmark: just an API key ---- *@
+        <div x-show="provider === 'Brevo' || provider === 'SendGrid' || provider === 'Postmark'" x-cloak class="sm:col-span-2">
+            <label asp-for="ApiKey" class="block text-sm font-medium text-gray-700 dark:text-slate-300">
+                <span x-text="provider === 'Postmark' ? 'Server API Token' : 'API Key'"></span>
+            </label>
+            <input asp-for="ApiKey" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        @* ---- Mailgun ---- *@
+        <div x-show="provider === 'Mailgun'" x-cloak>
+            <label asp-for="ApiKey" class="block text-sm font-medium text-gray-700 dark:text-slate-300">API Key</label>
+            <input asp-for="ApiKey" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div x-show="provider === 'Mailgun'" x-cloak>
+            <label asp-for="Domain" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Domain</label>
+            <input asp-for="Domain" placeholder="mg.yourdomain.com" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div x-show="provider === 'Mailgun'" x-cloak>
+            <label asp-for="Region" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Region</label>
+            <select asp-for="Region" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                <option value="us">US</option>
+                <option value="eu">EU</option>
+            </select>
+        </div>
+
+        @* ---- AmazonSes ---- *@
+        <div x-show="provider === 'AmazonSes'" x-cloak>
+            <label asp-for="AccessKey" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Access Key</label>
+            <input asp-for="AccessKey" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div x-show="provider === 'AmazonSes'" x-cloak>
+            <label asp-for="SecretKey" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Secret Key</label>
+            <input asp-for="SecretKey" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div x-show="provider === 'AmazonSes'" x-cloak class="sm:col-span-2">
+            <label asp-for="Region" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Region</label>
+            <input asp-for="Region" placeholder="us-east-1" class="mt-1 block w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
 
         <div>

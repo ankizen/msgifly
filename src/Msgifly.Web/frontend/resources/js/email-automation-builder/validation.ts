@@ -64,34 +64,3 @@ export function computeValidationIssues(tree: EmailAutomationTree): ValidationIs
   walk(tree.steps);
   return issues;
 }
-
-/** A Condition step is only ever authored as the last item in its array by this builder — the
- * engine actually tolerates trailing siblings after a Condition, but this UI can't render or author
- * that shape. A tree loaded with that shape anyway (e.g. authored via a future integration) would
- * have those trailing steps silently dropped on next save; this surfaces a one-time non-blocking
- * notice instead of staying silent about it. Identical logic to the WhatsApp canvas's
- * detectTrailingSiblingsAfterCondition — the tree shape it walks is generic enough to copy verbatim. */
-export function detectTrailingSiblingsAfterCondition(steps: EmailStepNode[]): ValidationIssue[] {
-  const issues: ValidationIssue[] = [];
-
-  function walk(scope: EmailStepNode[]) {
-    const conditionIndex = scope.findIndex((s) => s.type === 'Condition');
-    if (conditionIndex !== -1 && conditionIndex < scope.length - 1) {
-      const condition = scope[conditionIndex];
-      const droppedCount = scope.length - conditionIndex - 1;
-      issues.push({
-        nodeId: condition.id,
-        message: `Condition: ${droppedCount} step${droppedCount === 1 ? '' : 's'} after this one in the same sequence can't be shown here and will be dropped if you save.`,
-      });
-    }
-    for (const step of scope) {
-      if (step.type === 'Condition') {
-        walk(step.yes);
-        walk(step.no);
-      }
-    }
-  }
-
-  walk(steps);
-  return issues;
-}

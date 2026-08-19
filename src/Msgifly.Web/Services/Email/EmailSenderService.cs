@@ -1,30 +1,30 @@
-using MailKit.Net.Smtp;
-using MailKit.Security;
 using Microsoft.EntityFrameworkCore;
-using MimeKit;
 using Msgifly.Web.Data;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Models.Enums;
+using Msgifly.Web.Services.Email.Providers;
 using Msgifly.Web.Services.Workspaces;
 
 namespace Msgifly.Web.Services.Email;
 
 /// <summary>
-/// Sends via a workspace's configured EmailSmtpConnection using MailKit (SmtpClient/System.Net.Mail
-/// is Microsoft-obsolete). Connection resolution: exact FromEmail match (active) -> else the
-/// workspace's IsDefault connection -> else Fail. Generic SMTP only — no per-provider API
-/// integrations, since every provider FluentSMTP special-cases also exposes a standard SMTP relay
-/// endpoint this already reaches.
+/// Sends via a workspace's configured EmailSmtpConnection, dispatching to the connection's
+/// Provider-specific handler (SMTP relay via MailKit, or a real API integration — Brevo,
+/// SendGrid, Mailgun, Amazon SES, Postmark — see Services/Email/Providers/). Connection
+/// resolution: exact FromEmail match (active) -> else the workspace's IsDefault connection ->
+/// else Fail.
 /// </summary>
 public class EmailSenderService : IEmailSender
 {
     private readonly ApplicationDbContext _db;
+    private readonly EmailProviderHandlerFactory _handlerFactory;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly ILogger<EmailSenderService> _logger;
 
-    public EmailSenderService(ApplicationDbContext db, ICurrentWorkspaceAccessor workspaceAccessor, ILogger<EmailSenderService> logger)
+    public EmailSenderService(ApplicationDbContext db, EmailProviderHandlerFactory handlerFactory, ICurrentWorkspaceAccessor workspaceAccessor, ILogger<EmailSenderService> logger)
     {
         _db = db;
+        _handlerFactory = handlerFactory;
         _workspaceAccessor = workspaceAccessor;
         _logger = logger;
     }
@@ -50,24 +50,11 @@ public class EmailSenderService : IEmailSender
 
         try
         {
-            var message = new MimeMessage();
-            message.From.Add(new MailboxAddress(fromName ?? fromEmail, fromEmail));
-            message.To.Add(MailboxAddress.Parse(request.ToEmail));
-            message.Subject = request.Subject;
-            message.Body = new TextPart(MimeKit.Text.TextFormat.Html) { Text = request.BodyHtml };
+            var handler = _handlerFactory.Resolve(connection.Provider);
+            var result = await handler.SendAsync(connection, fromEmail, fromName, request);
 
-            using var client = new SmtpClient();
-            await client.ConnectAsync(connection.Host, connection.Port, connection.EnableSsl ? SecureSocketOptions.Auto : SecureSocketOptions.None);
-            if (!string.IsNullOrEmpty(connection.Username))
-            {
-                await client.AuthenticateAsync(connection.Username, connection.Password);
-            }
-
-            await client.SendAsync(message);
-            await client.DisconnectAsync(true);
-
-            var logId = await WriteLogAsync(workspaceId.Value, request, fromEmail, EmailLogStatus.Sent, null);
-            return EmailSendResult.Ok(logId);
+            var logId = await WriteLogAsync(workspaceId.Value, request, fromEmail, result.Success ? EmailLogStatus.Sent : EmailLogStatus.Failed, result.ErrorMessage);
+            return result.Success ? EmailSendResult.Ok(logId) : EmailSendResult.Fail(result.ErrorMessage ?? "Send failed.", logId);
         }
         catch (Exception ex)
         {

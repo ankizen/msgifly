@@ -5,6 +5,7 @@ using Msgifly.Web.Data;
 using Msgifly.Web.Extensions;
 using Msgifly.Web.Models;
 using Msgifly.Web.Models.Entities;
+using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services.Email;
 using Msgifly.Web.Services.Workspaces;
@@ -52,15 +53,20 @@ public class EmailSmtpConnectionsController : Controller
         {
             Id = connection.Id,
             Name = connection.Name,
+            Provider = connection.Provider,
             Host = connection.Host,
-            Port = connection.Port,
+            Port = connection.Port ?? 587,
             Username = connection.Username,
             EnableSsl = connection.EnableSsl,
+            Domain = connection.Domain,
+            Region = connection.Region,
             FromEmail = connection.FromEmail,
             FromName = connection.FromName,
             IsDefault = connection.IsDefault,
             MaxSendsPerMinute = connection.MaxSendsPerMinute,
             IsActive = connection.IsActive,
+            // Secrets (Password/ApiKey/AccessKey/SecretKey) are never re-populated into the form —
+            // left blank means "keep what's already stored", same convention as Workspace.AccessToken.
         });
     }
 
@@ -69,10 +75,7 @@ public class EmailSmtpConnectionsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Save(EmailSmtpConnectionFormViewModel model)
     {
-        if (model.Id is null && string.IsNullOrWhiteSpace(model.Password))
-        {
-            ModelState.AddModelError(nameof(model.Password), "Password is required for a new connection.");
-        }
+        ValidateProviderFields(model);
 
         if (!ModelState.IsValid)
         {
@@ -89,51 +92,47 @@ public class EmailSmtpConnectionsController : Controller
             }
         }
 
-        if (model.Id is null)
+        EmailSmtpConnection connection;
+        bool isNew = model.Id is null;
+        if (isNew)
         {
-            _db.EmailSmtpConnections.Add(new EmailSmtpConnection
-            {
-                WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
-                Name = model.Name,
-                Host = model.Host,
-                Port = model.Port,
-                Username = model.Username,
-                Password = model.Password ?? string.Empty,
-                EnableSsl = model.EnableSsl,
-                FromEmail = model.FromEmail,
-                FromName = model.FromName,
-                IsDefault = model.IsDefault,
-                MaxSendsPerMinute = model.MaxSendsPerMinute,
-                IsActive = model.IsActive,
-            });
-            this.Notify("SMTP connection created.");
+            connection = new EmailSmtpConnection { WorkspaceId = _workspaceAccessor.WorkspaceId!.Value };
+            _db.EmailSmtpConnections.Add(connection);
         }
         else
         {
-            var connection = await _db.EmailSmtpConnections.FindAsync(model.Id.Value);
-            if (connection is null)
+            var existing = await _db.EmailSmtpConnections.FindAsync(model.Id!.Value);
+            if (existing is null)
             {
                 return NotFound();
             }
 
-            connection.Name = model.Name;
-            connection.Host = model.Host;
-            connection.Port = model.Port;
-            connection.Username = model.Username;
-            if (!string.IsNullOrWhiteSpace(model.Password))
-            {
-                connection.Password = model.Password;
-            }
-
-            connection.EnableSsl = model.EnableSsl;
-            connection.FromEmail = model.FromEmail;
-            connection.FromName = model.FromName;
-            connection.IsDefault = model.IsDefault;
-            connection.MaxSendsPerMinute = model.MaxSendsPerMinute;
-            connection.IsActive = model.IsActive;
+            connection = existing;
             connection.UpdatedAt = DateTime.UtcNow;
-            this.Notify("SMTP connection updated.");
         }
+
+        connection.Name = model.Name;
+        connection.Provider = model.Provider;
+        connection.Host = model.Host;
+        connection.Port = model.Port;
+        connection.Username = model.Username;
+        connection.EnableSsl = model.EnableSsl;
+        connection.Domain = model.Domain;
+        connection.Region = model.Region;
+        connection.FromEmail = model.FromEmail;
+        connection.FromName = model.FromName;
+        connection.IsDefault = model.IsDefault;
+        connection.MaxSendsPerMinute = model.MaxSendsPerMinute;
+        connection.IsActive = model.IsActive;
+
+        // Secrets only overwritten when the form actually posted a new value — a blank field on
+        // edit keeps whatever's already stored, same convention as Workspace.AccessToken.
+        if (!string.IsNullOrWhiteSpace(model.Password)) connection.Password = model.Password;
+        if (!string.IsNullOrWhiteSpace(model.ApiKey)) connection.ApiKey = model.ApiKey;
+        if (!string.IsNullOrWhiteSpace(model.AccessKey)) connection.AccessKey = model.AccessKey;
+        if (!string.IsNullOrWhiteSpace(model.SecretKey)) connection.SecretKey = model.SecretKey;
+
+        this.Notify(isNew ? "SMTP connection created." : "SMTP connection updated.");
 
         await _db.SaveChangesAsync();
         return RedirectToAction(nameof(Index));
@@ -178,5 +177,71 @@ public class EmailSmtpConnectionsController : Controller
         await _db.SaveChangesAsync();
         this.Notify("SMTP connection deleted.");
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Each provider needs a different subset of credential fields — validated here
+    /// rather than via static [Required] attributes, since which fields are required depends on
+    /// the selected Provider. Secrets are exempt on edit (blank = keep existing) but required on
+    /// create, same reasoning as the Password field already had.</summary>
+    private void ValidateProviderFields(EmailSmtpConnectionFormViewModel model)
+    {
+        bool isNew = model.Id is null;
+
+        switch (model.Provider)
+        {
+            case EmailSmtpProvider.Smtp:
+                if (string.IsNullOrWhiteSpace(model.Host))
+                {
+                    ModelState.AddModelError(nameof(model.Host), "Host is required.");
+                }
+
+                if (isNew && string.IsNullOrWhiteSpace(model.Password))
+                {
+                    ModelState.AddModelError(nameof(model.Password), "Password is required for a new connection.");
+                }
+
+                break;
+
+            case EmailSmtpProvider.Brevo:
+            case EmailSmtpProvider.SendGrid:
+            case EmailSmtpProvider.Postmark:
+                if (isNew && string.IsNullOrWhiteSpace(model.ApiKey))
+                {
+                    ModelState.AddModelError(nameof(model.ApiKey), "API key is required.");
+                }
+
+                break;
+
+            case EmailSmtpProvider.Mailgun:
+                if (isNew && string.IsNullOrWhiteSpace(model.ApiKey))
+                {
+                    ModelState.AddModelError(nameof(model.ApiKey), "API key is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(model.Domain))
+                {
+                    ModelState.AddModelError(nameof(model.Domain), "Domain is required.");
+                }
+
+                break;
+
+            case EmailSmtpProvider.AmazonSes:
+                if (isNew && string.IsNullOrWhiteSpace(model.AccessKey))
+                {
+                    ModelState.AddModelError(nameof(model.AccessKey), "Access key is required.");
+                }
+
+                if (isNew && string.IsNullOrWhiteSpace(model.SecretKey))
+                {
+                    ModelState.AddModelError(nameof(model.SecretKey), "Secret key is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(model.Region))
+                {
+                    ModelState.AddModelError(nameof(model.Region), "Region is required.");
+                }
+
+                break;
+        }
     }
 }

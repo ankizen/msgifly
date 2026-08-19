@@ -49,20 +49,20 @@
                 </ul>
             </div>
         </template>
-        <div class="relative">
-            <div id="emailAutomationCanvas" class="relative w-full" style="height: clamp(420px, calc(100vh - 320px), 900px);" x-ignore></div>
-            <div x-show="loading" x-cloak class="absolute inset-0 flex items-center justify-center bg-white dark:bg-slate-800" style="height: clamp(420px, calc(100vh - 320px), 900px);">
+        <div class="relative min-h-[240px]">
+            <div id="emailAutomationCanvas" class="relative w-full" x-ignore></div>
+            <div x-show="loading" x-cloak class="absolute inset-0 flex items-center justify-center bg-white dark:bg-slate-800 min-h-[240px]">
                 <div class="flex flex-col items-center gap-2 text-gray-400 dark:text-slate-500">
                     <svg class="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                     </svg>
-                    <span class="text-xs">Loading canvas…</span>
+                    <span class="text-xs">Loading…</span>
                 </div>
             </div>
         </div>
         <p class="px-3 py-2 text-xs text-gray-400 dark:text-slate-500 border-t border-gray-100 dark:border-slate-700">
-            Click the trigger node to choose when this runs and which list/tag it's scoped to. Click the + on any step to add what comes next. Click a step to edit it in the panel.
+            Click the trigger card to choose when this runs and which list/tag it's scoped to. Click a step to edit it, or use the + between steps to add another.
         </p>
     </div>
 
@@ -86,28 +86,17 @@
             loading: true,
             validationIssues: [],
             dirty: false,
-            resizeCanvas() {
-                const el = document.getElementById('emailAutomationCanvas');
-                if (!el) return;
-                const top = el.getBoundingClientRect().top;
-                const height = Math.max(420, Math.round(window.innerHeight - top - 16));
-                el.style.height = height + 'px';
-                if (el.nextElementSibling) el.nextElementSibling.style.height = height + 'px';
-            },
             async init() {
-                window.addEventListener('resize', () => this.resizeCanvas());
                 const initial = {
                     triggerType: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.TriggerType)),
                     listId: @Html.Raw(Model.ListId?.ToString() ?? "null"),
                     tagId: @Html.Raw(Model.TagId?.ToString() ?? "null"),
                     steps: JSON.parse(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StepsJson))),
                 };
-                this.resizeCanvas();
                 const { mountEmailAutomationBuilder } = await window.loadEmailAutomationBuilder();
                 this.canvas = mountEmailAutomationBuilder(document.getElementById('emailAutomationCanvas'), initial, (state) => {
                     this.validationIssues = state.validationIssues || [];
                     if (!state.isInitialRender) this.dirty = true;
-                    this.$nextTick(() => this.resizeCanvas());
                 });
                 this.loading = false;
 

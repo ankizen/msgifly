@@ -10,6 +10,7 @@ using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Services.Automations;
 using Msgifly.Web.Services.Email;
+using Msgifly.Web.Services.Email.Providers;
 using Msgifly.Web.Services.EmailAutomations;
 using Msgifly.Web.Services.EmailSequences;
 using Msgifly.Web.Services.Groups;
@@ -88,6 +89,10 @@ builder.Services.AddHttpClient("EmailAutomationWebhook", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
 });
+builder.Services.AddHttpClient("EmailProvider", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
 builder.Services.AddHttpClient("Coolify", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);
@@ -100,6 +105,13 @@ builder.Services.AddScoped<ContactGroupResolver>();
 builder.Services.AddScoped<IEmailSender, EmailSenderService>();
 builder.Services.AddScoped<EmailMergeTagRenderer>();
 builder.Services.AddScoped<EmailAudienceResolver>();
+builder.Services.AddScoped<IEmailProviderHandler, SmtpProviderHandler>();
+builder.Services.AddScoped<IEmailProviderHandler, BrevoProviderHandler>();
+builder.Services.AddScoped<IEmailProviderHandler, SendGridProviderHandler>();
+builder.Services.AddScoped<IEmailProviderHandler, MailgunProviderHandler>();
+builder.Services.AddScoped<IEmailProviderHandler, AmazonSesProviderHandler>();
+builder.Services.AddScoped<IEmailProviderHandler, PostmarkProviderHandler>();
+builder.Services.AddScoped<EmailProviderHandlerFactory>();
 builder.Services.AddScoped<EmailAutomationEngine>();
 builder.Services.AddScoped<EmailSequenceService>();
 builder.Services.AddScoped<LeadAdsSyncJob>();

@@ -4,19 +4,22 @@ export interface StepMetaEntry {
   label: string;
   icon: string;
   category: 'Messaging' | 'Logic' | 'Actions';
+  /** One-line blurb shown on each row of the Add-step drawer (FluentCRM's own block picker shows
+   * the same icon+title+description shape per row). */
+  description: string;
 }
 
 export const STEP_META: Record<EmailStepType, StepMetaEntry> = {
-  SendEmail: { label: 'Send Email', icon: '✉️', category: 'Messaging' },
-  Wait: { label: 'Wait', icon: '⏱', category: 'Logic' },
-  Condition: { label: 'Condition (if/else)', icon: '🔀', category: 'Logic' },
-  AddTag: { label: 'Add Tag', icon: '🏷️', category: 'Actions' },
-  RemoveTag: { label: 'Remove Tag', icon: '🚫', category: 'Actions' },
-  AddToList: { label: 'Add to List', icon: '📋', category: 'Actions' },
-  RemoveFromList: { label: 'Remove from List', icon: '📤', category: 'Actions' },
-  UpdateSubscriberField: { label: 'Update Subscriber Field', icon: '✏️', category: 'Actions' },
-  Webhook: { label: 'Call Webhook', icon: '🌐', category: 'Actions' },
-  Stop: { label: 'Stop', icon: '⏹', category: 'Actions' },
+  SendEmail: { label: 'Send Email', icon: '✉️', category: 'Messaging', description: 'Send a one-off email to the subscriber.' },
+  Wait: { label: 'Wait', icon: '⏱', category: 'Logic', description: 'Pause this branch for a set amount of time.' },
+  Condition: { label: 'Condition (if/else)', icon: '🔀', category: 'Logic', description: 'Branch into Yes/No paths based on a subscriber check.' },
+  AddTag: { label: 'Add Tag', icon: '🏷️', category: 'Actions', description: 'Apply a tag to the subscriber.' },
+  RemoveTag: { label: 'Remove Tag', icon: '🚫', category: 'Actions', description: 'Remove a tag from the subscriber.' },
+  AddToList: { label: 'Add to List', icon: '📋', category: 'Actions', description: 'Add the subscriber to a list.' },
+  RemoveFromList: { label: 'Remove from List', icon: '📤', category: 'Actions', description: 'Remove the subscriber from a list.' },
+  UpdateSubscriberField: { label: 'Update Subscriber Field', icon: '✏️', category: 'Actions', description: 'Set a field on the subscriber’s profile.' },
+  Webhook: { label: 'Call Webhook', icon: '🌐', category: 'Actions', description: 'Send subscriber data to an external URL.' },
+  Stop: { label: 'Stop', icon: '⏹', category: 'Actions', description: 'End this branch here.' },
 };
 
 export interface StepColor {

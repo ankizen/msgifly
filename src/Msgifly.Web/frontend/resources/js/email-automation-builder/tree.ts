@@ -120,8 +120,14 @@ export function insertAfterNode(steps: EmailStepNode[], afterId: string, newNode
 
 export type InsertScope = { kind: 'root' } | { kind: 'branch'; conditionId: string; branch: 'yes' | 'no' };
 
+/** Where a pick from AddStepDrawer should land: right after an existing step (the per-row "+"
+ * connector), or at the front of an empty list/branch (the dashed placeholder button) — the two
+ * insertion primitives insertAfterNode/insertAtScopeStart below cover both. */
+export type AddTarget = { kind: 'after'; anchorId: string } | { kind: 'start'; scope: InsertScope };
+
 /** Unshifts `newNode` to the front of the root array, or a Condition's Yes/No branch — used only
- * where an EmptySlotNode placeholder is currently rendered (root-is-empty, or an empty branch). */
+ * where StepList's own "+ Add step" empty-state placeholder is currently rendered (root-is-empty,
+ * or an empty branch). */
 export function insertAtScopeStart(steps: EmailStepNode[], scope: InsertScope, newNode: EmailStepNode): EmailStepNode[] {
   if (scope.kind === 'root') {
     return [newNode, ...steps];
@@ -168,6 +174,64 @@ export function deleteStep(steps: EmailStepNode[], id: string): { steps: EmailSt
     return { ...step, yes: yesResult.steps, no: noResult.steps };
   });
   return changed ? { steps: next, removedCount } : { steps, removedCount: 0 };
+}
+
+/** Deep-clones a node with fresh ids throughout its subtree — same re-id need as treeFromWire
+ * (a clone can never share an id with its source), just applied to an in-memory node instead of a
+ * wire-parsed one. */
+function regenerateIds(node: EmailStepNode): EmailStepNode {
+  if (node.type === 'Condition') {
+    return { ...node, id: newId(), yes: node.yes.map(regenerateIds), no: node.no.map(regenerateIds) };
+  }
+  return { ...node, id: newId() };
+}
+
+/** Clones the node (and, for a Condition, its whole Yes/No subtree) and splices the clone in
+ * immediately after the original — mirrors the FluentCRM funnel editor's per-block "Clone" menu
+ * action. Same recursive-array-hunt shape as deleteStep/updateStepConfig below. */
+export function cloneStep(steps: EmailStepNode[], id: string): EmailStepNode[] {
+  const index = steps.findIndex((s) => s.id === id);
+  if (index !== -1) {
+    const next = [...steps];
+    next.splice(index + 1, 0, regenerateIds(steps[index]));
+    return next;
+  }
+
+  let changed = false;
+  const next = steps.map((step) => {
+    if (step.type !== 'Condition') return step;
+    const yes = cloneStep(step.yes, id);
+    const no = cloneStep(step.no, id);
+    if (yes === step.yes && no === step.no) return step;
+    changed = true;
+    return { ...step, yes, no };
+  });
+  return changed ? next : steps;
+}
+
+/** Swaps the node with its immediate previous/next sibling in whichever array it lives in — the
+ * up/down reorder buttons on each step card. A no-op (returns the original reference) at either
+ * end of the list, same as FluentCRM's disabled-at-the-ends arrow buttons. */
+export function moveStep(steps: EmailStepNode[], id: string, direction: 'up' | 'down'): EmailStepNode[] {
+  const index = steps.findIndex((s) => s.id === id);
+  if (index !== -1) {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= steps.length) return steps;
+    const next = [...steps];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    return next;
+  }
+
+  let changed = false;
+  const next = steps.map((step) => {
+    if (step.type !== 'Condition') return step;
+    const yes = moveStep(step.yes, id, direction);
+    const no = moveStep(step.no, id, direction);
+    if (yes === step.yes && no === step.no) return step;
+    changed = true;
+    return { ...step, yes, no };
+  });
+  return changed ? next : steps;
 }
 
 export function updateStepConfig<T extends EmailStepType>(steps: EmailStepNode[], id: string, patch: Partial<ConfigFor<T>>): EmailStepNode[] {

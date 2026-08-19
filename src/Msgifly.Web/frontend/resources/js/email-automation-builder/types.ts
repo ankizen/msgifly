@@ -148,12 +148,11 @@ export interface OnChangeState {
   isInitialRender: boolean;
 }
 
+/** zoomIn/zoomOut/zoomReset/tidyUp from the old React-Flow-canvas handle are gone — there's no
+ * pan/zoom surface left to operate on now that this renders as a plain scrolling block list, and
+ * Save.cshtml never called them (it only calls exportForSubmit/focusNode). */
 export interface EmailAutomationBuilderHandle {
   exportForSubmit(): ExportResult;
   focusNode(nodeId: string): void;
-  tidyUp(): void;
-  zoomIn(): void;
-  zoomOut(): void;
-  zoomReset(): void;
   destroy(): void;
 }

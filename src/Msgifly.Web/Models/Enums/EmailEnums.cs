@@ -42,3 +42,15 @@ public enum EmailCustomFieldType
     Date = 2,
     Dropdown = 3,
 }
+
+/// <summary>Mirrors FluentSMTP's provider set (Providers/config.php) — real HTTP API
+/// integrations, not just generic SMTP relay.</summary>
+public enum EmailSmtpProvider
+{
+    Smtp = 0,
+    Brevo = 1,
+    SendGrid = 2,
+    Mailgun = 3,
+    AmazonSes = 4,
+    Postmark = 5,
+}
