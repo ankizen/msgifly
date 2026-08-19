@@ -104,17 +104,17 @@
 
                     <template x-for="message in messages" :key="message.id">
                         <div class="flex" :class="message.isOutbound ? 'justify-end' : 'justify-start'">
-                            <div class="max-w-[75%] rounded-lg overflow-hidden text-sm shadow-sm"
+                            <div class="max-w-[85%] sm:max-w-sm rounded-lg overflow-hidden text-sm shadow-sm"
                                  :class="message.isOutbound ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100'">
 
-                                @* Image/video headers render edge-to-edge at the top of the bubble, exactly like WhatsApp itself — no padding, only the bubble's own rounded corners. *@
+                                @* Image/video headers render edge-to-edge at the top of the bubble, exactly like WhatsApp itself — no padding, only the bubble's own rounded corners. No forced width/object-fit: the full image renders at its own aspect ratio (never cropped), just capped so it can't blow out past the bubble. *@
                                 <template x-if="message.messageType === 'image' || message.messageType === 'sticker'">
                                     <a :href="message.url" target="_blank" rel="noopener">
-                                        <img :src="message.url" class="block w-full max-h-64 object-cover" loading="lazy" />
+                                        <img :src="message.url" class="block max-w-full max-h-80" loading="lazy" />
                                     </a>
                                 </template>
                                 <template x-if="message.messageType === 'video'">
-                                    <video :src="message.url" controls class="block w-full max-h-64"></video>
+                                    <video :src="message.url" controls class="block max-w-full max-h-80"></video>
                                 </template>
 
                                 <div class="px-3 py-2">
