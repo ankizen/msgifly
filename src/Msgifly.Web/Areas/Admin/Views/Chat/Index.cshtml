@@ -107,14 +107,14 @@
                             <div class="max-w-[85%] sm:max-w-sm rounded-lg overflow-hidden text-sm shadow-sm"
                                  :class="message.isOutbound ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100'">
 
-                                @* Image/video headers render edge-to-edge at the top of the bubble, exactly like WhatsApp itself — no padding, only the bubble's own rounded corners. No forced width/object-fit: the full image renders at its own aspect ratio (never cropped), just capped so it can't blow out past the bubble. *@
+                                @* Image/video headers render edge-to-edge, filling the bubble's own width — same as WhatsApp itself. w-full + h-auto (no object-fit, no height cap) means it always spans the full bubble width with height following the image's real aspect ratio, so nothing is ever cropped or stretched out of shape; the bubble's own max-width above is what keeps it from growing unbounded. *@
                                 <template x-if="message.messageType === 'image' || message.messageType === 'sticker'">
                                     <a :href="message.url" target="_blank" rel="noopener">
-                                        <img :src="message.url" class="block max-w-full max-h-80" loading="lazy" />
+                                        <img :src="message.url" class="block w-full h-auto" loading="lazy" />
                                     </a>
                                 </template>
                                 <template x-if="message.messageType === 'video'">
-                                    <video :src="message.url" controls class="block max-w-full max-h-80"></video>
+                                    <video :src="message.url" controls class="block w-full h-auto"></video>
                                 </template>
 
                                 <div class="px-3 py-2">
