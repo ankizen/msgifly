@@ -114,7 +114,15 @@
                             class="mx-auto block text-xs text-emerald-600 hover:text-emerald-500 mb-2">Load older messages</button>
 
                     <template x-for="message in messages" :key="message.id">
-                        <div class="flex group" :class="message.isOutbound ? 'justify-end' : 'justify-start'" :id="'msg-' + message.id">
+                        <div :id="'msg-' + message.id">
+                        @* System notes (e.g. "📌 Pinned: ...") render as a centered pill, not a normal aligned bubble — they're not from either party and can't be reacted to/replied to/pinned themselves. *@
+                        <template x-if="message.messageType === 'system'">
+                            <div class="flex justify-center my-1">
+                                <span class="px-3 py-1 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-slate-300 text-xs text-center" x-text="message.message"></span>
+                            </div>
+                        </template>
+                        <template x-if="message.messageType !== 'system'">
+                        <div class="flex group" :class="message.isOutbound ? 'justify-end' : 'justify-start'">
                         <div class="relative max-w-[85%] sm:max-w-sm">
 
                             @* Hover toolbar: reply + react, revealed via the group-hover on the row above — same convention WhatsApp Web itself uses instead of always-visible icons cluttering every bubble. *@
@@ -236,6 +244,8 @@
                                     class="absolute -bottom-2 flex items-center justify-center h-5 w-5 rounded-full bg-white dark:bg-slate-800 shadow border border-gray-200 dark:border-slate-600 text-xs leading-none"
                                     :class="message.isOutbound ? 'right-1' : 'left-1'" x-text="message.reactionEmoji"></button>
                         </div>
+                        </div>
+                        </template>
                         </div>
                     </template>
                 </div>
@@ -732,11 +742,18 @@ function chatInbox() {
                 window.showNotification(await res.text(), 'danger');
                 return;
             }
-            const { isPinned, unpinnedMessageId } = await res.json();
+            const { isPinned, unpinnedMessageId, systemMessage } = await res.json();
             message.isPinned = isPinned;
             if (unpinnedMessageId) {
                 const previous = this.messages.find(m => m.id === unpinnedMessageId);
                 if (previous) previous.isPinned = false;
+            }
+            // Also arrives via the ReceiveMessage SignalR broadcast (for any other open tab) —
+            // addMessageIfNew's id dedup means adding it here too, for this tab's own immediate
+            // feedback, is safe.
+            if (systemMessage) {
+                this.addMessageIfNew(systemMessage);
+                this.$nextTick(() => this.scrollToBottom());
             }
         },
 

@@ -428,7 +428,7 @@ public class ChatController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> TogglePin(int messageId)
     {
-        var message = await _db.ChatMessages.FirstOrDefaultAsync(m => m.Id == messageId);
+        var message = await _db.ChatMessages.Include(m => m.Chat).FirstOrDefaultAsync(m => m.Id == messageId);
         if (message is null)
         {
             return NotFound();
@@ -453,11 +453,43 @@ public class ChatController : Controller
         }
 
         message.UpdatedAt = DateTime.UtcNow;
-        await _db.SaveChangesAsync();
+
+        // A small in-timeline note, matching WhatsApp's own "You pinned a message" system bubble —
+        // purely local (MessageType "system"), never sent to WhatsApp itself (there's nothing to
+        // send: Meta has no pin concept at all). Only on pin, not unpin — real WhatsApp doesn't
+        // note the reverse either. Deliberately leaves chat.LastMessage/LastMessageTime untouched,
+        // same reasoning: pinning isn't a "new message" for the conversation list's own preview.
+        ChatMessageDto? systemDto = null;
+        if (message.IsPinned)
+        {
+            var preview = ChatPreviewText.ForMedia(message.MessageType ?? "text", message.Message);
+            var truncatedPreview = preview.Length > 60 ? preview[..60] + "…" : preview;
+            var systemMessage = new ChatMessage
+            {
+                ChatId = message.ChatId,
+                SenderId = "system",
+                Message = $"📌 Pinned: {truncatedPreview}",
+                MessageType = "system",
+                Status = MessageDeliveryStatus.Sent,
+                TimeSent = DateTime.UtcNow,
+                IsRead = true,
+            };
+            _db.ChatMessages.Add(systemMessage);
+            await _db.SaveChangesAsync();
+            systemDto = ToDto(systemMessage, message.Chat);
+        }
+        else
+        {
+            await _db.SaveChangesAsync();
+        }
 
         await _hubContext.Clients.All.SendAsync("PinnedMessageChanged", message.ChatId, message.IsPinned ? message.Id : (int?)null, unpinnedMessageId);
+        if (systemDto is not null)
+        {
+            await _hubContext.Clients.All.SendAsync("ReceiveMessage", message.ChatId, systemDto);
+        }
 
-        return Json(new { isPinned = message.IsPinned, unpinnedMessageId });
+        return Json(new { isPinned = message.IsPinned, unpinnedMessageId, systemMessage = systemDto });
     }
 
     [HttpPost]
