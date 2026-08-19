@@ -79,8 +79,14 @@ public class ChatController : Controller
         // picking one, which took the whole chat list down.
         //
         // Also carries the Contact's own name — once someone's saved as a Contact, whatever the
-        // CRM has for them (which the admin can rename freely) should win over Chat.Name, which
-        // is just whatever WhatsApp itself last reported as that number's own profile name.
+        // CRM has for them (which the admin can rename freely) should win over Chat.Name. Chat.Name
+        // itself is NOT a reliable display name on its own: it's only ever refreshed from a real
+        // WhatsApp profile name via an inbound webhook (WhatsAppWebhookController), but a quick-
+        // send/automation instead seeds a brand-new Chat's Name from whatever Contact was being
+        // messaged at the time — never confirmed against WhatsApp. If that Contact is later
+        // deleted (or never replies, so the webhook path never ran), Chat.Name is left holding a
+        // name with nothing backing it. Rather than risk showing a stale/wrong name, no Contact
+        // match means falling back to the phone number, not Chat.Name.
         var contactInfo = await _db.Contacts.AsNoTracking()
             .Where(c => receiverIds.Contains(c.Phone))
             .GroupBy(c => c.Phone)
@@ -109,7 +115,7 @@ public class ChatController : Controller
             var contact = contactInfo.GetValueOrDefault(c.ReceiverId);
             return new ChatSummaryDto(
                 c.Id,
-                !string.IsNullOrWhiteSpace(contact?.Name) ? contact.Name : c.Name,
+                !string.IsNullOrWhiteSpace(contact?.Name) ? contact.Name : c.ReceiverId,
                 c.ReceiverId,
                 c.LastMessage,
                 c.LastMessageTime,
@@ -142,7 +148,13 @@ public class ChatController : Controller
         var messages = await query.OrderByDescending(m => m.Id).Take(MessagePageSize).ToListAsync();
         messages.Reverse();
 
-        var result = messages.Select(m => ToDto(m, chat));
+        var templateNames = messages.Where(m => m.TemplateName != null).Select(m => m.TemplateName!).Distinct().ToList();
+        Dictionary<string, WhatsappTemplate> templatesByName = templateNames.Count == 0
+            ? new()
+            : await _db.WhatsappTemplates.AsNoTracking().Where(t => templateNames.Contains(t.TemplateName))
+                .ToDictionaryAsync(t => t.TemplateName);
+
+        var result = messages.Select(m => ToDto(m, chat, m.TemplateName is not null ? templatesByName.GetValueOrDefault(m.TemplateName) : null));
         return Json(result);
     }
 
@@ -491,7 +503,7 @@ public class ChatController : Controller
         chat.LastMessageTime = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        var dto = ToDto(message, chat);
+        var dto = ToDto(message, chat, template);
         await _hubContext.Clients.All.SendAsync("ReceiveMessage", chatId, dto);
 
         return Json(dto);
@@ -510,13 +522,31 @@ public class ChatController : Controller
         return lastInbound is not null && DateTime.UtcNow - lastInbound < TimeSpan.FromHours(24);
     }
 
-    private static ChatMessageDto ToDto(ChatMessage message, Chat chat) => new(
+    private static ChatMessageDto ToDto(ChatMessage message, Chat chat, WhatsappTemplate? template = null) => new(
         message.Id,
         message.SenderId,
-        message.Message,
+        StripLegacyFooterSuffix(message.Message, template?.FooterText),
         message.MessageType,
         message.TimeSent,
         IsOutbound: message.StaffId is not null || message.SenderId != chat.ReceiverId,
         message.Status.ToString(),
-        message.Url);
+        message.Url,
+        template?.FooterText,
+        template?.ButtonsJson);
+
+    /// <summary>Messages sent before TemplateMessageRenderer stopped folding footer text into the
+    /// body had it appended as a trailing "\n\nFooter" paragraph. Now that the Chat view renders
+    /// the footer as its own distinct line (sourced from the template, not the stored message
+    /// text), strip that old suffix at read time so it doesn't appear twice — a pure display-time
+    /// normalization, no data rewrite needed.</summary>
+    private static string StripLegacyFooterSuffix(string text, string? footerText)
+    {
+        if (string.IsNullOrWhiteSpace(footerText))
+        {
+            return text;
+        }
+
+        var suffix = "\n\n" + footerText;
+        return text.EndsWith(suffix, StringComparison.Ordinal) ? text[..^suffix.Length] : text;
+    }
 }

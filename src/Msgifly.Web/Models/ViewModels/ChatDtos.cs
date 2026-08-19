@@ -21,6 +21,11 @@ public record ChatMessageDto(
     DateTime TimeSent,
     bool IsOutbound,
     string Status,
-    string? Url = null);
+    string? Url = null,
+    /// <summary>Set only for a template send whose template still exists locally — looked up live
+    /// by TemplateName rather than stored per-message, so it reflects the template's current
+    /// footer/buttons even for messages sent before this field existed.</summary>
+    string? FooterText = null,
+    string? ButtonsJson = null);
 
 public record CannedReplyDto(int Id, string Title, string Description);

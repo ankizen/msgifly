@@ -30,11 +30,14 @@ public static class TemplateMessageRenderer
         });
     }
 
-    /// <summary>Full display form for a Chat bubble: header + body + footer with params filled
-    /// in. When the header is media, the media type/url are returned separately so the caller can
-    /// store them on MessageType/Url — the Chat view already knows how to render an image/video/
-    /// document bubble, so a template with a media header renders exactly like a normal media
-    /// message with the body text as its caption, matching what the recipient saw.</summary>
+    /// <summary>Full display form for a Chat bubble: header + body with params filled in. Footer
+    /// text is NOT folded in here — the Chat view renders it as its own distinct (small, muted)
+    /// line by looking the template up via ChatMessage.TemplateName at read time, matching how
+    /// WhatsApp itself visually separates footer from body instead of running them together as one
+    /// paragraph. When the header is media, the media type/url are returned separately so the
+    /// caller can store them on MessageType/Url — the Chat view already knows how to render an
+    /// image/video/document bubble, so a template with a media header renders exactly like a
+    /// normal media message with the body text as its caption, matching what the recipient saw.</summary>
     public static Rendered ForChatMessage(WhatsappTemplate template, TemplateSendRequest request)
     {
         var isTextHeader = string.Equals(template.HeaderFormat, "TEXT", StringComparison.OrdinalIgnoreCase);
@@ -48,11 +51,6 @@ public static class TemplateMessageRenderer
         }
 
         parts.Add(RenderText(template.BodyText, request.BodyParams) ?? string.Empty);
-
-        if (!string.IsNullOrWhiteSpace(template.FooterText))
-        {
-            parts.Add(template.FooterText);
-        }
 
         var displayText = string.Join("\n\n", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
         var mediaUrl = isMediaHeader ? (request.HeaderMediaUrl ?? template.HeaderMediaUrl) : null;
