@@ -10,6 +10,8 @@
     var automationOptions = (List<AutomationOption>)ViewData["AutomationOptions"]!;
     var groupOptions = (List<GroupOption>)ViewData["GroupOptions"]!;
     var groupFilterOptions = (List<GroupOption>)ViewData["GroupFilterOptions"]!;
+    var emailAutomationOptions = (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewData["EmailAutomationOptions"]!;
+    var emailSequenceOptions = (List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>)ViewData["EmailSequenceOptions"]!;
     var hasActiveFilters = !string.IsNullOrEmpty(ViewData["Search"]?.ToString())
         || ViewData["StatusId"] is not null || ViewData["SourceId"] is not null
         || !string.IsNullOrEmpty(ViewData["LeadFormId"]?.ToString()) || ViewData["GroupId"] is not null;
@@ -109,6 +111,13 @@
                 Run Automation
             </button>
         }
+        @if (emailAutomationOptions.Count > 0)
+        {
+            <button type="button" class="text-emerald-700 dark:text-emerald-400 hover:text-emerald-600 font-medium"
+                    x-on:click="openEmailAutomationForBulk(selectedIds)">
+                Run Email Automation
+            </button>
+        }
         <button type="button" class="text-red-600 hover:text-red-500 font-medium"
                 x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("BulkDelete")?ids=' + selectedIds.join(','), message: `Delete ${selectedIds.length} contact(s)? This cannot be undone.` })">
             Delete selected
@@ -196,6 +205,23 @@
                                                 x-on:click="openAutomationFor(@contact.Id, @System.Text.Json.JsonSerializer.Serialize(contact.FullName))">
                                             Run Automation
                                         </button>
+                                    }
+                                    @if (!string.IsNullOrEmpty(contact.Email))
+                                    {
+                                        @if (emailAutomationOptions.Count > 0)
+                                        {
+                                            <button type="button" class="block w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                    x-on:click="openEmailAutomationFor(@contact.Id, @System.Text.Json.JsonSerializer.Serialize(contact.FullName))">
+                                                Run Email Automation
+                                            </button>
+                                        }
+                                        @if (emailSequenceOptions.Count > 0)
+                                        {
+                                            <button type="button" class="block w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                                                    x-on:click="openAddToSequenceFor(@contact.Id, @System.Text.Json.JsonSerializer.Serialize(contact.FullName))">
+                                                Add to Sequence
+                                            </button>
+                                        }
                                     }
                                     <a asp-action="Save" asp-route-id="@contact.Id" class="block px-3 py-1.5 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">Edit</a>
                                     <button type="button" class="block w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -388,6 +414,75 @@
     </div>
 </div>
 
+@* ---------- Run Email Automation modal ---------- *@
+<div x-show="runEmailAutomationOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+    <div class="fixed inset-0 bg-black/40" x-on:click="runEmailAutomationOpen = false"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6" x-on:click.stop>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Run Email Automation</h2>
+            <p class="text-sm text-gray-500 dark:text-slate-400 mb-1"
+               x-text="runEmailAutomationBulkMode ? (runEmailAutomationBulkIds.length + ' contact(s) selected') : ('For: ' + runEmailAutomationContactName)"></p>
+            <p class="text-xs text-gray-400 dark:text-slate-500 mb-4">Runs the automation's full step tree right now — real emails, real waits.</p>
+
+            <form method="post" class="space-y-4"
+                  x-bind:action="runEmailAutomationBulkMode ? '@Url.Action("BulkRunEmailAutomation")' : '@Url.Action("RunEmailAutomation")'">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="contactId" x-bind:value="runEmailAutomationContactId" />
+                <input type="hidden" name="ids" x-bind:value="runEmailAutomationBulkIds.join(',')" />
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Email automation</label>
+                    <select name="automationId" x-model="emailAutomationId"
+                            class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="">Choose an automation...</option>
+                        @foreach (var a in emailAutomationOptions)
+                        {
+                            <option value="@a.Value">@a.Text</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="submit" :disabled="!emailAutomationId" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Run</button>
+                    <button type="button" x-on:click="runEmailAutomationOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@* ---------- Add to Email Sequence modal ---------- *@
+<div x-show="addToSequenceOpen" x-cloak class="fixed inset-0 z-40 overflow-y-auto" style="display: none;">
+    <div class="fixed inset-0 bg-black/40" x-on:click="addToSequenceOpen = false"></div>
+    <div class="flex min-h-full items-center justify-center p-4">
+        <div class="relative bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6" x-on:click.stop>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Add to Email Sequence</h2>
+            <p class="text-sm text-gray-500 dark:text-slate-400 mb-4" x-text="'For: ' + addToSequenceContactName"></p>
+
+            <form asp-action="AddToEmailSequence" method="post" class="space-y-4">
+                <input type="hidden" name="contactId" x-bind:value="addToSequenceContactId" />
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Sequence</label>
+                    <select name="sequenceId" x-model="sequenceId"
+                            class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="">Choose a sequence...</option>
+                        @foreach (var s in emailSequenceOptions)
+                        {
+                            <option value="@s.Value">@s.Text</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="submit" :disabled="!sequenceId" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium">Add</button>
+                    <button type="button" x-on:click="addToSequenceOpen = false" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 </div>
 
 @section Scripts {
@@ -416,7 +511,41 @@
             runAutomationContactName: '',
             automationId: '',
 
+            runEmailAutomationOpen: false,
+            runEmailAutomationBulkMode: false,
+            runEmailAutomationBulkIds: [],
+            runEmailAutomationContactId: null,
+            runEmailAutomationContactName: '',
+            emailAutomationId: '',
+
+            addToSequenceOpen: false,
+            addToSequenceContactId: null,
+            addToSequenceContactName: '',
+            sequenceId: '',
+
             init() {},
+
+            openEmailAutomationFor(contactId, contactName) {
+                this.runEmailAutomationBulkMode = false;
+                this.runEmailAutomationContactId = contactId;
+                this.runEmailAutomationContactName = contactName;
+                this.emailAutomationId = '';
+                this.runEmailAutomationOpen = true;
+            },
+
+            openEmailAutomationForBulk(ids) {
+                this.runEmailAutomationBulkMode = true;
+                this.runEmailAutomationBulkIds = ids;
+                this.emailAutomationId = '';
+                this.runEmailAutomationOpen = true;
+            },
+
+            openAddToSequenceFor(contactId, contactName) {
+                this.addToSequenceContactId = contactId;
+                this.addToSequenceContactName = contactName;
+                this.sequenceId = '';
+                this.addToSequenceOpen = true;
+            },
 
             openFlowFor(contactId, contactName) {
                 this.flowContactId = contactId;

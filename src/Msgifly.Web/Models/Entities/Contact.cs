@@ -47,6 +47,15 @@ public class Contact
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Email opt-in state — only Subscribed/Transactional are bulk-sendable from Email
+    /// Marketing. A Contact IS the email subscriber (no separate list): the same person who came
+    /// in as a WhatsApp/Facebook lead is who gets emailed, so this lives directly here rather than
+    /// duplicating the record. Unrelated to StatusId (that's the CRM pipeline stage).</summary>
+    public EmailSubscriberStatus EmailStatus { get; set; } = EmailSubscriberStatus.Subscribed;
+
+    /// <summary>Values keyed by EmailCustomField.Key — a JSON blob, not EAV.</summary>
+    public string EmailCustomFieldsJson { get; set; } = "{}";
+
     public ICollection<ContactNote> Notes { get; set; } = new List<ContactNote>();
 
     public string FullName => $"{FirstName} {LastName}".Trim();

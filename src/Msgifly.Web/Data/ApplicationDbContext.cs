@@ -77,7 +77,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<AutomationLog> AutomationLogs => Set<AutomationLog>();
 
     // --- Email Marketing (independent stack, see Models/Entities/Email*.cs) ---------------------
-    public DbSet<EmailSubscriber> EmailSubscribers => Set<EmailSubscriber>();
+    // No separate "EmailSubscriber" DbSet — Contact IS the email subscriber (see Contact.EmailStatus).
     public DbSet<EmailList> EmailLists => Set<EmailList>();
     public DbSet<EmailTag> EmailTags => Set<EmailTag>();
     public DbSet<EmailSubscriberList> EmailSubscriberLists => Set<EmailSubscriberList>();
@@ -136,8 +136,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<AutomationStep>().HasQueryFilter(s => s.Automation.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<AutomationLog>().HasQueryFilter(l => l.Automation.WorkspaceId == _workspaceAccessor.WorkspaceId);
 
-        // Email Marketing — independent stack, same scoping pattern as above.
-        builder.Entity<EmailSubscriber>().HasQueryFilter(s => s.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        // Email Marketing — independent stack, same scoping pattern as above. No EmailSubscriber
+        // filter: Contact already carries one (see the very first line of this block).
         builder.Entity<EmailList>().HasQueryFilter(l => l.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<EmailTag>().HasQueryFilter(t => t.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<EmailCustomField>().HasQueryFilter(f => f.WorkspaceId == _workspaceAccessor.WorkspaceId);
@@ -160,6 +160,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             e.Property(c => c.LastName).HasMaxLength(255).IsRequired();
             e.Property(c => c.Phone).HasMaxLength(30).IsRequired();
             e.HasIndex(c => c.Phone);
+            // Not unique — a Contact can exist with no email at all (WhatsApp-only lead), and two
+            // Contacts sharing an email isn't a real constraint here the way phone is. Just an
+            // index for Email Marketing's own lookups (audience resolution, unsubscribe-by-token).
+            e.HasIndex(c => c.Email);
 
             e.HasOne(c => c.Status)
                 .WithMany(s => s.Contacts)
@@ -342,21 +346,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         });
 
         // --- Email Marketing (independent stack; see Models/Entities/Email*.cs) -----------------
-        builder.Entity<EmailSubscriber>(e =>
-        {
-            e.Property(s => s.Email).HasMaxLength(256).IsRequired();
-            e.HasIndex(s => new { s.WorkspaceId, s.Email }).IsUnique();
-
-            e.HasOne(s => s.Contact)
-                .WithMany()
-                .HasForeignKey(s => s.ContactId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            e.HasOne(s => s.Source)
-                .WithMany()
-                .HasForeignKey(s => s.SourceId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
+        // No EmailSubscriber config — Contact IS the email subscriber (see the Contact block above).
 
         builder.Entity<EmailList>(e => e.HasIndex(l => l.WorkspaceId));
         builder.Entity<EmailTag>(e => e.HasIndex(t => t.WorkspaceId));

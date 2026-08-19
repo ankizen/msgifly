@@ -34,7 +34,8 @@ public static class Permissions
         "email_template.view", "email_template.edit",
         "automation.view", "automation.create", "automation.edit", "automation.delete",
         "workspace.view", "workspace.create", "workspace.edit",
-        "email_subscriber.view", "email_subscriber.create", "email_subscriber.edit", "email_subscriber.delete", "email_subscriber.bulk_import",
+        // No email_subscriber.* — Contact IS the email subscriber (Leads & CRM's contact.*
+        // permissions already gate list/tag/email-status management on the Contact form).
         "email_list.view", "email_list.create", "email_list.edit", "email_list.delete",
         "email_tag.view", "email_tag.create", "email_tag.edit", "email_tag.delete",
         "email_campaign.view", "email_campaign.create", "email_campaign.edit", "email_campaign.delete", "email_campaign.send",

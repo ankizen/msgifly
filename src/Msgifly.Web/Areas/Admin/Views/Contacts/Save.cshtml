@@ -1,6 +1,11 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using Msgifly.Web.Models.Entities
 @model Msgifly.Web.Models.ViewModels.ContactFormViewModel
 @{
     ViewData["Title"] = Model.Id is null ? "Add Contact" : "Edit Contact";
+    var emailListOptions = ViewData["EmailListOptions"] as List<SelectListItem> ?? [];
+    var emailTagOptions = ViewData["EmailTagOptions"] as List<SelectListItem> ?? [];
+    var emailCustomFields = ViewData["EmailCustomFields"] as List<EmailCustomField> ?? [];
 }
 
 <div class="mb-6">
@@ -18,13 +23,17 @@
                 <button type="button" x-on:click="tab = 'notes'"
                         :class="tab === 'notes' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-500 dark:text-slate-400'"
                         class="whitespace-nowrap border-b-2 py-3 text-sm font-medium">Notes (@Model.Notes.Count)</button>
+                <button type="button" x-on:click="tab = 'email'"
+                        :class="tab === 'email' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-500 dark:text-slate-400'"
+                        class="whitespace-nowrap border-b-2 py-3 text-sm font-medium">Email Marketing</button>
             </nav>
         </div>
     }
 
-    <div x-show="tab === 'details'" class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
-        <form asp-action="Save" method="post">
-            <input type="hidden" asp-for="Id" />
+    <form asp-action="Save" method="post">
+        <input type="hidden" asp-for="Id" />
+
+        <div x-show="tab === 'details'" class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
             <div asp-validation-summary="ModelOnly" class="mb-4 text-sm text-red-600"></div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -102,13 +111,88 @@
                 <input asp-for="IsEnabled" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
                 <span class="text-sm text-gray-700 dark:text-slate-300">@Html.DisplayNameFor(m => m.IsEnabled)</span>
             </label>
+        </div>
 
-            <div class="mt-6 flex gap-3">
-                <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
-                <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium">Cancel</a>
+        @if (Model.Id is not null)
+        {
+            <div x-show="tab === 'email'" x-cloak class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 space-y-6">
+                <div>
+                    <label asp-for="EmailStatus" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                    <select asp-for="EmailStatus" asp-items="Html.GetEnumSelectList<Msgifly.Web.Models.Enums.EmailSubscriberStatus>()"
+                            class="mt-1 block w-full max-w-xs rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
+                    <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">Only Subscribed/Transactional contacts receive bulk email campaigns. Requires an Email address above.</p>
+                </div>
+
+                @if (emailListOptions.Count > 0)
+                {
+                    <div>
+                        <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Lists</span>
+                        <div class="space-y-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 dark:border-slate-700 p-2">
+                            @foreach (var item in emailListOptions)
+                            {
+                                var listId = int.Parse(item.Value!);
+                                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                                    <input type="checkbox" name="SelectedListIds" value="@item.Value" checked="@Model.SelectedListIds.Contains(listId)"
+                                           class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                                    @item.Text
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (emailTagOptions.Count > 0)
+                {
+                    <div>
+                        <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Tags</span>
+                        <div class="space-y-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 dark:border-slate-700 p-2">
+                            @foreach (var item in emailTagOptions)
+                            {
+                                var tagId = int.Parse(item.Value!);
+                                <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                                    <input type="checkbox" name="SelectedTagIds" value="@item.Value" checked="@Model.SelectedTagIds.Contains(tagId)"
+                                           class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                                    @item.Text
+                                </label>
+                            }
+                        </div>
+                    </div>
+                }
+                @if (emailListOptions.Count == 0 && emailTagOptions.Count == 0)
+                {
+                    <p class="text-sm text-gray-500 dark:text-slate-400">
+                        No lists or tags yet — create some under
+                        <a asp-area="Admin" asp-controller="EmailLists" asp-action="Index" class="text-emerald-600 hover:text-emerald-500">Email Marketing</a>.
+                    </p>
+                }
+
+                @if (emailCustomFields.Count > 0)
+                {
+                    <div class="border-t border-gray-100 dark:border-slate-700 pt-4">
+                        <p class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Custom fields</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            @foreach (var field in emailCustomFields)
+                            {
+                                Model.EmailCustomFieldValues.TryGetValue(field.Key, out var value);
+                                <div>
+                                    <label class="block text-sm text-gray-700 dark:text-slate-300">@field.Label</label>
+                                    <input type="text" name="EmailCustomFieldValues[@field.Key]" value="@value"
+                                           class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+                <p class="text-xs text-gray-400 dark:text-slate-500">
+                    <a asp-area="Admin" asp-controller="EmailCustomFields" asp-action="Index" class="text-emerald-600 hover:text-emerald-500">Manage custom fields</a>
+                </p>
             </div>
-        </form>
-    </div>
+        }
+
+        <div class="mt-6 flex gap-3">
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
+            <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium">Cancel</a>
+        </div>
+    </form>
 
     @if (Model.Id is not null)
     {

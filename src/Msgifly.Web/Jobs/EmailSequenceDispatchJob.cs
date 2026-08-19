@@ -80,7 +80,7 @@ public class EmailSequenceDispatchJob
             return;
         }
 
-        if (tracker.Subscriber.Status is EmailSubscriberStatus.Unsubscribed or EmailSubscriberStatus.Bounced or EmailSubscriberStatus.Complained)
+        if (tracker.Subscriber.EmailStatus is EmailSubscriberStatus.Unsubscribed or EmailSubscriberStatus.Bounced or EmailSubscriberStatus.Complained)
         {
             tracker.Status = EmailSequenceSubscriberStatus.Cancelled;
             tracker.UpdatedAt = DateTime.UtcNow;
@@ -100,9 +100,14 @@ public class EmailSequenceDispatchJob
             return;
         }
 
-        var subject = _mergeTagRenderer.Render(mail.Subject, tracker.Subscriber);
-        var body = _mergeTagRenderer.Render(mail.BodyHtml, tracker.Subscriber);
-        await _emailSender.SendAsync(new EmailSendRequest(tracker.Subscriber.Email, subject, body, Source: $"Sequence:{tracker.SequenceId}"));
+        // SubscribeAsync refuses to enroll a contact with no email, but it could theoretically be
+        // cleared afterwards — skip rather than send to a blank address if that ever happens.
+        if (!string.IsNullOrWhiteSpace(tracker.Subscriber.Email))
+        {
+            var subject = _mergeTagRenderer.Render(mail.Subject, tracker.Subscriber);
+            var body = _mergeTagRenderer.Render(mail.BodyHtml, tracker.Subscriber);
+            await _emailSender.SendAsync(new EmailSendRequest(tracker.Subscriber.Email, subject, body, Source: $"Sequence:{tracker.SequenceId}"));
+        }
 
         // Advances regardless of send success/failure — one bad address shouldn't wedge the rest
         // of the drip, same reasoning as CampaignMessageJob not retrying a rejected send.

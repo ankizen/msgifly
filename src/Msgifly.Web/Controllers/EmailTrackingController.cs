@@ -91,7 +91,7 @@ public class EmailTrackingController : Controller
         recipient.UpdatedAt = DateTime.UtcNow;
 
         // Unsubscribe is global, not per-campaign — matches FluentCRM's own semantics.
-        recipient.Subscriber.Status = EmailSubscriberStatus.Unsubscribed;
+        recipient.Subscriber.EmailStatus = EmailSubscriberStatus.Unsubscribed;
         recipient.Subscriber.UpdatedAt = DateTime.UtcNow;
 
         await _sequenceService.UnsubscribeAllAsync(recipient.Subscriber.Id);

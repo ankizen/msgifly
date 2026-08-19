@@ -7,10 +7,11 @@ using Msgifly.Web.Models.Enums;
 namespace Msgifly.Web.Services.Email;
 
 /// <summary>
-/// Turns an EmailCampaign's targeting fields into a flat subscriber-id list — mirrors
-/// ContactGroupResolver's role for WhatsApp campaigns. SelectAll bypasses the Include lists/tags
-/// (every bulk-sendable subscriber in the workspace), but Exclude still subtracts even in that
-/// mode — a suppression list should apply regardless of how the rest of the audience was picked.
+/// Turns an EmailCampaign's targeting fields into a flat Contact-id list (Contact IS the email
+/// subscriber) — mirrors ContactGroupResolver's role for WhatsApp campaigns. SelectAll bypasses
+/// the Include lists/tags (every bulk-sendable subscriber in the workspace), but Exclude still
+/// subtracts even in that mode — a suppression list should apply regardless of how the rest of
+/// the audience was picked.
 /// </summary>
 public class EmailAudienceResolver
 {
@@ -26,8 +27,10 @@ public class EmailAudienceResolver
 
     public async Task<List<int>> ResolveSubscriberIdsAsync(EmailCampaign campaign)
     {
-        var query = _db.EmailSubscribers.AsNoTracking()
-            .Where(s => s.WorkspaceId == campaign.WorkspaceId && BulkSendableStatuses.Contains(s.Status));
+        // Contact IS the email subscriber — no separate subscriber table. A Contact with no email
+        // at all (WhatsApp-only lead) is never a valid campaign target regardless of EmailStatus.
+        var query = _db.Contacts.AsNoTracking()
+            .Where(s => s.WorkspaceId == campaign.WorkspaceId && !string.IsNullOrEmpty(s.Email) && BulkSendableStatuses.Contains(s.EmailStatus));
 
         if (!campaign.SelectAll)
         {

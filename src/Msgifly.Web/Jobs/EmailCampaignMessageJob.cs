@@ -70,6 +70,17 @@ public class EmailCampaignMessageJob
             return; // left Pending — picked up again once the campaign is resumed
         }
 
+        // EmailAudienceResolver already filters to Contacts with a real email at materialization
+        // time, so this should never be blank in practice — but Email is optional on Contact now
+        // (unlike the old dedicated EmailSubscriber table), so guard defensively rather than crash.
+        if (string.IsNullOrWhiteSpace(recipient.Subscriber.Email))
+        {
+            recipient.Status = EmailCampaignRecipientStatus.Failed;
+            recipient.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return;
+        }
+
         var subject = _mergeTagRenderer.Render(recipient.Campaign.Subject, recipient.Subscriber, recipient.TrackingToken);
         var body = _mergeTagRenderer.Render(recipient.Campaign.BodyHtml, recipient.Subscriber, recipient.TrackingToken);
 

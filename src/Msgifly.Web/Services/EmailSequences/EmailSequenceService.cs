@@ -19,12 +19,21 @@ public class EmailSequenceService
         _db = db;
     }
 
-    /// <summary>No-ops if already enrolled, or if the sequence has no mails yet.</summary>
+    /// <summary>No-ops if already enrolled, if the sequence has no mails yet, or if the contact
+    /// has no email at all (Contact IS the email subscriber now, so this is the one choke point
+    /// that keeps an email-less WhatsApp-only lead from ever being enrolled, rather than
+    /// re-checking it at every dispatch site downstream).</summary>
     public async Task SubscribeAsync(int sequenceId, int subscriberId)
     {
         var alreadyEnrolled = await _db.EmailSequenceSubscribers
             .AnyAsync(s => s.SequenceId == sequenceId && s.SubscriberId == subscriberId);
         if (alreadyEnrolled)
+        {
+            return;
+        }
+
+        var hasEmail = await _db.Contacts.AnyAsync(c => c.Id == subscriberId && c.Email != null && c.Email != "");
+        if (!hasEmail)
         {
             return;
         }

@@ -203,16 +203,29 @@ public class EmailAutomationsController : Controller
         }
 
         var trimmedEmail = email.Trim();
-        var subscriber = await _db.EmailSubscribers.FirstOrDefaultAsync(s => s.Email == trimmedEmail);
+        var subscriber = await _db.Contacts.FirstOrDefaultAsync(c => c.Email == trimmedEmail);
         if (subscriber is null)
         {
-            subscriber = new EmailSubscriber
+            var defaultStatusId = await _db.Statuses.Where(s => s.IsDefault).Select(s => (int?)s.Id).FirstOrDefaultAsync()
+                ?? await _db.Statuses.Select(s => (int?)s.Id).FirstOrDefaultAsync();
+            var defaultSourceId = await _db.Sources.Select(s => (int?)s.Id).FirstOrDefaultAsync();
+            if (defaultStatusId is null || defaultSourceId is null)
+            {
+                this.Notify("Create at least one Status and Source before testing an email automation.", "danger");
+                return RedirectToAction(nameof(Index));
+            }
+
+            subscriber = new Contact
             {
                 WorkspaceId = _workspaceAccessor.WorkspaceId!.Value,
+                FirstName = "Test",
+                LastName = string.Empty,
                 Email = trimmedEmail,
-                Status = EmailSubscriberStatus.Transactional,
+                EmailStatus = EmailSubscriberStatus.Transactional,
+                StatusId = defaultStatusId.Value,
+                SourceId = defaultSourceId.Value,
             };
-            _db.EmailSubscribers.Add(subscriber);
+            _db.Contacts.Add(subscriber);
             await _db.SaveChangesAsync();
         }
 

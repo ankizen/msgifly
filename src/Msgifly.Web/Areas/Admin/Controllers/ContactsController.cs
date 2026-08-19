@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.AspNetCore.Authorization;
@@ -14,6 +15,8 @@ using Msgifly.Web.Models.Enums;
 using Msgifly.Web.Models.ViewModels;
 using Msgifly.Web.Services;
 using Msgifly.Web.Services.Automations;
+using Msgifly.Web.Services.EmailAutomations;
+using Msgifly.Web.Services.EmailSequences;
 using Msgifly.Web.Services.Groups;
 using Msgifly.Web.Services.WhatsApp;
 using Msgifly.Web.Services.Workspaces;
@@ -27,6 +30,8 @@ public class ContactsController : Controller
     private const int PageSize = 25;
     private readonly ApplicationDbContext _db;
     private readonly AutomationEngine _automationEngine;
+    private readonly EmailAutomationEngine _emailAutomationEngine;
+    private readonly EmailSequenceService _emailSequenceService;
     private readonly IWhatsAppService _whatsAppService;
     private readonly ICurrentWorkspaceAccessor _workspaceAccessor;
     private readonly ContactGroupResolver _groupResolver;
@@ -34,12 +39,16 @@ public class ContactsController : Controller
     public ContactsController(
         ApplicationDbContext db,
         AutomationEngine automationEngine,
+        EmailAutomationEngine emailAutomationEngine,
+        EmailSequenceService emailSequenceService,
         IWhatsAppService whatsAppService,
         ICurrentWorkspaceAccessor workspaceAccessor,
         ContactGroupResolver groupResolver)
     {
         _db = db;
         _automationEngine = automationEngine;
+        _emailAutomationEngine = emailAutomationEngine;
+        _emailSequenceService = emailSequenceService;
         _whatsAppService = whatsAppService;
         _workspaceAccessor = workspaceAccessor;
         _groupResolver = groupResolver;
@@ -130,6 +139,10 @@ public class ContactsController : Controller
             .OrderBy(g => g.Name)
             .Select(g => new GroupOption(g.Id, g.Name, g.Type == ContactGroupType.Dynamic ? "Dynamic" : "Static"))
             .ToListAsync();
+        ViewData["EmailAutomationOptions"] = await _db.EmailAutomations.AsNoTracking().Where(a => a.IsActive).OrderBy(a => a.Name)
+            .Select(a => new SelectListItem { Value = a.Id.ToString(), Text = a.Name }).ToListAsync();
+        ViewData["EmailSequenceOptions"] = await _db.EmailSequences.AsNoTracking().OrderBy(s => s.Name)
+            .Select(s => new SelectListItem { Value = s.Id.ToString(), Text = s.Name }).ToListAsync();
 
         return View(await PagedList<Contact>.CreateAsync(query, page, effectivePageSize));
     }
@@ -424,6 +437,89 @@ public class ContactsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
+    /// <summary>The "Run Email Automation" quick action — same idea as RunAutomation above, but
+    /// through the independent EmailAutomationEngine (Contact IS the email subscriber, so this
+    /// takes the same contactId, no separate lookup needed).</summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RunEmailAutomation(int contactId, int automationId)
+    {
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Id == contactId);
+        if (contact is null)
+        {
+            return NotFound();
+        }
+
+        var (status, errorMessage) = await _emailAutomationEngine.RunAutomationForTestAsync(automationId, contactId);
+        var failed = status == EmailAutomationLogStatus.Failed;
+        this.Notify(
+            failed ? $"Couldn't run email automation for {contact.FullName}: {errorMessage}"
+            : status == EmailAutomationLogStatus.Partial ? $"Email automation started for {contact.FullName} — now waiting on a Wait step."
+            : $"Email automation completed for {contact.FullName}.",
+            failed ? "danger" : "success");
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Bulk version of RunEmailAutomation — same sequential-loop pattern as BulkRunAutomation.</summary>
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> BulkRunEmailAutomation(string ids, int automationId)
+    {
+        var contactIds = ParseIds(ids);
+        if (contactIds.Count == 0)
+        {
+            this.Notify("No contacts selected.", "warning");
+            return RedirectToAction(nameof(Index));
+        }
+
+        var contacts = await _db.Contacts.Where(c => contactIds.Contains(c.Id)).ToListAsync();
+        var succeeded = 0;
+        var failures = new List<string>();
+
+        foreach (var contact in contacts)
+        {
+            var (status, errorMessage) = await _emailAutomationEngine.RunAutomationForTestAsync(automationId, contact.Id);
+            if (status != EmailAutomationLogStatus.Failed)
+            {
+                succeeded++;
+            }
+            else
+            {
+                failures.Add($"{contact.FullName} ({errorMessage})");
+            }
+        }
+
+        var message = failures.Count == 0
+            ? $"Email automation started for all {succeeded} contact(s)."
+            : $"Started for {succeeded} of {contacts.Count}. Failed: {string.Join("; ", failures.Take(5))}{(failures.Count > 5 ? $" and {failures.Count - 5} more" : "")}.";
+        this.Notify(message, failures.Count == 0 ? "success" : "warning");
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Policy = "contact.edit")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddToEmailSequence(int contactId, int sequenceId)
+    {
+        var contact = await _db.Contacts.FirstOrDefaultAsync(c => c.Id == contactId);
+        if (contact is null)
+        {
+            return NotFound();
+        }
+
+        if (string.IsNullOrWhiteSpace(contact.Email))
+        {
+            this.Notify($"{contact.FullName} has no email address — add one first.", "danger");
+            return RedirectToAction(nameof(Index));
+        }
+
+        await _emailSequenceService.SubscribeAsync(sequenceId, contactId);
+        this.Notify($"{contact.FullName} added to the email sequence.");
+        return RedirectToAction(nameof(Index));
+    }
+
     private static string? FirstScreenId(string flowJson)
     {
         try
@@ -497,6 +593,10 @@ public class ContactsController : Controller
                 Phone = contact.Phone,
                 IsEnabled = contact.IsEnabled,
                 Notes = contact.Notes.ToList(),
+                EmailStatus = contact.EmailStatus,
+                SelectedListIds = await _db.EmailSubscriberLists.AsNoTracking().Where(l => l.SubscriberId == id).Select(l => l.ListId).ToListAsync(),
+                SelectedTagIds = await _db.EmailSubscriberTags.AsNoTracking().Where(t => t.SubscriberId == id).Select(t => t.TagId).ToListAsync(),
+                EmailCustomFieldValues = SafeDeserializeCustomFields(contact.EmailCustomFieldsJson),
             };
         }
 
@@ -539,6 +639,8 @@ public class ContactsController : Controller
                 Phone = PhoneNumberNormalizer.Normalize(model.Phone),
                 IsEnabled = model.IsEnabled,
                 DateAssigned = model.AssignedToId is not null ? DateTime.UtcNow : null,
+                EmailStatus = model.EmailStatus,
+                EmailCustomFieldsJson = JsonSerializer.Serialize(model.EmailCustomFieldValues),
             };
             _db.Contacts.Add(contact);
             createdContact = contact;
@@ -579,11 +681,16 @@ public class ContactsController : Controller
             contact.Website = model.Website;
             contact.Phone = PhoneNumberNormalizer.Normalize(model.Phone);
             contact.IsEnabled = model.IsEnabled;
+            contact.EmailStatus = model.EmailStatus;
+            contact.EmailCustomFieldsJson = JsonSerializer.Serialize(model.EmailCustomFieldValues);
             contact.UpdatedAt = DateTime.UtcNow;
             this.Notify("Contact updated.");
         }
 
         await _db.SaveChangesAsync();
+
+        var contactId = createdContact?.Id ?? model.Id!.Value;
+        await SyncEmailListsAndTagsAsync(contactId, model.SelectedListIds, model.SelectedTagIds);
 
         if (createdContact is not null)
         {
@@ -779,6 +886,45 @@ public class ContactsController : Controller
         model.AssigneeOptions = await _db.Users.AsNoTracking().OrderBy(u => u.FirstName)
             .Select(u => new SelectListItem { Value = u.Id.ToString(), Text = u.FirstName + " " + u.LastName })
             .ToListAsync();
+        ViewData["EmailListOptions"] = await _db.EmailLists.AsNoTracking().OrderBy(l => l.Name)
+            .Select(l => new SelectListItem { Value = l.Id.ToString(), Text = l.Name }).ToListAsync();
+        ViewData["EmailTagOptions"] = await _db.EmailTags.AsNoTracking().OrderBy(t => t.Name)
+            .Select(t => new SelectListItem { Value = t.Id.ToString(), Text = t.Name }).ToListAsync();
+        ViewData["EmailCustomFields"] = await _db.EmailCustomFields.AsNoTracking().OrderBy(f => f.Label).ToListAsync();
+    }
+
+    /// <summary>Diffs the posted list/tag selections against what's currently stored and applies
+    /// only the delta — mirrors the same add/remove-difference pattern used everywhere else in
+    /// this app for many-to-many form fields.</summary>
+    private async Task SyncEmailListsAndTagsAsync(int contactId, List<int> listIds, List<int> tagIds)
+    {
+        var existingLists = await _db.EmailSubscriberLists.Where(l => l.SubscriberId == contactId).ToListAsync();
+        _db.EmailSubscriberLists.RemoveRange(existingLists.Where(l => !listIds.Contains(l.ListId)));
+        foreach (var listId in listIds.Except(existingLists.Select(l => l.ListId)))
+        {
+            _db.EmailSubscriberLists.Add(new EmailSubscriberList { SubscriberId = contactId, ListId = listId });
+        }
+
+        var existingTags = await _db.EmailSubscriberTags.Where(t => t.SubscriberId == contactId).ToListAsync();
+        _db.EmailSubscriberTags.RemoveRange(existingTags.Where(t => !tagIds.Contains(t.TagId)));
+        foreach (var tagId in tagIds.Except(existingTags.Select(t => t.TagId)))
+        {
+            _db.EmailSubscriberTags.Add(new EmailSubscriberTag { SubscriberId = contactId, TagId = tagId });
+        }
+
+        await _db.SaveChangesAsync();
+    }
+
+    private static Dictionary<string, string> SafeDeserializeCustomFields(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static async Task<List<SelectListItem>> BuildOptionsAsync<T>(

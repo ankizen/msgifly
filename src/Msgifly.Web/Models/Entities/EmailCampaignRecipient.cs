@@ -10,8 +10,9 @@ public class EmailCampaignRecipient
     public int CampaignId { get; set; }
     public EmailCampaign Campaign { get; set; } = null!;
 
+    /// <summary>Contact IS the email subscriber — no separate subscriber table.</summary>
     public int SubscriberId { get; set; }
-    public EmailSubscriber Subscriber { get; set; } = null!;
+    public Contact Subscriber { get; set; } = null!;
 
     public EmailCampaignRecipientStatus Status { get; set; } = EmailCampaignRecipientStatus.Pending;
 

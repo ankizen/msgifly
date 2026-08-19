@@ -1,11 +1,11 @@
 @model List<Msgifly.Web.Models.Entities.EmailCustomField>
 @{
-    ViewData["Title"] = "Custom Fields";
+    ViewData["Title"] = "Email Custom Fields";
 }
 
 <div class="mb-6">
-    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Custom Fields</h1>
-    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Extra fields tracked on each subscriber, available as merge tags in campaigns and automations.</p>
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Email Custom Fields</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Extra fields tracked on each contact for email marketing, available as merge tags in campaigns and automations.</p>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -32,7 +32,7 @@
                         <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@field.FieldType</td>
                         <td class="px-4 py-3 text-right text-sm">
                             <button type="button" class="text-red-600 hover:text-red-500"
-                                    x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("DeleteCustomField", new { id = field.Id })', message: 'Delete this custom field?' })">
+                                    x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = field.Id })', message: 'Delete this custom field?' })">
                                 Delete
                             </button>
                         </td>
@@ -44,7 +44,7 @@
 
     <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6">
         <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Add a custom field</h2>
-        <form asp-action="SaveCustomField" method="post" class="space-y-3" x-data="{ fieldType: 'Text' }">
+        <form asp-action="Save" method="post" class="space-y-3" x-data="{ fieldType: 'Text' }">
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-slate-300">Label</label>
                 <input type="text" name="Label" required placeholder="Birthday"
@@ -75,5 +75,5 @@
 </div>
 
 <div class="mt-6">
-    <a asp-action="Index" class="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">&larr; Back to Subscribers</a>
+    <a asp-area="Admin" asp-controller="Contacts" asp-action="Index" class="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">&larr; Back to Contacts</a>
 </div>

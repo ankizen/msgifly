@@ -18,7 +18,7 @@ public class EmailMergeTagRenderer
         _publicBaseUrl = (configuration["App:PublicBaseUrl"] ?? "https://app.msgifly.com").TrimEnd('/');
     }
 
-    public string Render(string text, EmailSubscriber subscriber, string? trackingToken = null, Dictionary<string, string>? vars = null) =>
+    public string Render(string text, Contact subscriber, string? trackingToken = null, Dictionary<string, string>? vars = null) =>
         TokenPattern.Replace(text, match =>
         {
             var key = match.Groups[1].Value;
@@ -40,7 +40,7 @@ public class EmailMergeTagRenderer
                     "firstName" => string.IsNullOrWhiteSpace(subscriber.FirstName) ? "there" : subscriber.FirstName,
                     "lastName" => subscriber.LastName ?? string.Empty,
                     "fullName" => string.IsNullOrWhiteSpace(subscriber.FullName) ? "there" : subscriber.FullName,
-                    "email" => subscriber.Email,
+                    "email" => subscriber.Email ?? string.Empty,
                     _ => string.Empty,
                 };
             }

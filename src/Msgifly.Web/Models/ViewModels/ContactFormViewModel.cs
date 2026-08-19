@@ -58,6 +58,16 @@ public class ContactFormViewModel
     [Display(Name = "Enabled")]
     public bool IsEnabled { get; set; } = true;
 
+    // --- Email Marketing (Contact IS the email subscriber — no separate list) ---
+    [Display(Name = "Email status")]
+    public EmailSubscriberStatus EmailStatus { get; set; } = EmailSubscriberStatus.Subscribed;
+
+    public List<int> SelectedListIds { get; set; } = [];
+    public List<int> SelectedTagIds { get; set; } = [];
+
+    /// <summary>Keyed by EmailCustomField.Key — rendered dynamically from ViewData["EmailCustomFields"].</summary>
+    public Dictionary<string, string> EmailCustomFieldValues { get; set; } = [];
+
     public List<SelectListItem> StatusOptions { get; set; } = [];
     public List<SelectListItem> SourceOptions { get; set; } = [];
     public List<SelectListItem> AssigneeOptions { get; set; } = [];

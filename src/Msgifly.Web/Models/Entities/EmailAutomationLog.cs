@@ -10,8 +10,9 @@ public class EmailAutomationLog
     public int AutomationId { get; set; }
     public EmailAutomation Automation { get; set; } = null!;
 
+    /// <summary>Contact IS the email subscriber — no separate subscriber table.</summary>
     public int SubscriberId { get; set; }
-    public EmailSubscriber Subscriber { get; set; } = null!;
+    public Contact Subscriber { get; set; } = null!;
 
     public EmailAutomationLogStatus Status { get; set; }
 

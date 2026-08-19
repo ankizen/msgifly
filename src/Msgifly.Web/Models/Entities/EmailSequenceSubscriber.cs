@@ -13,8 +13,9 @@ public class EmailSequenceSubscriber
     public int SequenceId { get; set; }
     public EmailSequence Sequence { get; set; } = null!;
 
+    /// <summary>Contact IS the email subscriber — no separate subscriber table.</summary>
     public int SubscriberId { get; set; }
-    public EmailSubscriber Subscriber { get; set; } = null!;
+    public Contact Subscriber { get; set; } = null!;
 
     public EmailSequenceSubscriberStatus Status { get; set; } = EmailSequenceSubscriberStatus.Active;
 

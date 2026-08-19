@@ -12,7 +12,8 @@ using Msgifly.Web.Services.Workspaces;
 namespace Msgifly.Web.Services.EmailAutomations;
 
 /// <summary>
-/// Runs no-code email automations against EmailSubscriber identity only — an independent copy of
+/// Runs no-code email automations against Contact identity (Contact IS the email subscriber — no
+/// separate subscriber table) — an independent copy of
 /// AutomationEngine's tree-walk-plus-Hangfire-Wait design (deliberately not shared code; the user
 /// asked for Email Marketing to stay fully separate from the WhatsApp automation stack). A Wait
 /// step suspends the walk and schedules a Hangfire job to resume it later, same as the WhatsApp
@@ -227,13 +228,21 @@ public class EmailAutomationEngine
 
     private async Task<string> RunStepAsync(EmailAutomationStep step, int subscriberId)
     {
-        var subscriber = await _db.EmailSubscribers.FirstOrDefaultAsync(s => s.Id == subscriberId)
+        var subscriber = await _db.Contacts.FirstOrDefaultAsync(c => c.Id == subscriberId)
             ?? throw new InvalidOperationException("Subscriber not found.");
 
         switch (step.StepType)
         {
             case EmailAutomationStepType.SendEmail:
             {
+                // Contact IS the email subscriber now, and unlike the old dedicated EmailSubscriber
+                // table, Email is optional here (a WhatsApp-only lead can be run through an email
+                // automation by mistake) — fail loudly rather than silently sending to a blank address.
+                if (string.IsNullOrWhiteSpace(subscriber.Email))
+                {
+                    throw new InvalidOperationException("This contact has no email address.");
+                }
+
                 var cfg = Deserialize<SendEmailStepConfig>(step.StepConfigJson) ?? throw new InvalidOperationException("Missing SendEmail config.");
                 var subject = _mergeTagRenderer.Render(cfg.Subject, subscriber);
                 var body = _mergeTagRenderer.Render(cfg.BodyHtml, subscriber);
@@ -357,7 +366,7 @@ public class EmailAutomationEngine
         }
     }
 
-    private static bool ApplySubscriberField(EmailSubscriber subscriber, string field, string value)
+    private static bool ApplySubscriberField(Contact subscriber, string field, string value)
     {
         switch (field)
         {
@@ -387,7 +396,7 @@ public class EmailAutomationEngine
                     return false;
                 }
 
-                var subscriber = await _db.EmailSubscribers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == subscriberId);
+                var subscriber = await _db.Contacts.AsNoTracking().FirstOrDefaultAsync(c => c.Id == subscriberId);
                 if (subscriber is null)
                 {
                     return false;
@@ -400,7 +409,10 @@ public class EmailAutomationEngine
                     "Email" => subscriber.Email,
                     "Phone" => subscriber.Phone,
                     "Type" => subscriber.Type.ToString(),
-                    "Status" => subscriber.Status.ToString(),
+                    // Email opt-in status (Subscribed/Unsubscribed/...), not Contact.Status (the
+                    // unrelated CRM pipeline stage) — EmailStatus is what a condition on an email
+                    // automation actually means by "Status".
+                    "Status" => subscriber.EmailStatus.ToString(),
                     _ => null,
                 };
                 return string.Equals(actual ?? string.Empty, cfg.Value ?? string.Empty, StringComparison.OrdinalIgnoreCase);
