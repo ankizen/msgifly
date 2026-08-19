@@ -56,6 +56,12 @@ public class ChatMessage
     /// message, and this inbox shows one combined state per message rather than per-person.</summary>
     public string? ReactionEmoji { get; set; }
 
+    /// <summary>Purely a local organizing feature — WhatsApp's Cloud API has no "pin" concept at
+    /// all (real WhatsApp pinning is client-side only, never sent over the wire), so this never
+    /// calls out to Meta. One pinned message per chat; pinning a new one unpins whatever was
+    /// pinned before it, matching a simple single pinned-banner UI.</summary>
+    public bool IsPinned { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

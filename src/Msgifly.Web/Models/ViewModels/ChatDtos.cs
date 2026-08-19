@@ -30,7 +30,8 @@ public record ChatMessageDto(
     /// <summary>Set when this message is a quoted reply to another one — resolved live from
     /// RefMessageId rather than duplicating the quoted content per-message.</summary>
     RepliedToPreview? RepliedTo = null,
-    string? ReactionEmoji = null);
+    string? ReactionEmoji = null,
+    bool IsPinned = false);
 
 /// <summary>A short, ready-to-render preview of the message a reply is quoting — Id lets the
 /// client scroll to/highlight the original if it wants to, Preview is already resolved to a

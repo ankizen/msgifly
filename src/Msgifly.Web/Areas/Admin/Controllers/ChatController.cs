@@ -417,6 +417,49 @@ public class ChatController : Controller
         return Json(new { reactionEmoji = message.ReactionEmoji });
     }
 
+    /// <summary>
+    /// Pins/unpins a message — purely local to this inbox, never calls WhatsApp (Meta's Cloud API
+    /// has no pin concept; real WhatsApp pinning is client-side only, on the customer's own phone).
+    /// One pinned message per chat: pinning a new one unpins whatever was pinned before it, so the
+    /// client only ever needs to track a single pinned-message banner.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "chat.view")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> TogglePin(int messageId)
+    {
+        var message = await _db.ChatMessages.FirstOrDefaultAsync(m => m.Id == messageId);
+        if (message is null)
+        {
+            return NotFound();
+        }
+
+        int? unpinnedMessageId = null;
+
+        if (message.IsPinned)
+        {
+            message.IsPinned = false;
+        }
+        else
+        {
+            var previouslyPinned = await _db.ChatMessages.FirstOrDefaultAsync(m => m.ChatId == message.ChatId && m.IsPinned);
+            if (previouslyPinned is not null)
+            {
+                previouslyPinned.IsPinned = false;
+                unpinnedMessageId = previouslyPinned.Id;
+            }
+
+            message.IsPinned = true;
+        }
+
+        message.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        await _hubContext.Clients.All.SendAsync("PinnedMessageChanged", message.ChatId, message.IsPinned ? message.Id : (int?)null, unpinnedMessageId);
+
+        return Json(new { isPinned = message.IsPinned, unpinnedMessageId });
+    }
+
     [HttpPost]
     [Authorize(Policy = "chat.view")]
     [ValidateAntiForgeryToken]
@@ -595,7 +638,8 @@ public class ChatController : Controller
             repliedToMessage.Id,
             ChatPreviewText.ForMedia(repliedToMessage.MessageType ?? "text", repliedToMessage.Message),
             repliedToMessage.MessageType),
-        message.ReactionEmoji);
+        message.ReactionEmoji,
+        message.IsPinned);
 
     /// <summary>Messages sent before TemplateMessageRenderer stopped folding footer text into the
     /// body had it appended as a trailing "\n\nFooter" paragraph. Now that the Chat view renders
