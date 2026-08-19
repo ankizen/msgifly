@@ -60,6 +60,7 @@ public class EmailSmtpConnectionsController : Controller
             EnableSsl = connection.EnableSsl,
             Domain = connection.Domain,
             Region = connection.Region,
+            AccountId = connection.AccountId,
             FromEmail = connection.FromEmail,
             FromName = connection.FromName,
             IsDefault = connection.IsDefault,
@@ -119,6 +120,7 @@ public class EmailSmtpConnectionsController : Controller
         connection.EnableSsl = model.EnableSsl;
         connection.Domain = model.Domain;
         connection.Region = model.Region;
+        connection.AccountId = model.AccountId;
         connection.FromEmail = model.FromEmail;
         connection.FromName = model.FromName;
         connection.IsDefault = model.IsDefault;
@@ -205,9 +207,26 @@ public class EmailSmtpConnectionsController : Controller
             case EmailSmtpProvider.Brevo:
             case EmailSmtpProvider.SendGrid:
             case EmailSmtpProvider.Postmark:
+            case EmailSmtpProvider.SparkPost:
+            case EmailSmtpProvider.Netcore:
+            case EmailSmtpProvider.ElasticMail:
+            case EmailSmtpProvider.Smtp2Go:
                 if (isNew && string.IsNullOrWhiteSpace(model.ApiKey))
                 {
                     ModelState.AddModelError(nameof(model.ApiKey), "API key is required.");
+                }
+
+                break;
+
+            case EmailSmtpProvider.Cloudflare:
+                if (isNew && string.IsNullOrWhiteSpace(model.ApiKey))
+                {
+                    ModelState.AddModelError(nameof(model.ApiKey), "API token is required.");
+                }
+
+                if (string.IsNullOrWhiteSpace(model.AccountId))
+                {
+                    ModelState.AddModelError(nameof(model.AccountId), "Account ID is required.");
                 }
 
                 break;

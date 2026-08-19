@@ -18,8 +18,17 @@
         </div>
         <div>
             <label asp-for="Provider" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
-            <select asp-for="Provider" x-model="provider" asp-items="Html.GetEnumSelectList<Msgifly.Web.Models.Enums.EmailSmtpProvider>()"
-                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
+            @* Option values are the enum's NAME (not GetEnumSelectList's numeric string) so Alpine's
+               x-model/x-show string comparisons below stay correct after the user changes the
+               dropdown — ASP.NET Core's enum model binder accepts a posted name string just as
+               well as a numeric one, so this binds to Provider on Save identically either way. *@
+            <select asp-for="Provider" x-model="provider"
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                @foreach (var value in Enum.GetValues<Msgifly.Web.Models.Enums.EmailSmtpProvider>())
+                {
+                    <option value="@value">@value</option>
+                }
+            </select>
         </div>
 
         <div class="flex items-center gap-4 sm:col-span-2">
@@ -58,13 +67,24 @@
                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
 
-        @* ---- Brevo / SendGrid / Postmark: just an API key ---- *@
-        <div x-show="provider === 'Brevo' || provider === 'SendGrid' || provider === 'Postmark'" x-cloak class="sm:col-span-2">
+        @* ---- Brevo / SendGrid / Postmark / SparkPost / Netcore / ElasticMail / Smtp2Go: just an API key ---- *@
+        <div x-show="['Brevo', 'SendGrid', 'Postmark', 'SparkPost', 'Netcore', 'ElasticMail', 'Smtp2Go'].includes(provider)" x-cloak class="sm:col-span-2">
             <label asp-for="ApiKey" class="block text-sm font-medium text-gray-700 dark:text-slate-300">
                 <span x-text="provider === 'Postmark' ? 'Server API Token' : 'API Key'"></span>
             </label>
             <input asp-for="ApiKey" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        @* ---- Cloudflare ---- *@
+        <div x-show="provider === 'Cloudflare'" x-cloak>
+            <label asp-for="ApiKey" class="block text-sm font-medium text-gray-700 dark:text-slate-300">API Token</label>
+            <input asp-for="ApiKey" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current")"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div x-show="provider === 'Cloudflare'" x-cloak>
+            <label asp-for="AccountId" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Account ID</label>
+            <input asp-for="AccountId" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
         </div>
 
         @* ---- Mailgun ---- *@

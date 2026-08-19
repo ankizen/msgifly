@@ -21,7 +21,8 @@ public class EmailSmtpConnection
     public string? Password { get; set; }
     public bool EnableSsl { get; set; } = true;
 
-    // --- API-key providers: Brevo, SendGrid, Mailgun, Postmark ---
+    // --- API-key providers: Brevo, SendGrid, Mailgun, Postmark, SparkPost, Netcore,
+    // ElasticMail, Smtp2Go, Cloudflare ---
     public string? ApiKey { get; set; }
 
     // --- Mailgun only ---
@@ -33,6 +34,9 @@ public class EmailSmtpConnection
     // --- AmazonSes only ---
     public string? AccessKey { get; set; }
     public string? SecretKey { get; set; }
+
+    // --- Cloudflare only ---
+    public string? AccountId { get; set; }
 
     public string FromEmail { get; set; } = string.Empty;
     public string? FromName { get; set; }

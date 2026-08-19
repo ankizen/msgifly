@@ -53,4 +53,9 @@ public enum EmailSmtpProvider
     Mailgun = 3,
     AmazonSes = 4,
     Postmark = 5,
+    SparkPost = 6,
+    Netcore = 7,
+    ElasticMail = 8,
+    Smtp2Go = 9,
+    Cloudflare = 10,
 }

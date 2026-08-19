@@ -35,6 +35,9 @@ public class EmailSmtpConnectionFormViewModel
     public string? AccessKey { get; set; }
     public string? SecretKey { get; set; }
 
+    // --- Cloudflare ---
+    public string? AccountId { get; set; }
+
     [Required, EmailAddress]
     public string FromEmail { get; set; } = string.Empty;
 
