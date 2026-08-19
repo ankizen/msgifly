@@ -9,6 +9,9 @@ using Msgifly.Web.Hubs;
 using Msgifly.Web.Jobs;
 using Msgifly.Web.Models.Entities;
 using Msgifly.Web.Services.Automations;
+using Msgifly.Web.Services.Email;
+using Msgifly.Web.Services.EmailAutomations;
+using Msgifly.Web.Services.EmailSequences;
 using Msgifly.Web.Services.Groups;
 using Msgifly.Web.Services.LeadAds;
 using Msgifly.Web.Services.Settings;
@@ -81,6 +84,10 @@ builder.Services.AddHttpClient("AutomationWebhook", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(10);
 });
+builder.Services.AddHttpClient("EmailAutomationWebhook", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddHttpClient("Coolify", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);
@@ -90,6 +97,11 @@ builder.Services.AddScoped<EmbeddedSignupService>();
 builder.Services.AddScoped<MetaLeadAdsService>();
 builder.Services.AddScoped<AutomationEngine>();
 builder.Services.AddScoped<ContactGroupResolver>();
+builder.Services.AddScoped<IEmailSender, EmailSenderService>();
+builder.Services.AddScoped<EmailMergeTagRenderer>();
+builder.Services.AddScoped<EmailAudienceResolver>();
+builder.Services.AddScoped<EmailAutomationEngine>();
+builder.Services.AddScoped<EmailSequenceService>();
 builder.Services.AddScoped<LeadAdsSyncJob>();
 builder.Services.AddScoped<TrackingDomainVerificationService>();
 builder.Services.AddScoped<CoolifyDomainService>();
@@ -182,6 +194,16 @@ RecurringJob.AddOrUpdate<TrackingDomainVerificationJob>(
     "verify-tracking-domains",
     job => job.VerifyAllAsync(),
     Cron.Hourly());
+
+RecurringJob.AddOrUpdate<EmailCampaignDispatchJob>(
+    "process-scheduled-email-campaigns",
+    job => job.ProcessScheduledCampaignsAsync(),
+    Cron.Minutely());
+
+RecurringJob.AddOrUpdate<EmailSequenceDispatchJob>(
+    "process-email-sequences",
+    job => job.ProcessDueAsync(),
+    Cron.Minutely());
 
 app.MapHub<ChatHub>("/hubs/chat");
 

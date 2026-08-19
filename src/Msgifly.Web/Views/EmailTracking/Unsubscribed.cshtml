@@ -1,0 +1,17 @@
+@model string
+@{
+    Layout = "_LoginLayout";
+    ViewData["Title"] = "Unsubscribed";
+}
+
+<div class="p-8 text-center">
+    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+        <svg class="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+    </div>
+    <h1 class="mt-4 text-lg font-semibold text-gray-900 dark:text-white">You've been unsubscribed</h1>
+    <p class="mt-2 text-sm text-gray-500 dark:text-slate-400">
+        @Model will no longer receive marketing emails from us. You won't be included in future campaigns or sequences.
+    </p>
+</div>

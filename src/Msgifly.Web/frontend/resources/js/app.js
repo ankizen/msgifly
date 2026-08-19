@@ -135,6 +135,11 @@ window.initializeEmojiPicker = initializeEmojiPicker;
 // page, no console-visible crash, nothing — this exact bug shipped once already).
 window.loadAutomationBuilder = () => import('./automation-builder');
 
+// Same reasoning and same before-Alpine.start() ordering requirement as window.loadAutomationBuilder
+// above, for the independent Email Marketing automation canvas (separate React Flow tree, separate
+// chunk, no shared code with the WhatsApp builder).
+window.loadEmailAutomationBuilder = () => import('./email-automation-builder');
+
 // Global unread-message badge (the "Chat" sidebar nav item, see _NavItems.cshtml) — live on
 // every page, not just while actually on /Admin/Chat, so an admin working anywhere else in the
 // app still sees a new message arrive without needing to reload or navigate there. This is a

@@ -75,6 +75,25 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<Automation> Automations => Set<Automation>();
     public DbSet<AutomationStep> AutomationSteps => Set<AutomationStep>();
     public DbSet<AutomationLog> AutomationLogs => Set<AutomationLog>();
+
+    // --- Email Marketing (independent stack, see Models/Entities/Email*.cs) ---------------------
+    public DbSet<EmailSubscriber> EmailSubscribers => Set<EmailSubscriber>();
+    public DbSet<EmailList> EmailLists => Set<EmailList>();
+    public DbSet<EmailTag> EmailTags => Set<EmailTag>();
+    public DbSet<EmailSubscriberList> EmailSubscriberLists => Set<EmailSubscriberList>();
+    public DbSet<EmailSubscriberTag> EmailSubscriberTags => Set<EmailSubscriberTag>();
+    public DbSet<EmailCustomField> EmailCustomFields => Set<EmailCustomField>();
+    public DbSet<EmailSmtpConnection> EmailSmtpConnections => Set<EmailSmtpConnection>();
+    public DbSet<EmailCampaign> EmailCampaigns => Set<EmailCampaign>();
+    public DbSet<EmailCampaignRecipient> EmailCampaignRecipients => Set<EmailCampaignRecipient>();
+    public DbSet<EmailLog> EmailLogs => Set<EmailLog>();
+    public DbSet<EmailAutomation> EmailAutomations => Set<EmailAutomation>();
+    public DbSet<EmailAutomationStep> EmailAutomationSteps => Set<EmailAutomationStep>();
+    public DbSet<EmailAutomationLog> EmailAutomationLogs => Set<EmailAutomationLog>();
+    public DbSet<EmailSequence> EmailSequences => Set<EmailSequence>();
+    public DbSet<EmailSequenceMail> EmailSequenceMails => Set<EmailSequenceMail>();
+    public DbSet<EmailSequenceSubscriber> EmailSequenceSubscribers => Set<EmailSequenceSubscriber>();
+
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<LeadAdsImport> LeadAdsImports => Set<LeadAdsImport>();
     public DbSet<LeadAdsForm> LeadAdsForms => Set<LeadAdsForm>();
@@ -116,6 +135,24 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<CampaignDetail>().HasQueryFilter(d => d.Campaign.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<AutomationStep>().HasQueryFilter(s => s.Automation.WorkspaceId == _workspaceAccessor.WorkspaceId);
         builder.Entity<AutomationLog>().HasQueryFilter(l => l.Automation.WorkspaceId == _workspaceAccessor.WorkspaceId);
+
+        // Email Marketing — independent stack, same scoping pattern as above.
+        builder.Entity<EmailSubscriber>().HasQueryFilter(s => s.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailList>().HasQueryFilter(l => l.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailTag>().HasQueryFilter(t => t.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailCustomField>().HasQueryFilter(f => f.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailSmtpConnection>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailCampaign>().HasQueryFilter(c => c.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailLog>().HasQueryFilter(l => l.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailAutomation>().HasQueryFilter(a => a.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailSequence>().HasQueryFilter(s => s.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailSubscriberList>().HasQueryFilter(s => s.Subscriber.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailSubscriberTag>().HasQueryFilter(s => s.Subscriber.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailCampaignRecipient>().HasQueryFilter(r => r.Campaign.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailAutomationStep>().HasQueryFilter(s => s.Automation.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailAutomationLog>().HasQueryFilter(l => l.Automation.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailSequenceMail>().HasQueryFilter(m => m.Sequence.WorkspaceId == _workspaceAccessor.WorkspaceId);
+        builder.Entity<EmailSequenceSubscriber>().HasQueryFilter(s => s.Sequence.WorkspaceId == _workspaceAccessor.WorkspaceId);
 
         builder.Entity<Contact>(e =>
         {
@@ -301,6 +338,165 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             e.HasOne(m => m.Contact)
                 .WithMany()
                 .HasForeignKey(m => m.ContactId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // --- Email Marketing (independent stack; see Models/Entities/Email*.cs) -----------------
+        builder.Entity<EmailSubscriber>(e =>
+        {
+            e.Property(s => s.Email).HasMaxLength(256).IsRequired();
+            e.HasIndex(s => new { s.WorkspaceId, s.Email }).IsUnique();
+
+            e.HasOne(s => s.Contact)
+                .WithMany()
+                .HasForeignKey(s => s.ContactId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            e.HasOne(s => s.Source)
+                .WithMany()
+                .HasForeignKey(s => s.SourceId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<EmailList>(e => e.HasIndex(l => l.WorkspaceId));
+        builder.Entity<EmailTag>(e => e.HasIndex(t => t.WorkspaceId));
+
+        builder.Entity<EmailSubscriberList>(e =>
+        {
+            e.HasIndex(s => new { s.SubscriberId, s.ListId }).IsUnique();
+
+            e.HasOne(s => s.Subscriber)
+                .WithMany()
+                .HasForeignKey(s => s.SubscriberId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(s => s.List)
+                .WithMany(l => l.Members)
+                .HasForeignKey(s => s.ListId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<EmailSubscriberTag>(e =>
+        {
+            e.HasIndex(s => new { s.SubscriberId, s.TagId }).IsUnique();
+
+            e.HasOne(s => s.Subscriber)
+                .WithMany()
+                .HasForeignKey(s => s.SubscriberId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(s => s.Tag)
+                .WithMany(t => t.Members)
+                .HasForeignKey(s => s.TagId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<EmailCustomField>(e => e.HasIndex(f => new { f.WorkspaceId, f.Key }).IsUnique());
+
+        builder.Entity<EmailSmtpConnection>(e => e.HasIndex(c => c.WorkspaceId));
+
+        builder.Entity<EmailCampaign>(e => e.HasIndex(c => c.WorkspaceId));
+
+        builder.Entity<EmailCampaignRecipient>(e =>
+        {
+            e.HasIndex(r => r.TrackingToken).IsUnique();
+            e.HasIndex(r => r.Status);
+
+            e.HasOne(r => r.Campaign)
+                .WithMany(c => c.Recipients)
+                .HasForeignKey(r => r.CampaignId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.Subscriber)
+                .WithMany()
+                .HasForeignKey(r => r.SubscriberId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.EmailLog)
+                .WithMany()
+                .HasForeignKey(r => r.EmailLogId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<EmailLog>(e =>
+        {
+            e.HasIndex(l => new { l.CreatedAt, l.Status });
+            e.HasIndex(l => l.WorkspaceId);
+        });
+
+        builder.Entity<EmailAutomation>(e =>
+        {
+            e.HasIndex(a => a.WorkspaceId);
+            e.HasIndex(a => new { a.TriggerType, a.IsActive });
+        });
+
+        builder.Entity<EmailAutomationStep>(e =>
+        {
+            e.HasOne(s => s.Automation)
+                .WithMany(a => a.Steps)
+                .HasForeignKey(s => s.AutomationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Restrict (not Cascade) on the self-reference — same reasoning as AutomationStep:
+            // deleting the whole EmailAutomation already removes every step via the FK above in
+            // one shot, so a second cascade path off ParentStepId isn't needed — and SQL Server
+            // rejects multiple cascade paths to the same table anyway.
+            e.HasOne(s => s.ParentStep)
+                .WithMany()
+                .HasForeignKey(s => s.ParentStepId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasIndex(s => new { s.AutomationId, s.ParentStepId, s.Branch, s.Position });
+        });
+
+        builder.Entity<EmailAutomationLog>(e =>
+        {
+            e.HasOne(l => l.Automation)
+                .WithMany()
+                .HasForeignKey(l => l.AutomationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(l => l.Subscriber)
+                .WithMany()
+                .HasForeignKey(l => l.SubscriberId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(l => new { l.AutomationId, l.CreatedAt });
+        });
+
+        builder.Entity<EmailSequence>(e =>
+        {
+            e.HasIndex(s => s.WorkspaceId);
+
+            e.HasOne(s => s.AutoEnrollList)
+                .WithMany()
+                .HasForeignKey(s => s.AutoEnrollListId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<EmailSequenceMail>(e =>
+        {
+            e.HasOne(m => m.Sequence)
+                .WithMany(s => s.Mails)
+                .HasForeignKey(m => m.SequenceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(m => new { m.SequenceId, m.Order });
+        });
+
+        builder.Entity<EmailSequenceSubscriber>(e =>
+        {
+            e.HasIndex(s => new { s.SequenceId, s.SubscriberId }).IsUnique();
+            e.HasIndex(s => new { s.Status, s.NextExecutionAt });
+
+            e.HasOne(s => s.Sequence)
+                .WithMany()
+                .HasForeignKey(s => s.SequenceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(s => s.Subscriber)
+                .WithMany()
+                .HasForeignKey(s => s.SubscriberId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

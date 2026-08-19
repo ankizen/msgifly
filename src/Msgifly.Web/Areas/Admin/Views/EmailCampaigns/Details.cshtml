@@ -1,0 +1,79 @@
+@model Msgifly.Web.Models.PagedList<Msgifly.Web.Models.Entities.EmailCampaignRecipient>
+@{
+    var campaign = (Msgifly.Web.Models.Entities.EmailCampaign)ViewData["Campaign"]!;
+    ViewData["Title"] = campaign.Name;
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@campaign.Name</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">@campaign.Status &middot; @campaign.Subject</p>
+    </div>
+    <div class="flex gap-2">
+        @if (campaign.Status == Msgifly.Web.Models.Enums.EmailCampaignStatus.Sending)
+        {
+            <form asp-action="Pause" asp-route-id="@campaign.Id" method="post">
+                <button type="submit" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700">Pause</button>
+            </form>
+        }
+        @if (campaign.Status == Msgifly.Web.Models.Enums.EmailCampaignStatus.Paused)
+        {
+            <form asp-action="Resume" asp-route-id="@campaign.Id" method="post">
+                <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Resume</button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-4 text-center">
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Pending"]</p>
+        <p class="text-xs text-gray-500 dark:text-slate-400">Pending</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-4 text-center">
+        <p class="text-2xl font-semibold text-emerald-600">@ViewData["Sent"]</p>
+        <p class="text-xs text-gray-500 dark:text-slate-400">Sent</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-4 text-center">
+        <p class="text-2xl font-semibold text-red-600">@ViewData["Failed"]</p>
+        <p class="text-xs text-gray-500 dark:text-slate-400">Failed</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-4 text-center">
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Opened"]</p>
+        <p class="text-xs text-gray-500 dark:text-slate-400">Opened</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 shadow rounded-lg p-4 text-center">
+        <p class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Clicked"]</p>
+        <p class="text-xs text-gray-500 dark:text-slate-400">Clicked</p>
+    </div>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Subscriber</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Opened</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Clicked</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Items.Any())
+            {
+                <tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No recipients.</td></tr>
+            }
+            @foreach (var recipient in Model.Items)
+            {
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@recipient.Subscriber?.Email</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@recipient.Status</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(recipient.IsOpened ? "Yes" : "—")</td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@(recipient.IsClicked ? $"{recipient.ClickCount}x" : "—")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<partial name="_Pagination" model="Model" />

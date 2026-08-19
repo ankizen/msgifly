@@ -1,0 +1,66 @@
+@model Msgifly.Web.Models.PagedList<Msgifly.Web.Models.Entities.EmailCampaign>
+@{
+    ViewData["Title"] = "Email Campaigns";
+    var counts = (Dictionary<int, int>)ViewData["Counts"]!;
+}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Email Campaigns</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Broadcast emails to your lists, tags, or everyone.</p>
+    </div>
+    <a asp-action="Save" class="inline-flex items-center px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">
+        + New Campaign
+    </a>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Name</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Recipients</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Items.Any())
+            {
+                <tr><td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No campaigns yet.</td></tr>
+            }
+            @foreach (var campaign in Model.Items)
+            {
+                var total = counts.TryGetValue(campaign.Id, out var c) ? c : 0;
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@campaign.Name</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                            @(campaign.Status == Msgifly.Web.Models.Enums.EmailCampaignStatus.Sent ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                              : campaign.Status == Msgifly.Web.Models.Enums.EmailCampaignStatus.Paused ? "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                              : "bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300")">
+                            @campaign.Status
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@total</td>
+                    <td class="px-4 py-3 text-right text-sm space-x-3">
+                        @if (campaign.Status == Msgifly.Web.Models.Enums.EmailCampaignStatus.Draft)
+                        {
+                            <a asp-action="Save" asp-route-id="@campaign.Id" class="text-emerald-600 hover:text-emerald-500">Edit</a>
+                        }
+                        else
+                        {
+                            <a asp-action="Details" asp-route-id="@campaign.Id" class="text-emerald-600 hover:text-emerald-500">View</a>
+                        }
+                        <button type="button" class="text-red-600 hover:text-red-500"
+                                x-on:click="$dispatch('confirm-delete', { url: '@Url.Action("Delete", new { id = campaign.Id })', message: 'Delete this campaign?' })">
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<partial name="_Pagination" model="Model" />

@@ -1,0 +1,116 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@using Msgifly.Web.Models.Entities
+@model Msgifly.Web.Models.ViewModels.EmailSubscriberFormViewModel
+@{
+    ViewData["Title"] = Model.Id is null ? "Add Subscriber" : "Edit Subscriber";
+    var listOptions = (List<SelectListItem>)ViewData["ListOptions"]!;
+    var tagOptions = (List<SelectListItem>)ViewData["TagOptions"]!;
+    var sourceOptions = (List<SelectListItem>)ViewData["SourceOptions"]!;
+    var customFields = (List<EmailCustomField>)ViewData["CustomFields"]!;
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl">
+    <form asp-action="Save" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input type="hidden" asp-for="Id" />
+        <div class="sm:col-span-2" asp-validation-summary="ModelOnly"></div>
+
+        <div>
+            <label asp-for="Email" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Email" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" autofocus />
+            <span asp-validation-for="Email" class="mt-1 block text-sm text-red-600"></span>
+        </div>
+        <div>
+            <label asp-for="Phone" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Phone" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        <div>
+            <label asp-for="FirstName" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="FirstName" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div>
+            <label asp-for="LastName" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="LastName" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        <div>
+            <label asp-for="Status" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <select asp-for="Status" asp-items="Html.GetEnumSelectList<Msgifly.Web.Models.Enums.EmailSubscriberStatus>()"
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
+        </div>
+        <div>
+            <label asp-for="Type" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <select asp-for="Type" asp-items="Html.GetEnumSelectList<Msgifly.Web.Models.Enums.ContactType>()"
+                    class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></select>
+        </div>
+
+        <div class="sm:col-span-2">
+            <label asp-for="SourceId" class="block text-sm font-medium text-gray-700 dark:text-slate-300">Source</label>
+            <select asp-for="SourceId" asp-items="sourceOptions" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                <option value="">— none —</option>
+            </select>
+        </div>
+
+        @if (listOptions.Count > 0)
+        {
+            <div>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Lists</span>
+                <div class="space-y-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 dark:border-slate-700 p-2">
+                    @foreach (var item in listOptions)
+                    {
+                        var listId = int.Parse(item.Value!);
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                            <input type="checkbox" name="SelectedListIds" value="@item.Value" checked="@Model.SelectedListIds.Contains(listId)"
+                                   class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                            @item.Text
+                        </label>
+                    }
+                </div>
+            </div>
+        }
+        @if (tagOptions.Count > 0)
+        {
+            <div>
+                <span class="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Tags</span>
+                <div class="space-y-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 dark:border-slate-700 p-2">
+                    @foreach (var item in tagOptions)
+                    {
+                        var tagId = int.Parse(item.Value!);
+                        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+                            <input type="checkbox" name="SelectedTagIds" value="@item.Value" checked="@Model.SelectedTagIds.Contains(tagId)"
+                                   class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                            @item.Text
+                        </label>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (customFields.Count > 0)
+        {
+            <div class="sm:col-span-2 border-t border-gray-100 dark:border-slate-700 pt-4">
+                <p class="text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">Custom fields</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    @foreach (var field in customFields)
+                    {
+                        Model.CustomFieldValues.TryGetValue(field.Key, out var value);
+                        <div>
+                            <label class="block text-sm text-gray-700 dark:text-slate-300">@field.Label</label>
+                            <input type="text" name="CustomFieldValues[@field.Key]" value="@value"
+                                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="sm:col-span-2 mt-2 flex gap-3">
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
+            <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium">Cancel</a>
+        </div>
+    </form>
+</div>

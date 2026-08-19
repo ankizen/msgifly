@@ -16,5 +16,5 @@
       "@/*": ["resources/js/*"]
     }
   },
-  "include": ["resources/js/automation-builder/**/*"]
+  "include": ["resources/js/automation-builder/**/*", "resources/js/email-automation-builder/**/*"]
 }

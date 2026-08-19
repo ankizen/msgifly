@@ -1,0 +1,87 @@
+@model Msgifly.Web.Models.ViewModels.EmailSmtpConnectionFormViewModel
+@{
+    ViewData["Title"] = Model.Id is null ? "Add SMTP Connection" : "Edit SMTP Connection";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@ViewData["Title"]</h1>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 max-w-2xl">
+    <form asp-action="Save" method="post" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <input type="hidden" asp-for="Id" />
+        <div class="sm:col-span-2" asp-validation-summary="ModelOnly"></div>
+
+        <div>
+            <label asp-for="Name" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Name" placeholder="Primary SMTP" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div class="flex items-end gap-4 pb-1">
+            <label class="inline-flex items-center gap-2">
+                <input asp-for="IsDefault" type="checkbox" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                <span class="text-sm text-gray-700 dark:text-slate-300">Default connection</span>
+            </label>
+            <label class="inline-flex items-center gap-2">
+                <input asp-for="IsActive" type="checkbox" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                <span class="text-sm text-gray-700 dark:text-slate-300">Active</span>
+            </label>
+        </div>
+
+        <div>
+            <label asp-for="Host" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Host" placeholder="smtp.example.com" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label asp-for="Port" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+                <input asp-for="Port" type="number" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            </div>
+            <label class="inline-flex items-center gap-2 self-end pb-2">
+                <input asp-for="EnableSsl" type="checkbox" class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500" />
+                <span class="text-sm text-gray-700 dark:text-slate-300">Use SSL/TLS</span>
+            </label>
+        </div>
+
+        <div>
+            <label asp-for="Username" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Username" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div>
+            <label asp-for="Password" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="Password" type="password" placeholder="@(Model.Id is null ? "" : "Leave blank to keep current password")"
+                   class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        <div>
+            <label asp-for="FromEmail" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="FromEmail" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+        <div>
+            <label asp-for="FromName" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="FromName" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        </div>
+
+        <div>
+            <label asp-for="MaxSendsPerMinute" class="block text-sm font-medium text-gray-700 dark:text-slate-300"></label>
+            <input asp-for="MaxSendsPerMinute" type="number" class="mt-1 block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+            <p class="mt-1 text-xs text-gray-400 dark:text-slate-500">Paces campaign sends to avoid tripping your provider's rate limit.</p>
+        </div>
+
+        <div class="sm:col-span-2 mt-2 flex gap-3">
+            <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Save</button>
+            <a asp-action="Index" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium">Cancel</a>
+        </div>
+    </form>
+
+    @if (Model.Id is not null)
+    {
+        <div class="mt-8 pt-6 border-t border-gray-200 dark:border-slate-700" x-data="{ toEmail: '' }">
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Send a test email</h2>
+            <form asp-action="SendTest" asp-route-id="@Model.Id" method="post" class="mt-2 flex gap-2 max-w-md">
+                <input type="email" name="toEmail" x-model="toEmail" required placeholder="you@example.com"
+                       class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+                <button type="submit" class="px-4 py-2 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 text-sm font-medium whitespace-nowrap hover:bg-gray-50 dark:hover:bg-slate-700">Send test</button>
+            </form>
+        </div>
+    }
+</div>

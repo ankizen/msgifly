@@ -34,5 +34,12 @@ public static class Permissions
         "email_template.view", "email_template.edit",
         "automation.view", "automation.create", "automation.edit", "automation.delete",
         "workspace.view", "workspace.create", "workspace.edit",
+        "email_subscriber.view", "email_subscriber.create", "email_subscriber.edit", "email_subscriber.delete", "email_subscriber.bulk_import",
+        "email_list.view", "email_list.create", "email_list.edit", "email_list.delete",
+        "email_tag.view", "email_tag.create", "email_tag.edit", "email_tag.delete",
+        "email_campaign.view", "email_campaign.create", "email_campaign.edit", "email_campaign.delete", "email_campaign.send",
+        "email_smtp.view", "email_smtp.create", "email_smtp.edit", "email_smtp.delete",
+        "email_automation.view", "email_automation.create", "email_automation.edit", "email_automation.delete",
+        "email_sequence.view", "email_sequence.create", "email_sequence.edit", "email_sequence.delete",
     ];
 }

@@ -1,0 +1,59 @@
+@model Msgifly.Web.Models.PagedList<Msgifly.Web.Models.Entities.EmailAutomationLog>
+@{
+    var automation = (Msgifly.Web.Models.Entities.EmailAutomation)ViewData["Automation"]!;
+    ViewData["Title"] = $"{automation.Name} — Logs";
+}
+
+<div class="mb-6">
+    <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">@automation.Name</h1>
+    <p class="mt-1 text-sm text-gray-500 dark:text-slate-400">Run logs — Partial means the run reached a Wait step and is scheduled to resume later.</p>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg p-6 mb-6 max-w-lg">
+    <h2 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Test this automation</h2>
+    <p class="text-xs text-gray-500 dark:text-slate-400 mb-3">Runs for real right now — sends real emails to the address below — whether or not the automation is Active.</p>
+    <form asp-action="Test" asp-route-id="@automation.Id" method="post" class="flex gap-2">
+        <input type="email" name="email" required placeholder="you@example.com"
+               class="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-emerald-500" />
+        <button type="submit" class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium whitespace-nowrap">Run test</button>
+    </form>
+</div>
+
+<div class="bg-white dark:bg-slate-800 shadow rounded-lg overflow-hidden">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="bg-gray-50 dark:bg-slate-900">
+            <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Subscriber</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">When</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+            @if (!Model.Items.Any())
+            {
+                <tr><td colspan="3" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-slate-400">No runs yet.</td></tr>
+            }
+            @foreach (var log in Model.Items)
+            {
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-900 dark:text-slate-100">@log.Subscriber?.Email</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+                            @(log.Status == Msgifly.Web.Models.Enums.EmailAutomationLogStatus.Success ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                              : log.Status == Msgifly.Web.Models.Enums.EmailAutomationLogStatus.Failed ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                              : "bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300")">
+                            @log.Status
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-slate-400">@log.CreatedAt.ToString("g")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="mt-4">
+    <a asp-action="Index" class="text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">&larr; Back to Automations</a>
+</div>
+
+<partial name="_Pagination" model="Model" />
